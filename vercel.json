@@ -11,6 +11,14 @@
       "destination": "/app/index.html"
     },
     {
+      "source": "/account",
+      "destination": "/app/index.html"
+    },
+    {
+      "source": "/account/",
+      "destination": "/app/index.html"
+    },
+    {
       "source": "/app/:path*",
       "destination": "/app/:path*"
     }

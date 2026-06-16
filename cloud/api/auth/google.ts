@@ -59,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const tokenJson = JSON.stringify(bearer);
   const userIdJson = JSON.stringify(user.id);
   const emailJson = JSON.stringify(email);
-  const webAppUrl = JSON.stringify((process.env.WEB_APP_ORIGIN || 'https://freeswarm.myndlabs.tech') + '/app');
+  const webAppUrl = JSON.stringify((process.env.WEB_APP_ORIGIN || 'https://freeswarm.myndlabs.tech') + '/account');
 
   const html = `
 <!DOCTYPE html>

@@ -1,11 +1,13 @@
 {
-  "name": "freeswarm-website",
+  "name": "freeswarm",
   "version": "1.0.0",
   "description": "FreeSwarm - An Army of AI Agents at Your Fingertips",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run build:website && npm run build:app",
+    "build:website": "next build",
+    "build:app": "cd frontend && npm install && npm run build",
     "start": "next start",
     "lint": "next lint"
   },

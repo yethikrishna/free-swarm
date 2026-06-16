@@ -1,14 +1,14 @@
 {
-  "buildCommand": "npm install && npm run build && cd frontend && npm install && npm run build",
-  "outputDirectory": ".",
+  "buildCommand": "npm install && npm run build",
+  "framework": "nextjs",
   "rewrites": [
     {
-      "source": "/app/:path*",
-      "destination": "/frontend/dist/:path*"
+      "source": "/app",
+      "destination": "/app/index.html"
     },
     {
-      "source": "/app",
-      "destination": "/frontend/dist/index.html"
+      "source": "/app/:path*",
+      "destination": "/app/:path*"
     }
   ],
   "headers": [
@@ -21,5 +21,8 @@
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
       ]
     }
-  ]
+  ],
+  "env": {
+    "NEXT_PUBLIC_SITE_URL": "https://freeswarm.myndlabs.tech"
+  }
 }

@@ -5,9 +5,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run build:website && npm run build:app",
+    "build": "npm run build:app && npm run build:website",
     "build:website": "next build",
-    "build:app": "cd frontend && npm install && npm run build",
+    "build:app": "cd frontend && npm install && npm run build && cd .. && mkdir -p public/app && cp -r frontend/dist/* public/app/",
     "start": "next start",
     "lint": "next lint"
   },

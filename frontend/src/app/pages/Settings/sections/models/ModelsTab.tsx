@@ -8,6 +8,7 @@ import SubscriptionCards from '../subscription/SubscriptionCards';
 import ApiKeyCard, { API_KEY_CARDS } from './ApiKeyCard';
 import CustomProvidersEditor from './CustomProvidersEditor';
 import CombosEditor from './CombosEditor';
+import ModelAliasesEditor from './ModelAliasesEditor';
 import type { SettingsStyles } from '../settingsStyles';
 
 const ModelsTab: React.FC<{
@@ -88,6 +89,13 @@ const ModelsTab: React.FC<{
         />
 
         <CombosEditor
+          form={form}
+          setForm={setForm}
+          allModels={allModels}
+          styles={styles}
+        />
+
+        <ModelAliasesEditor
           form={form}
           setForm={setForm}
           allModels={allModels}

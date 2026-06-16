@@ -37,6 +37,18 @@ export interface ModelCombo {
   timeoutMs?: number;
 }
 
+export interface ModelAlias {
+  modelId: string;
+  alias: string;
+  costPerMTok?: number;
+}
+
+export interface ModelPricingOverride {
+  modelId: string;
+  inputCostPerMTok?: number;
+  outputCostPerMTok?: number;
+}
+
 export interface SubscriptionUsage {
   requests_in_window: number;
   plan_limit: number;
@@ -61,6 +73,8 @@ export interface AppSettings {
   openrouter_api_key?: string | null;
   custom_providers?: CustomProvider[];
   model_combos?: ModelCombo[];
+  model_aliases?: ModelAlias[];
+  model_pricing_overrides?: ModelPricingOverride[];
   browser_homepage: string;
   auto_select_mode_on_new_agent: boolean;
   expand_new_chats_in_dashboard: boolean;

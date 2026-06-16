@@ -53,7 +53,7 @@ const GeneralAdvanced: React.FC<{
         />
       </Box>
 
-      <Box sx={inlineRowLastSx}>
+      <Box sx={inlineRowSx}>
         <Box sx={{ mr: 3 }}>
           <Typography sx={labelSx}>Experimental updates</Typography>
           <Typography sx={descSx}>Receive pre-release builds with new features earlier. These versions may be less stable than normal releases.</Typography>
@@ -61,6 +61,21 @@ const GeneralAdvanced: React.FC<{
         <Switch
           checked={form.allow_experimental_updates}
           onChange={(e) => setForm({ ...form, allow_experimental_updates: e.target.checked })}
+          sx={{
+            '& .MuiSwitch-switchBase.Mui-checked': { color: c.accent.primary },
+            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: c.accent.primary },
+          }}
+        />
+      </Box>
+
+      <Box sx={inlineRowLastSx}>
+        <Box sx={{ mr: 3 }}>
+          <Typography sx={labelSx}>Track reasoning tokens</Typography>
+          <Typography sx={descSx}>Enable tracking of extended thinking token usage from 9Router. Useful for understanding model performance and costs.</Typography>
+        </Box>
+        <Switch
+          checked={form.track_reasoning_tokens ?? false}
+          onChange={(e) => setForm({ ...form, track_reasoning_tokens: e.target.checked })}
           sx={{
             '& .MuiSwitch-switchBase.Mui-checked': { color: c.accent.primary },
             '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: c.accent.primary },

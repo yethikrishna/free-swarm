@@ -64,6 +64,7 @@ export interface AppSettings {
   auto_reveal_sub_agents: boolean;
   dev_mode: boolean;
   allow_experimental_updates: boolean;
+  track_reasoning_tokens: boolean;
   /** Managed subscription state; surfaces only when user has subscribed via cloud. */
   connection_mode?: 'own_key' | 'freeswarm-pro' | 'free-trial';
   freeswarm_bearer_token?: string | null;

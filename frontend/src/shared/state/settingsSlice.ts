@@ -32,6 +32,9 @@ export interface ModelCombo {
   name: string;
   description?: string;
   model_ids: string[];
+  retryOnError?: boolean;
+  retryDelayMs?: number;
+  timeoutMs?: number;
 }
 
 export interface SubscriptionUsage {

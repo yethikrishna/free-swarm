@@ -6,10 +6,10 @@ import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
+import ArrowUpIcon from '@mui/icons-material/ArrowUp';
+import ArrowDownIcon from '@mui/icons-material/ArrowDown';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Chip from '@mui/material/Chip';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import { AppSettings, ModelCombo } from '@/shared/state/settingsSlice';
@@ -167,8 +167,8 @@ const CombosEditor: React.FC<{
               Models (in fallback order)
             </Typography>
             {editingCombo.model_ids?.map((mid, idx) => (
-              <Box key={`${mid}-${idx}`} sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <Typography sx={{ fontSize: '0.8rem', color: c.text.muted, minWidth: '1.5rem' }}>
+              <Box key={`${mid}-${idx}`} sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}>
+                <Typography sx={{ fontSize: '0.8rem', color: c.text.muted, minWidth: '1.5rem', textAlign: 'center' }}>
                   #{idx + 1}
                 </Typography>
                 <TextField
@@ -186,9 +186,38 @@ const CombosEditor: React.FC<{
                 <IconButton
                   size="small"
                   onClick={() => {
+                    if (idx > 0) {
+                      const updated = [...(editingCombo.model_ids || [])];
+                      [updated[idx], updated[idx - 1]] = [updated[idx - 1], updated[idx]];
+                      setEditingCombo(prev => ({ ...prev, model_ids: updated }));
+                    }
+                  }}
+                  disabled={idx === 0}
+                  sx={{ color: idx === 0 ? c.text.ghost : c.text.muted }}
+                >
+                  <ArrowUpIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    if (idx < (editingCombo.model_ids?.length || 0) - 1) {
+                      const updated = [...(editingCombo.model_ids || [])];
+                      [updated[idx], updated[idx + 1]] = [updated[idx + 1], updated[idx]];
+                      setEditingCombo(prev => ({ ...prev, model_ids: updated }));
+                    }
+                  }}
+                  disabled={idx === (editingCombo.model_ids?.length || 0) - 1}
+                  sx={{ color: idx === (editingCombo.model_ids?.length || 0) - 1 ? c.text.ghost : c.text.muted }}
+                >
+                  <ArrowDownIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={() => {
                     const updated = editingCombo.model_ids?.filter((_, i) => i !== idx) || [];
                     setEditingCombo(prev => ({ ...prev, model_ids: updated }));
                   }}
+                  sx={{ color: c.text.muted, '&:hover': { color: c.status.error } }}
                 >
                   <DeleteIcon fontSize="small" />
                 </IconButton>
@@ -213,6 +242,44 @@ const CombosEditor: React.FC<{
             >
               Add model
             </Button>
+          </Box>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 1.5, borderRadius: `${c.radius.sm}px`, bgcolor: c.bg.elevated, border: `1px solid ${c.border.subtle}` }}>
+            <Typography sx={{ fontSize: '0.8rem', color: c.text.primary, fontWeight: 500 }}>
+              Advanced Options
+            </Typography>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={editingCombo.retryOnError ?? false}
+                  onChange={e => setEditingCombo(prev => ({ ...prev, retryOnError: e.target.checked }))}
+                  size="small"
+                />
+              }
+              label={<Typography sx={{ fontSize: '0.75rem' }}>Retry on error</Typography>}
+              sx={{ m: 0 }}
+            />
+            {editingCombo.retryOnError && (
+              <TextField
+                size="small"
+                type="number"
+                label="Retry delay (ms)"
+                value={editingCombo.retryDelayMs ?? 1000}
+                onChange={e => setEditingCombo(prev => ({ ...prev, retryDelayMs: parseInt(e.target.value) || 1000 }))}
+                inputProps={{ min: 100, max: 10000, step: 100 }}
+                sx={{ '& .MuiOutlinedInput-root': { fontSize: '0.85rem' } }}
+              />
+            )}
+            <TextField
+              size="small"
+              type="number"
+              label="Timeout (ms)"
+              value={editingCombo.timeoutMs ?? 30000}
+              onChange={e => setEditingCombo(prev => ({ ...prev, timeoutMs: parseInt(e.target.value) || 30000 }))}
+              inputProps={{ min: 1000, max: 300000, step: 1000 }}
+              sx={{ '& .MuiOutlinedInput-root': { fontSize: '0.85rem' } }}
+              helperText="Max wait time per model before fallback"
+            />
           </Box>
 
           <Box sx={{ display: 'flex', gap: 1 }}>

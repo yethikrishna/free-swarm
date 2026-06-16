@@ -1,6 +1,11 @@
 #!/bin/bash
 # Fetch the pre-built 9router Next.js app from npm and stage it for packaging.
 # Usage: bash scripts/fetch-router.sh <dest_dir>
+#
+# NOTE: the FreeSwarm Router fork source lives in ../router (see
+# router/FREESWARM_FORK.md). The runtime still uses the pinned npm build below
+# until that fork is built and validated against backend providers/registry.py;
+# do not repoint this script at the fork without doing that validation first.
 
 set -euo pipefail
 

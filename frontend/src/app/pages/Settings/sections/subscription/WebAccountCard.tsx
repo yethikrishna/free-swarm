@@ -36,8 +36,9 @@ const WebAccountCard: React.FC = () => {
   const cloudBase = FREESWARM_DEFAULT_PROXY_URL.replace(/\/$/, '');
 
   // Full-page navigation (no Electron bridge on web); OAuth returns to /app?token=.
+  // client=web tells the handoff page to skip the desktop localhost POST race.
   const onConnectGitHub = () => {
-    window.location.href = `${cloudBase}/api/auth/github?redirect_to=/app`;
+    window.location.href = `${cloudBase}/api/auth/github?redirect_to=/app&client=web`;
   };
 
   const onSignOut = () => {

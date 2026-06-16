@@ -46,7 +46,7 @@ const LoginView: React.FC<{ onSignedIn: (token: string) => void }> = ({ onSigned
   const [showEmail, setShowEmail] = useState(false);
 
   const signInWithGitHub = () => {
-    window.location.href = `${FREESWARM_DEFAULT_PROXY_URL}/api/auth/github`;
+    window.location.href = `${FREESWARM_DEFAULT_PROXY_URL}/api/auth/github?redirect_to=/account&client=web`;
   };
 
   const submit = async (e: React.FormEvent) => {

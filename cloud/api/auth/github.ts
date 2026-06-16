@@ -21,7 +21,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!code) {
     const localPort = typeof req.query.local_port === 'string' ? req.query.local_port : '8324';
     const redirectTo = req.query.redirect_to === '/app' ? '/app' : '/account';
-    const state = Buffer.from(JSON.stringify({ local_port: localPort, redirect_to: redirectTo })).toString('base64url');
+    const client = req.query.client === 'web' ? 'web' : 'desktop';
+    const state = Buffer.from(JSON.stringify({ local_port: localPort, redirect_to: redirectTo, client })).toString('base64url');
     const url = new URL('https://github.com/login/oauth/authorize');
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('redirect_uri', redirectUri);
@@ -61,14 +62,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = await upsertUser(primaryEmail.toLowerCase(), 'github');
   const bearer = await mintToken({ sub: user.id, email: user.email });
 
-  // Decode state to recover local_port and redirect_to from the initiating page.
+  // Decode state to recover local_port, redirect_to, and client from the initiating page.
   let localPort = '8324';
   let redirectTo = '/account';
+  let clientWeb = false;
   try {
     const stateRaw = typeof req.query.state === 'string' ? req.query.state : '';
     const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString());
     if (typeof state.local_port === 'string' && /^\d+$/.test(state.local_port)) localPort = state.local_port;
     if (state.redirect_to === '/app') redirectTo = '/app';
+    if (state.client === 'web') clientWeb = true;
   } catch {}
 
   // Render the bearer-handoff page.
@@ -77,6 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userIdJson = JSON.stringify(user.id);
   const emailJson = JSON.stringify(primaryEmail.toLowerCase());
   const localPortJson = JSON.stringify(localPort);
+  const clientWebJson = JSON.stringify(clientWeb);
   const webAppUrl = JSON.stringify((process.env.WEB_APP_ORIGIN || 'https://freeswarm.myndlabs.tech') + redirectTo);
 
   const html = `
@@ -141,26 +145,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userId = ${userIdJson};
     const email = ${emailJson};
     const localPort = ${localPortJson};
+    const clientWeb = ${clientWebJson};
     const webAppUrl = ${webAppUrl};
 
     async function handoff() {
-      // Try desktop localhost first (Electron app)
-      try {
-        const response = await Promise.race([
-          fetch('http://localhost:' + localPort + '/api/auth/signin-activate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, signin_method: 'github', email }),
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
-        ]);
-        if (response.ok) {
-          // Desktop received the token; close this window.
-          if (window.opener) window.close();
-          return;
+      // Web sign-in: skip the desktop localhost handoff entirely. Trying it races
+      // a desktop app that happens to be running on the same machine, which would
+      // swallow the token and leave the web tab signed-out.
+      if (!clientWeb) {
+        try {
+          const response = await Promise.race([
+            fetch('http://localhost:' + localPort + '/api/auth/signin-activate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token, signin_method: 'github', email }),
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+          ]);
+          if (response.ok) {
+            // Desktop received the token; close this window.
+            if (window.opener) window.close();
+            return;
+          }
+        } catch (err) {
+          // No desktop (timeout or fetch failed); fall through to web path.
         }
-      } catch (err) {
-        // No desktop (timeout or fetch failed); fall through to web path.
       }
 
       // Web path: pass token in URL so the web app's origin can store it in its own localStorage.

@@ -85,55 +85,72 @@ const AccountCard: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 2, mb: 2, borderRadius: `${c.radius.lg}px`, border: `1px solid ${c.border.subtle}`, bgcolor: c.bg.surface }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: c.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {userEmail || 'Signed in'}
-          </Typography>
-          {methodLabel && (
-            <Typography sx={{ fontSize: '0.72rem', color: c.text.muted, mt: 0.25 }}>{methodLabel}</Typography>
-          )}
-          {!userId && hasBearer && (
-            <Typography sx={{ fontSize: '0.72rem', color: c.text.muted, mt: 0.25 }}>
-              Subscription connected. Sign in to also link this device to your account.
+    <>
+      <Box sx={{ p: 2, mb: 2, borderRadius: `${c.radius.lg}px`, border: `1px solid ${c.border.subtle}`, bgcolor: c.bg.surface }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: c.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {userEmail || 'Signed in'}
             </Typography>
-          )}
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
-          {!userId && hasBearer && (
+            {methodLabel && (
+              <Typography sx={{ fontSize: '0.72rem', color: c.text.muted, mt: 0.25 }}>{methodLabel}</Typography>
+            )}
+            {!userId && hasBearer && (
+              <Typography sx={{ fontSize: '0.72rem', color: c.text.muted, mt: 0.25 }}>
+                Subscription connected. Sign in to also link this device to your account.
+              </Typography>
+            )}
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+            {!userId && hasBearer && (
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={onSignIn}
+                sx={{
+                  textTransform: 'none',
+                  fontSize: '0.75rem',
+                  borderColor: c.border.medium,
+                  color: c.text.primary,
+                  '&:hover': { borderColor: c.accent.primary, color: c.accent.primary, bgcolor: 'transparent' },
+                }}
+              >
+                Link account
+              </Button>
+            )}
             <Button
-              variant="outlined"
+              variant="text"
               size="small"
-              onClick={onSignIn}
+              onClick={onSignOut}
+              disabled={signingOut}
               sx={{
                 textTransform: 'none',
                 fontSize: '0.75rem',
-                borderColor: c.border.medium,
-                color: c.text.primary,
-                '&:hover': { borderColor: c.accent.primary, color: c.accent.primary, bgcolor: 'transparent' },
+                color: c.text.muted,
+                '&:hover': { color: c.status.error, bgcolor: 'transparent' },
               }}
             >
-              Link account
+              {signingOut ? <CircularProgress size={14} sx={{ color: c.text.muted }} /> : 'Sign out'}
             </Button>
-          )}
-          <Button
-            variant="text"
-            size="small"
-            onClick={onSignOut}
-            disabled={signingOut}
-            sx={{
-              textTransform: 'none',
-              fontSize: '0.75rem',
-              color: c.text.muted,
-              '&:hover': { color: c.status.error, bgcolor: 'transparent' },
-            }}
-          >
-            {signingOut ? <CircularProgress size={14} sx={{ color: c.text.muted }} /> : 'Sign out'}
-          </Button>
+          </Box>
         </Box>
       </Box>
-    </Box>
+
+      {/* OAuth provider connections */}
+      <Box sx={{ p: 2, mb: 2, borderRadius: `${c.radius.lg}px`, border: `1px solid ${c.border.subtle}`, bgcolor: c.bg.surface }}>
+        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: c.text.primary, mb: 1 }}>Connected Services</Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1, borderRadius: `${c.radius.md}px`, bgcolor: c.bg.subtle }}>
+            <Typography sx={{ fontSize: '0.75rem', color: c.text.primary }}>Connect Google</Typography>
+            <Typography sx={{ fontSize: '0.7rem', color: c.text.muted, fontStyle: 'italic' }}>Coming soon</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1, borderRadius: `${c.radius.md}px`, bgcolor: c.bg.subtle }}>
+            <Typography sx={{ fontSize: '0.75rem', color: c.text.primary }}>Connect GitHub</Typography>
+            <Typography sx={{ fontSize: '0.7rem', color: c.text.muted, fontStyle: 'italic' }}>Coming soon</Typography>
+          </Box>
+        </Box>
+      </Box>
+    </>
   );
 };
 

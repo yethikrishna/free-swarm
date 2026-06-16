@@ -1,259 +1,353 @@
 'use client';
 
-import Link from 'next/link';
-import { motion } from 'framer-motion';
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-      delayChildren: 0.2,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.6, ease: 'easeOut' },
-  },
-};
+import { useState } from 'react';
 
 export default function Home() {
-  const features = [
+  const [expandedFaq, setExpandedFaq] = useState<number | null>(0);
+
+  const faqs = [
     {
-      title: 'Spatial Dashboard',
-      description: 'Manage multiple agents on an infinite canvas. Drag, pan, zoom freely across your entire workflow.',
-      icon: '🎯',
+      question: "How is FreeSwarm different from a regular AI chatbot?",
+      answer: "FreeSwarm is a full agent orchestrator, not just a chat interface. It lets you coordinate multiple agents in parallel, control their permissions, and integrate with your existing tools and workflows."
     },
     {
-      title: 'Real-time Approvals',
-      description: 'Every tool request surfaces in one place. Approve or deny with a single click or keyboard shortcut.',
-      icon: '✓',
+      question: "Who is FreeSwarm for?",
+      answer: "FreeSwarm is designed for developers, researchers, and teams who want to leverage AI agents for complex tasks while maintaining full control and transparency over agent actions."
     },
     {
-      title: 'Message Branching',
-      description: 'Edit previous messages to fork conversations. Navigate between branches without losing context.',
-      icon: '🔀',
+      question: "Is FreeSwarm free?",
+      answer: "Yes! FreeSwarm is open-source and free to use. You can run it locally on your machine with no cloud dependencies."
     },
     {
-      title: 'Built-in Browser',
-      description: 'Agents control real browser windows. Watch them navigate, extract content, and interact with the web.',
-      icon: '🌐',
+      question: "Can agents use my own apps and tools?",
+      answer: "Absolutely. FreeSwarm supports MCP servers and integrations, so agents can use any tools you connect - whether they're internal apps, APIs, or services."
     },
     {
-      title: 'App Builder',
-      description: 'Scaffold and launch full web applications. Live preview, persistent state, no context switching.',
-      icon: '⚙️',
+      question: "What integrations are supported?",
+      answer: "FreeSwarm supports MCP (Model Context Protocol) servers, giving access to thousands of integrations including GitHub, Slack, filesystem operations, and more."
     },
     {
-      title: 'MCP Integration',
-      description: 'Connect any MCP server. GitHub, Slack, filesystem, and more. Full approval flow everywhere.',
-      icon: '🔗',
-    },
+      question: "Can I run FreeSwarm offline?",
+      answer: "Yes. FreeSwarm runs entirely locally on your machine. There's no cloud relay or telemetry - your data and API keys stay on your device."
+    }
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen bg-white">
       {/* Navigation */}
-      <nav className="border-b border-slate-800 bg-slate-950/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-            FreeSwarm
+      <nav className="sticky top-0 z-50 bg-white border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <img src="https://openswarm.info/logo.png" alt="FreeSwarm" className="w-8 h-8" />
+            <span className="text-lg font-semibold text-gray-900">Free Swarm</span>
           </div>
-          <div className="flex gap-6">
-            <a href="#features" className="text-slate-400 hover:text-white transition">Features</a>
-            <a href="https://github.com/yethikrishna/free-swarm" className="text-slate-400 hover:text-white transition">GitHub</a>
-            <a href="https://freeswarm.myndlabs.tech/app" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition">
-              Launch App
-            </a>
-          </div>
+          <a href="https://freeswarm.myndlabs.tech/app" className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="4" y="4.5" width="16" height="11" rx="1.6"></rect>
+              <line x1="2.5" y1="19.5" x2="21.5" y2="19.5"></line>
+            </svg>
+            Launch App
+          </a>
         </div>
       </nav>
 
       {/* Hero Section */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-        <motion.div
-          className="text-center"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <motion.h1
-            className="text-5xl sm:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-400 bg-clip-text text-transparent"
-            variants={itemVariants}
-          >
-            An Army of AI Agents at Your Fingertips
-          </motion.h1>
-
-          <motion.p
-            className="text-xl text-slate-400 mb-8 max-w-2xl mx-auto leading-relaxed"
-            variants={itemVariants}
-          >
-            Launch, monitor, and coordinate multiple AI agents in parallel from a single interface.
-            Everything runs locally. No cloud relay. No telemetry.
-          </motion.p>
-
-          <motion.div
-            className="flex gap-4 justify-center flex-wrap"
-            variants={itemVariants}
-          >
-            <a
-              href="https://freeswarm.myndlabs.tech/app"
-              className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white px-8 py-3 rounded-lg font-semibold transition transform hover:scale-105"
-            >
-              Try Now →
+      <section className="max-w-7xl mx-auto px-6 py-20">
+        <div className="grid md:grid-cols-2 gap-12 items-center">
+          <div>
+            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+              Meet your new<br />
+              AI Agent<br />
+              Orchestrator
+            </h1>
+            <p className="text-xl text-gray-600 mb-8 leading-relaxed">
+              FreeSwarm is your open-source platform for coordinating multiple AI agents in parallel. One place for you and your agents to work together.
+            </p>
+            <a href="https://freeswarm.myndlabs.tech/app" className="inline-flex items-center gap-2 bg-gray-900 text-white px-8 py-4 rounded-lg hover:bg-gray-800 transition text-lg font-semibold">
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="4" y="4.5" width="16" height="11" rx="1.6"></rect>
+                <line x1="2.5" y1="19.5" x2="21.5" y2="19.5"></line>
+              </svg>
+              Try FreeSwarm Now
             </a>
-            <a
-              href="https://github.com/yethikrishna/free-swarm"
-              className="border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white px-8 py-3 rounded-lg font-semibold transition"
-            >
-              View on GitHub
-            </a>
-          </motion.div>
-        </motion.div>
-      </section>
-
-      {/* Why FreeSwarm Section */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 border-t border-slate-800">
-        <motion.div
-          className="grid md:grid-cols-2 gap-12 items-center"
-          variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true }}
-        >
-          <motion.div variants={itemVariants}>
-            <h2 className="text-3xl font-bold mb-6">Why FreeSwarm?</h2>
-            <ul className="space-y-4 text-slate-300">
-              <li className="flex gap-3">
-                <span className="text-cyan-400 flex-shrink-0">✓</span>
-                <span><strong>Parallel Agents:</strong> Launch as many agents as you need on one screen</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="text-cyan-400 flex-shrink-0">✓</span>
-                <span><strong>Unified Control:</strong> Every approval request in one place</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="text-cyan-400 flex-shrink-0">✓</span>
-                <span><strong>Full Visibility:</strong> Real-time monitoring of all agents</span>
-              </li>
-              <li className="flex gap-3">
-                <span className="text-cyan-400 flex-shrink-0">✓</span>
-                <span><strong>Local Control:</strong> No cloud dependency, no telemetry</span>
-              </li>
-            </ul>
-          </motion.div>
-
-          <motion.div
-            className="bg-gradient-to-br from-blue-900/20 to-cyan-900/20 border border-slate-700 rounded-lg p-8"
-            variants={itemVariants}
-          >
-            <div className="aspect-video bg-slate-800 rounded-lg flex items-center justify-center text-slate-500">
-              [Dashboard Preview]
-            </div>
-          </motion.div>
-        </motion.div>
-      </section>
-
-      {/* Features Grid */}
-      <section id="features" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 border-t border-slate-800">
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true }}
-        >
-          <motion.h2
-            className="text-4xl font-bold text-center mb-16"
-            variants={itemVariants}
-          >
-            Powerful Features
-          </motion.h2>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {features.map((feature, idx) => (
-              <motion.div
-                key={idx}
-                className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700 rounded-lg p-6 hover:border-cyan-500/50 transition hover:shadow-lg hover:shadow-cyan-500/10"
-                variants={itemVariants}
-              >
-                <div className="text-4xl mb-4">{feature.icon}</div>
-                <h3 className="text-xl font-bold mb-3">{feature.title}</h3>
-                <p className="text-slate-400">{feature.description}</p>
-              </motion.div>
-            ))}
           </div>
-        </motion.div>
+          <div className="bg-gray-100 rounded-xl overflow-hidden aspect-video">
+            <video
+              src="https://openswarm.info/Open%20Swarm%20Final%20Cut.mp4"
+              autoPlay
+              loop
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </div>
       </section>
 
-      {/* Tech Stack Section */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 border-t border-slate-800">
-        <motion.div
-          className="grid md:grid-cols-3 gap-12"
-          variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true }}
-        >
-          <motion.div variants={itemVariants}>
-            <h3 className="text-2xl font-bold mb-4">⚡ Fast</h3>
-            <p className="text-slate-400">Real-time WebSocket streaming for instant agent feedback and token-by-token output.</p>
-          </motion.div>
+      {/* Divider */}
+      <div className="h-px bg-gray-100 my-12"></div>
 
-          <motion.div variants={itemVariants}>
-            <h3 className="text-2xl font-bold mb-4">🔒 Private</h3>
-            <p className="text-slate-400">Everything runs locally. Your API keys stay on your machine. Zero cloud dependencies.</p>
-          </motion.div>
+      {/* Features Section */}
+      <section className="max-w-7xl mx-auto px-6 py-20">
+        <h2 className="text-4xl font-bold text-gray-900 mb-16 text-center">How FreeSwarm helps you get more done</h2>
 
-          <motion.div variants={itemVariants}>
-            <h3 className="text-2xl font-bold mb-4">🛠️ Flexible</h3>
-            <p className="text-slate-400">Works with any LLM provider. OpenAI, Claude, local models, or custom endpoints.</p>
-          </motion.div>
-        </motion.div>
+        <div className="grid md:grid-cols-2 gap-16">
+          <div>
+            <p className="text-2xl font-bold text-gray-900 mb-4">Connects to your tools</p>
+            <p className="text-gray-600 mb-6 text-lg leading-relaxed">
+              FreeSwarm integrates with MCP servers and your existing tools. So your agents can use your tools the same way you do.
+            </p>
+            <div className="bg-gray-100 rounded-lg overflow-hidden aspect-video">
+              <video
+                src="https://openswarm.info/2%20-%20Tools.mp4"
+                autoPlay
+                loop
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-2xl font-bold text-gray-900 mb-4">Agentic Browsers</p>
+            <p className="text-gray-600 mb-6 text-lg leading-relaxed">
+              Every agent in FreeSwarm can control a real browser. Watch them navigate, extract content, and interact with web pages in real time.
+            </p>
+            <div className="bg-gray-100 rounded-lg overflow-hidden aspect-video">
+              <video
+                src="https://openswarm.info/2%20-%20Browsers.mp4"
+                autoPlay
+                loop
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </div>
+        </div>
       </section>
+
+      {/* Divider */}
+      <div className="h-px bg-gray-100 my-12"></div>
+
+      {/* App Builder Section */}
+      <section className="max-w-7xl mx-auto px-6 py-20">
+        <div className="grid md:grid-cols-2 gap-12 items-center">
+          <div className="order-2 md:order-1 bg-gray-100 rounded-lg overflow-hidden aspect-video">
+            <video
+              src="https://openswarm.info/3%20-%20Apps.mp4"
+              autoPlay
+              loop
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div className="order-1 md:order-2">
+            <h2 className="text-4xl font-bold text-gray-900 mb-6">Infinite agent workflows</h2>
+            <p className="text-lg text-gray-600 leading-relaxed">
+              Define custom agent workflows and skills. Convert any task into a repeatable workflow that runs with one click. Build agent orchestrations that scale with your needs.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Divider */}
+      <div className="h-px bg-gray-100 my-12"></div>
+
+      {/* Learning Section */}
+      <section className="max-w-7xl mx-auto px-6 py-20">
+        <h2 className="text-4xl font-bold text-gray-900 mb-16 text-center">A Platform that learns</h2>
+
+        <div className="grid md:grid-cols-3 gap-8">
+          <div>
+            <div className="bg-gray-100 rounded-lg overflow-hidden aspect-video mb-6">
+              <video
+                src="https://openswarm.info/4%20-%20Never%20Twice.mp4"
+                autoPlay
+                loop
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <p className="text-xl font-bold text-gray-900 mb-3">Never do a task twice</p>
+            <p className="text-gray-600">Convert any agent interaction into a reusable workflow and run it with one click.</p>
+          </div>
+
+          <div>
+            <div className="bg-gray-100 rounded-lg overflow-hidden aspect-video mb-6">
+              <video
+                src="https://openswarm.info/4%20-%20Evolve.mp4"
+                autoPlay
+                loop
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <p className="text-xl font-bold text-gray-900 mb-3">Improving agents</p>
+            <p className="text-gray-600">Agents learn from interactions and become smarter, faster, and more reliable over time.</p>
+          </div>
+
+          <div>
+            <div className="bg-gray-100 rounded-lg overflow-hidden aspect-video mb-6">
+              <video
+                src="https://openswarm.info/4%20-%20Customize.mp4"
+                autoPlay
+                loop
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <p className="text-xl font-bold text-gray-900 mb-3">Customize everything</p>
+            <p className="text-gray-600">Control agent skills, permissions, behavior, and decision-making to match your exact needs.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Divider */}
+      <div className="h-px bg-gray-100 my-12"></div>
+
+      {/* Control Section */}
+      <section className="max-w-7xl mx-auto px-6 py-20">
+        <div className="grid md:grid-cols-2 gap-12 items-center">
+          <div className="bg-gray-100 rounded-lg overflow-hidden aspect-video">
+            <video
+              src="https://openswarm.info/5%20-%20Controls.mp4"
+              autoPlay
+              loop
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          <div>
+            <h2 className="text-4xl font-bold text-gray-900 mb-8">Stay in control</h2>
+
+            <div className="space-y-8">
+              <div className="border-l-4 border-gray-900 pl-6">
+                <p className="text-xl font-bold text-gray-900 mb-2">Select and send</p>
+                <p className="text-gray-600">Agents can control anything on your desktop or in your apps. Simply select what they can access.</p>
+              </div>
+
+              <div className="border-l-4 border-gray-300 pl-6">
+                <p className="text-xl font-bold text-gray-900 mb-2">Set permissions</p>
+                <p className="text-gray-600">Choose which actions need your approval, are always allowed, or denied completely.</p>
+              </div>
+
+              <div className="border-l-4 border-gray-300 pl-6">
+                <p className="text-xl font-bold text-gray-900 mb-2">Stay high level</p>
+                <p className="text-gray-600">Whenever your opinion or strategy is needed, agents will ask you directly before proceeding.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Divider */}
+      <div className="h-px bg-gray-100 my-12"></div>
+
+      {/* FAQ Section */}
+      <section className="max-w-3xl mx-auto px-6 py-20">
+        <h2 className="text-4xl font-bold text-gray-900 mb-12 text-center">Frequently asked questions</h2>
+
+        <div className="space-y-0">
+          {faqs.map((faq, idx) => (
+            <div key={idx} className={`border-b border-gray-200 ${idx === 0 ? 'border-t' : ''}`}>
+              <button
+                onClick={() => setExpandedFaq(expandedFaq === idx ? null : idx)}
+                className="w-full px-6 py-6 flex justify-between items-start hover:bg-gray-50 transition text-left"
+              >
+                <p className="text-lg font-semibold text-gray-900 pr-6">{faq.question}</p>
+                <svg
+                  className={`w-5 h-5 text-gray-600 transition-transform flex-shrink-0 mt-1 ${expandedFaq === idx ? 'rotate-180' : ''}`}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+
+              {expandedFaq === idx && (
+                <div className="px-6 pb-6 text-gray-600">
+                  {faq.answer}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Divider */}
+      <div className="h-px bg-gray-100 my-12"></div>
 
       {/* CTA Section */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 border-t border-slate-800">
-        <motion.div
-          className="bg-gradient-to-r from-blue-900/40 to-cyan-900/40 border border-blue-700/50 rounded-lg p-12 text-center"
-          variants={itemVariants}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true }}
-        >
-          <h2 className="text-3xl font-bold mb-4">Ready to orchestrate your AI agents?</h2>
-          <p className="text-slate-300 mb-8">Start with the web version or download the desktop app.</p>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <a
-              href="https://freeswarm.myndlabs.tech/app"
-              className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white px-8 py-3 rounded-lg font-semibold transition"
-            >
-              Launch Web App
-            </a>
-            <a
-              href="https://github.com/yethikrishna/free-swarm/releases"
-              className="border border-blue-500 text-blue-300 hover:text-white px-8 py-3 rounded-lg font-semibold transition"
-            >
-              Download Desktop
-            </a>
-          </div>
-        </motion.div>
+      <section className="max-w-7xl mx-auto px-6 py-20 text-center">
+        <h2 className="text-5xl font-bold text-gray-900 mb-6 leading-tight">
+          An AI Platform that does the work, not just talks about it.
+        </h2>
+        <p className="text-xl text-gray-600 mb-10">
+          Try FreeSwarm on your machine today. Open-source, free, and fully under your control.
+        </p>
+        <a href="https://freeswarm.myndlabs.tech/app" className="inline-flex items-center gap-2 bg-gray-900 text-white px-8 py-4 rounded-lg hover:bg-gray-800 transition text-lg font-semibold">
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="4" y="4.5" width="16" height="11" rx="1.6"></rect>
+            <line x1="2.5" y1="19.5" x2="21.5" y2="19.5"></line>
+          </svg>
+          Launch FreeSwarm
+        </a>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800 py-12 mt-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-slate-500">
-          <p className="mb-4">
-            Built by <a href="https://myndlabs.tech" className="text-blue-400 hover:text-blue-300">Mynd Labs</a> •
-            <a href="https://github.com/yethikrishna/free-swarm" className="text-blue-400 hover:text-blue-300 ml-2">Open Source</a> •
-            <a href="https://github.com/yethikrishna/free-swarm/blob/main/LICENSE" className="text-blue-400 hover:text-blue-300 ml-2">MIT License</a>
-          </p>
-          <p>An Army of AI Agents at Your Fingertips</p>
+      <footer className="bg-gray-900 text-white border-t border-gray-800 py-20">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid md:grid-cols-4 gap-12 mb-16">
+            <div>
+              <div className="flex items-center gap-3 mb-6">
+                <img src="https://openswarm.info/logo.png" alt="FreeSwarm" className="w-8 h-8" />
+                <span className="font-bold text-lg">Free Swarm</span>
+              </div>
+              <p className="text-gray-400 text-sm leading-relaxed">Your open-source AI agent orchestrator. One place for you and your agents to work together.</p>
+            </div>
+
+            <div>
+              <p className="font-bold text-white mb-6">Resources</p>
+              <ul className="space-y-3 text-sm">
+                <li><a href="https://github.com/yethikrishna/free-swarm" className="text-gray-400 hover:text-white transition">Source Code</a></li>
+                <li><a href="https://github.com/yethikrishna/free-swarm/blob/main/GETTING_STARTED.md" className="text-gray-400 hover:text-white transition">Getting Started</a></li>
+                <li><a href="https://github.com/yethikrishna/free-swarm/issues" className="text-gray-400 hover:text-white transition">Issues</a></li>
+                <li><a href="https://github.com/yethikrishna/free-swarm/blob/main/LICENSE" className="text-gray-400 hover:text-white transition">MIT License</a></li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-bold text-white mb-6">Community</p>
+              <ul className="space-y-3 text-sm">
+                <li><span className="text-gray-400">Discord - Coming Soon</span></li>
+                <li><span className="text-gray-400">Twitter - Coming Soon</span></li>
+                <li><a href="https://github.com/yethikrishna/free-swarm" className="text-gray-400 hover:text-white transition">GitHub</a></li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-bold text-white mb-6">Legal</p>
+              <ul className="space-y-3 text-sm">
+                <li><span className="text-gray-400">Privacy Policy - Coming Soon</span></li>
+                <li><span className="text-gray-400">Terms of Service - Coming Soon</span></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-800 pt-8 flex justify-between items-center">
+            <p className="text-gray-400 text-sm">© 2026 Free Swarm. MIT License.</p>
+            <p className="text-gray-400 text-sm">Follow us - Coming Soon</p>
+          </div>
         </div>
       </footer>
     </div>

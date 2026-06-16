@@ -1037,3 +1037,63 @@ async def combo_delete(combo_name: str):
             return {"ok": False, "error": f"Failed to delete combo: {r.status_code}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# 9router testStatus values that mean a connection is healthy.
+_PROVIDER_OK_STATUSES = ("active", "success")
+
+
+def _provider_status_from_connection(conn: dict) -> str:
+    """Map a 9router connection's testStatus/lastError to ok|error|unknown."""
+    if conn.get("lastError") or conn.get("testStatus") == "unavailable":
+        return "error"
+    if conn.get("testStatus") in _PROVIDER_OK_STATUSES and conn.get("isActive", True):
+        return "ok"
+    return "unknown"
+
+
+@agents.router.get("/providers/status")
+async def providers_status():
+    """Provider health, normalized from 9router connections.
+
+    Aggregates one row per provider id: a provider is "ok" if any of its
+    connections is healthy, "error" only if it has connections and none are
+    healthy. Providers with no connection are simply absent, so the UI renders
+    them as not-configured. Returns routerStatus="offline" when 9router is
+    unreachable so stale green badges never linger.
+    """
+    from datetime import datetime, timezone
+    from backend.apps.nine_router import get_providers
+
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        connections = await get_providers()
+    except Exception:
+        return {"routerStatus": "offline", "providers": [], "lastChecked": now}
+
+    by_provider: dict = {}
+    for c in connections:
+        pid = c.get("provider")
+        if not pid:
+            continue
+        st = _provider_status_from_connection(c)
+        entry = by_provider.get(pid)
+        if entry is None:
+            by_provider[pid] = {
+                "id": pid,
+                "name": c.get("name") or pid,
+                "configured": True,
+                "status": st,
+                "lastError": c.get("lastError"),
+                "lastChecked": now,
+            }
+        else:
+            # Healthiest connection wins; keep the first error message we saw.
+            if st == "ok":
+                entry["status"] = "ok"
+                entry["lastError"] = None
+            elif st == "error" and entry["status"] != "ok" and not entry["lastError"]:
+                entry["status"] = "error"
+                entry["lastError"] = c.get("lastError")
+
+    return {"routerStatus": "ok", "providers": list(by_provider.values()), "lastChecked": now}

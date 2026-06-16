@@ -9,6 +9,8 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import { AppSettings } from '@/shared/state/settingsSlice';
+import type { ProviderStatus } from '@/shared/hooks/useProviderStatus';
+import ProviderStatusBadge from './ProviderStatusBadge';
 import type { SettingsStyles } from '../settingsStyles';
 
 type ApiKeyField = 'anthropic_api_key' | 'openai_api_key' | 'google_api_key' | 'openrouter_api_key';
@@ -19,13 +21,15 @@ export interface ApiKeyConfig {
   desc: string;
   placeholder: string;
   href: string;
+  /** 9router provider id this key maps to, for live health lookup. */
+  providerId: string;
 }
 
 export const API_KEY_CARDS: ApiKeyConfig[] = [
-  { field: 'anthropic_api_key', label: 'Anthropic', desc: 'The latest Claude models.', placeholder: 'sk-ant-...', href: 'https://console.anthropic.com/settings/keys' },
-  { field: 'openai_api_key', label: 'OpenAI', desc: 'The latest OpenAI models.', placeholder: 'sk-...', href: 'https://platform.openai.com/api-keys' },
-  { field: 'google_api_key', label: 'Google', desc: 'The latest Gemini models.', placeholder: 'AIza...', href: 'https://aistudio.google.com/apikey' },
-  { field: 'openrouter_api_key', label: 'OpenRouter', desc: 'Hundreds of models from every major provider.', placeholder: 'sk-or-...', href: 'https://openrouter.ai/keys' },
+  { field: 'anthropic_api_key', label: 'Anthropic', desc: 'The latest Claude models.', placeholder: 'sk-ant-...', href: 'https://console.anthropic.com/settings/keys', providerId: 'anthropic' },
+  { field: 'openai_api_key', label: 'OpenAI', desc: 'The latest OpenAI models.', placeholder: 'sk-...', href: 'https://platform.openai.com/api-keys', providerId: 'openai' },
+  { field: 'google_api_key', label: 'Google', desc: 'The latest Gemini models.', placeholder: 'AIza...', href: 'https://aistudio.google.com/apikey', providerId: 'gemini' },
+  { field: 'openrouter_api_key', label: 'OpenRouter', desc: 'Hundreds of models from every major provider.', placeholder: 'sk-or-...', href: 'https://openrouter.ai/keys', providerId: 'openrouter' },
 ];
 
 const ApiKeyCard: React.FC<{
@@ -35,7 +39,9 @@ const ApiKeyCard: React.FC<{
   showApiKey: boolean;
   setShowApiKey: (v: boolean) => void;
   styles: SettingsStyles;
-}> = ({ config, form, setForm, showApiKey, setShowApiKey, styles }) => {
+  status?: ProviderStatus;
+  routerOffline?: boolean;
+}> = ({ config, form, setForm, showApiKey, setShowApiKey, styles, status, routerOffline }) => {
   const c = useClaudeTokens();
   const { fieldSx, descSx, labelSx } = styles;
   const value = form[config.field] as string | null | undefined;
@@ -43,9 +49,7 @@ const ApiKeyCard: React.FC<{
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <Typography sx={labelSx}>{config.label}</Typography>
-        {value ? (
-          <Typography sx={{ fontSize: '0.6rem', fontWeight: 600, color: c.status.success, bgcolor: `${c.status.success}15`, px: 0.75, py: 0.15, borderRadius: '3px' }}>CONNECTED</Typography>
-        ) : null}
+        <ProviderStatusBadge status={status} routerOffline={routerOffline} />
       </Box>
       <Typography sx={{ ...descSx, mb: 1 }}>{config.desc}</Typography>
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>

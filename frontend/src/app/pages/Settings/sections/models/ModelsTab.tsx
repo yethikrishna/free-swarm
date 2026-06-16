@@ -1,8 +1,12 @@
 import React, { useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import { AppSettings } from '@/shared/state/settingsSlice';
+import { useProviderStatus } from '@/shared/hooks/useProviderStatus';
 import FreeSwarmProCard from '../subscription/FreeSwarmProCard';
 import SubscriptionCards from '../subscription/SubscriptionCards';
 import ApiKeyCard, { API_KEY_CARDS } from './ApiKeyCard';
@@ -20,6 +24,7 @@ const ModelsTab: React.FC<{
 }> = ({ form, setForm, showApiKey, setShowApiKey, styles }) => {
   const c = useClaudeTokens();
   const { descSx } = styles;
+  const { byId: providerStatus, routerOffline, loading: statusLoading, refresh } = useProviderStatus();
 
   const allModels = useMemo(() => {
     const models: Array<{ value: string; label: string }> = [];
@@ -60,9 +65,23 @@ const ModelsTab: React.FC<{
       </Box>
 
       <Box data-onboarding="settings-api-keys" sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-        <Typography sx={{ fontSize: '0.7rem', color: c.text.ghost, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, mt: 1 }}>
-          Or Connect With API Keys
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 1 }}>
+          <Typography sx={{ fontSize: '0.7rem', color: c.text.ghost, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+            Or Connect With API Keys
+          </Typography>
+          <Tooltip title={routerOffline ? 'Router offline' : 'Refresh status'} arrow placement="top">
+            <span>
+              <IconButton
+                size="small"
+                onClick={refresh}
+                disabled={statusLoading}
+                sx={{ color: c.text.muted, '&:hover': { color: c.text.primary } }}
+              >
+                <RefreshIcon sx={{ fontSize: 15 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
 
         <Typography sx={{ ...descSx, mb: -1 }}>
           Pay per use. Each key is stored locally on your device.
@@ -77,6 +96,8 @@ const ModelsTab: React.FC<{
             showApiKey={showApiKey}
             setShowApiKey={setShowApiKey}
             styles={styles}
+            status={providerStatus[config.providerId]}
+            routerOffline={routerOffline}
           />
         ))}
 

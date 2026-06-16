@@ -16,6 +16,14 @@ export const WS_BASE = `ws://${host}:${port}`;
 // Must match freeswarm-cloud's PUBLIC_BASE_URL (fly.toml) and the Google OAuth redirect URI.
 export const FREESWARM_DEFAULT_PROXY_URL = 'https://api.freeswarm.myndlabs.tech';
 
+// Web vs desktop runtime mode. The desktop build injects an Electron bridge
+// (window.freeswarm); the webpack dev server runs on localhost. Anything else
+// (the hosted /app deployment) is the web build, where sign-in and subscription
+// gating get surfaced. Mirrors backend/config/mode.py.
+const _isElectron = !!_w.freeswarm;
+const _isLocalhost = ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
+export const IS_WEB = !_isElectron && !_isLocalhost;
+
 // Per-install token from Electron preload; cached after first resolve. Call refreshAuthToken() on 4401.
 let _authTokenCache: string = '';
 let _authTokenPromise: Promise<string> | null = null;

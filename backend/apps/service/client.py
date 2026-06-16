@@ -115,6 +115,11 @@ def set_user_id(uid: Optional[str]) -> None:
 def _is_enabled(kind: str) -> bool:
     """Honour user opt-out. Diagnostic always flows (errors block usability);
     state + session honour the toggle."""
+    # Local builds never log; nothing leaves the device regardless of kind.
+    # A test sink is an explicit capture hook, so it bypasses the mode gate.
+    from backend.config.mode import analytics_enabled
+    if not analytics_enabled() and _test_sink is None:
+        return False
     if kind == "diagnostic":
         return True
     try:
@@ -237,6 +242,11 @@ async def _post_or_spool(path: str, body: dict, kind: str) -> None:
 
 
 async def drain_spool(batch_size: int = 50) -> int:
+    # Local builds never replay the spool; egress stays off entirely.
+    # A test sink bypasses the gate so drain tests still exercise the path.
+    from backend.config.mode import analytics_enabled
+    if not analytics_enabled() and _test_sink is None:
+        return 0
     async with _drain_lock:
         entries = buffer.drain(_spool_path(), batch_size=batch_size)
         if not entries:

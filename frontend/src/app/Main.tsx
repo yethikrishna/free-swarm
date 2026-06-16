@@ -1,0 +1,544 @@
+import React, { useMemo, useEffect, useState, useRef, Suspense } from 'react';
+import { Provider } from 'react-redux';
+import { HashRouter, Routes, Route } from 'react-router-dom';
+import { ThemeProvider as MuiThemeProvider, createTheme, CssBaseline } from '@mui/material';
+import Box from '@mui/material/Box';
+import Fade from '@mui/material/Fade';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
+import { store } from '../shared/state/store';
+import { useAppDispatch, useAppSelector } from '@/shared/hooks';
+import { fetchSettings, updateSettings, markFreeTrialArmSettled } from '@/shared/state/settingsSlice';
+import { fetchModels } from '@/shared/state/modelsSlice';
+import { API_BASE } from '@/shared/config';
+import {
+  setAppVersion,
+  setUpdateAvailable,
+  setUpdateNotAvailable,
+  setDownloading,
+  setUpdateDownloaded,
+  setUpdateError,
+} from '@/shared/state/updateSlice';
+import AppShell from './components/Layout/AppShell';
+import DashboardSelection from './pages/DashboardSelection/DashboardSelection';
+import ErrorBoundary from './components/feedback/ErrorBoundary';
+import { setPanelMode, disableOnboardingAfterCrash } from '@/shared/state/onboardingProgressSlice';
+
+const Skills = React.lazy(() => import('./pages/Skills/Skills'));
+const Tools = React.lazy(() => import('./pages/Tools/Tools'));
+const Modes = React.lazy(() => import('./pages/Modes/Modes'));
+const Views = React.lazy(() => import('./pages/Views/Views'));
+const Customization = React.lazy(() => import('./pages/Customization/Customization'));
+const Analytics = React.lazy(() => import('./pages/Analytics/Analytics'));
+const OnboardingRoot = React.lazy(() =>
+  import('./components/Onboarding').then((m) => ({ default: m.OnboardingRoot })),
+);
+
+if (typeof window !== 'undefined') {
+  // Diagnostic global error capture. The packaged bundle has no source maps, so without these handlers the only thing that reaches main-process stderr is "Uncaught TypeError: ... (bundle.js:2)" with zero stack context. Forward error.stack and Redux action.type when available so we can pinpoint the offender across the chat-spawn / workflow rendering paths even in minified prod.
+  window.addEventListener('error', (e) => {
+    try {
+      // eslint-disable-next-line no-console
+      console.error('[diag][window.error]', e.message, '@', e.filename, ':', e.lineno, ':', e.colno, '\nstack:\n', e.error && (e.error as Error).stack);
+    } catch { /* never let the handler itself throw */ }
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    try {
+      const reason = (e as PromiseRejectionEvent).reason;
+      // eslint-disable-next-line no-console
+      console.error('[diag][window.unhandledrejection]', reason && reason.message, '\nstack:\n', reason && reason.stack);
+    } catch { /* never let the handler itself throw */ }
+  });
+
+  (window as any).__freeswarmPrefetchRoute = (path: string) => {
+    switch (path) {
+      case '/skills': void import('./pages/Skills/Skills'); return;
+      case '/actions':
+      case '/tools': void import('./pages/Tools/Tools'); return;
+      case '/modes': void import('./pages/Modes/Modes'); return;
+      case '/views':
+      case '/apps': void import('./pages/Views/Views'); return;
+      case '/customization': void import('./pages/Customization/Customization'); return;
+      case '/analytics': void import('./pages/Analytics/Analytics'); return;
+    }
+  };
+  const prefetchAll = () => {
+    void import('./pages/Views/Views');
+    void import('./pages/Skills/Skills');
+    void import('./pages/Tools/Tools');
+    void import('./pages/Modes/Modes');
+    void import('./pages/Customization/Customization');
+    void import('./pages/Analytics/Analytics');
+  };
+  const ric = (window as any).requestIdleCallback as
+    | ((cb: () => void, opts?: { timeout?: number }) => number)
+    | undefined;
+  if (ric) ric(prefetchAll, { timeout: 1500 });
+  else window.setTimeout(prefetchAll, 500);
+}
+import { report, getSessionTraceState, getRecentActions } from '@/shared/serviceClient';
+import { useRouteTracker } from '@/shared/hooks/useRouteTracker';
+import { useDeepLink } from '@/shared/hooks/useDeepLink';
+import { useWindowFocus } from '@/shared/hooks/useWindowFocus';
+import { useInteractionHeartbeat } from '@/shared/hooks/useInteractionHeartbeat';
+import { ThemeProvider, useThemeMode, useClaudeTokens } from '@/shared/styles/ThemeContext';
+import { ClaudeTokens } from '@/shared/styles/claudeTokens';
+
+function buildMuiTheme(c: ClaudeTokens, mode: 'light' | 'dark') {
+  return createTheme({
+    palette: {
+      mode,
+      background: {
+        default: c.bg.page,
+        paper: c.bg.surface,
+      },
+      primary: {
+        main: c.accent.primary,
+        dark: c.accent.pressed,
+        light: c.accent.hover,
+      },
+      text: {
+        primary: c.text.primary,
+        secondary: c.text.muted,
+        disabled: c.text.tertiary,
+      },
+      divider: c.border.medium,
+      error: { main: c.status.error },
+      warning: { main: c.status.warning },
+      success: { main: c.status.success },
+      info: { main: c.status.info },
+    },
+    typography: {
+      fontFamily: c.font.sans,
+      h1: { fontWeight: 600 },
+      h2: { fontWeight: 600 },
+      h3: { fontWeight: 600 },
+      h5: { fontWeight: 600 },
+      h6: { fontWeight: 600 },
+      button: { textTransform: 'none' as const, fontWeight: 500 },
+    },
+    shape: {
+      borderRadius: c.radius.xl,
+    },
+    components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          body: {
+            backgroundColor: c.bg.page,
+            color: c.text.primary,
+            scrollbarWidth: 'thin',
+            scrollbarColor: `${c.border.strong} transparent`,
+          },
+          '*': {
+            scrollbarWidth: 'thin',
+            scrollbarColor: `${c.border.strong} transparent`,
+          },
+          '*::-webkit-scrollbar': {
+            width: '6px',
+            height: '6px',
+          },
+          '*::-webkit-scrollbar-track': {
+            background: 'transparent',
+          },
+          '*::-webkit-scrollbar-thumb': {
+            background: c.border.strong,
+            borderRadius: '3px',
+          },
+          '*::-webkit-scrollbar-thumb:hover': {
+            background: c.text.ghost,
+          },
+          '*::-webkit-scrollbar-corner': {
+            background: 'transparent',
+          },
+        },
+      },
+      MuiButton: {
+        styleOverrides: {
+          root: {
+            borderRadius: c.radius.lg,
+            transition: c.transition,
+            textTransform: 'none' as const,
+            '&:active': { transform: 'scale(0.98)' },
+          },
+          contained: {
+            boxShadow: 'none',
+            '&:hover': { boxShadow: 'none' },
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            boxShadow: c.shadow.md,
+            border: `1px solid ${c.border.subtle}`,
+            backgroundImage: 'none',
+          },
+        },
+      },
+      MuiChip: {
+        styleOverrides: {
+          root: {
+            fontWeight: 500,
+            borderRadius: c.radius.md,
+          },
+        },
+      },
+      MuiDialog: {
+        styleOverrides: {
+          paper: {
+            borderRadius: 16,
+            boxShadow: c.shadow.lg,
+            border: `1px solid ${c.border.subtle}`,
+          },
+        },
+      },
+      MuiTooltip: {
+        styleOverrides: {
+          tooltip: {
+            backgroundColor: c.bg.inverse,
+            color: c.text.inverse,
+            fontSize: '0.75rem',
+          },
+        },
+      },
+    },
+  });
+}
+
+const DeepLinkListener: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  useDeepLink();
+  useWindowFocus();
+  useInteractionHeartbeat();
+  return <>{children}</>;
+};
+
+const SettingsLoader: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const dispatch = useAppDispatch();
+  const { setMode: setThemeMode } = useThemeMode();
+  const theme = useAppSelector((s) => s.settings.data.theme);
+  const loaded = useAppSelector((s) => s.settings.loaded);
+  const allowExperimentalUpdates = useAppSelector((s) => s.settings.data.allow_experimental_updates);
+  useEffect(() => {
+    dispatch(fetchSettings());
+    dispatch(fetchModels());
+    fetch(`${API_BASE}/subscription/sync`, { method: 'POST' })
+      .then((r) => {
+        if (r.ok) dispatch(fetchSettings());
+      })
+      .catch(() => {})
+      .finally(() => {
+        // Arm the zero-config free trial when nothing is connected so a brand-new
+        // user can run an agent immediately. The backend no-ops if a real key or
+        // subscription exists, so this is safe to fire on every launch.
+        fetch(`${API_BASE}/subscription/free-trial/mint`, { method: 'POST' })
+          .catch(() => {})
+          // The backend arms server-side regardless of whether the browser can read the mint
+          // response (a transient boot-time CORS/timing miss makes `data` unreadable), so refetch
+          // unconditionally, the GET is the only reliable signal the UI gets that it armed.
+          .finally(() => { dispatch(fetchSettings()); dispatch(markFreeTrialArmSettled()); });
+      });
+  }, [dispatch]);
+
+  useEffect(() => {
+    const onFocus = () => { dispatch(fetchSettings()); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (loaded) setThemeMode(theme as 'light' | 'dark');
+  }, [loaded, theme, setThemeMode]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    (window as any).freeswarm?.setAllowPrerelease?.(allowExperimentalUpdates);
+  }, [loaded, allowExperimentalUpdates]);
+  // Hold paint until settings land so the user's theme renders first; Electron's ready-to-show relies on this.
+  if (!loaded) return null;
+  return <>{children}</>;
+};
+
+const DEFAULT_MODEL_PRIORITY: string[] = [
+  'Anthropic',
+  'OpenAI',
+  'Google',
+  'FreeSwarm Pro',
+  'FreeSwarm',
+];
+
+const DEFAULT_MODEL_PICKS: Record<string, string[]> = {
+  Anthropic: ['sonnet-cc', 'sonnet'],
+  OpenAI: ['gpt-5.4-mini', 'gpt-5.4'],
+  Google: ['gemini-2.5-flash', 'gemini-3-flash', 'gemini-2.5-pro'],
+  'FreeSwarm Pro': ['sonnet', 'opus'],
+  FreeSwarm: ['gpt-5-mini', 'claude-haiku-4.5', 'gpt-4.1'],
+};
+
+function pickFallbackModel(
+  byProvider: Record<string, Array<{ value: string; label: string }>>,
+): { value: string; label: string; provider: string } | null {
+  for (const prov of DEFAULT_MODEL_PRIORITY) {
+    const models = byProvider[prov];
+    if (!models || models.length === 0) continue;
+    const available = new Map(models.map((m) => [m.value, m]));
+    const picks = DEFAULT_MODEL_PICKS[prov] || [];
+    for (const candidate of picks) {
+      const m = available.get(candidate);
+      if (m) return { value: m.value, label: m.label, provider: prov };
+    }
+    const first = models[0];
+    return { value: first.value, label: first.label, provider: prov };
+  }
+  return null;
+}
+
+/** Reconciles stored default_model against reachable models; falls back per DEFAULT_MODEL_PRIORITY and warns once. */
+const DefaultModelGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const dispatch = useAppDispatch();
+  const settings = useAppSelector((s) => s.settings.data);
+  const settingsLoaded = useAppSelector((s) => s.settings.loaded);
+  const byProvider = useAppSelector((s) => s.models.byProvider);
+  const modelsLoaded = useAppSelector((s) => s.models.loaded);
+
+  const [warning, setWarning] = useState<{ from: string; to: string; provider: string } | null>(null);
+  const pendingRef = useRef(false);
+
+  useEffect(() => {
+    if (!settingsLoaded || !modelsLoaded) return;
+    if (pendingRef.current) return;
+    if (Object.keys(byProvider).length === 0) return;
+
+    const flat = Object.values(byProvider).flat();
+    const currentExists = flat.some((m) => m.value === settings.default_model);
+    if (currentExists) return;
+
+    const fallback = pickFallbackModel(byProvider);
+    if (!fallback || fallback.value === settings.default_model) return;
+
+    const fromLabel = flat.find((m) => m.value === settings.default_model)?.label ?? settings.default_model;
+    pendingRef.current = true;
+    dispatch(updateSettings({ ...settings, default_model: fallback.value }))
+      .finally(() => {
+        pendingRef.current = false;
+      });
+    setWarning({ from: fromLabel, to: fallback.label, provider: fallback.provider });
+  }, [settingsLoaded, modelsLoaded, byProvider, settings, dispatch]);
+
+  return (
+    <>
+      {children}
+      <Snackbar
+        open={!!warning}
+        autoHideDuration={8000}
+        onClose={() => setWarning(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          severity="warning"
+          variant="filled"
+          onClose={() => setWarning(null)}
+          sx={{ fontSize: '0.8rem' }}
+        >
+          {warning && (
+            <>Default model <b>{warning.from}</b> is no longer available, switched to <b>{warning.to}</b> ({warning.provider}).</>
+          )}
+        </Alert>
+      </Snackbar>
+    </>
+  );
+};
+
+/** Surfaces a brief recovery chip if the crash-watchdog relaunched us last cycle.
+ *  Mac-only path (watchdog only runs on darwin); main.js returns null elsewhere.
+ *  Fade in over 250ms, hold for 8s, fade out over 300ms. No interaction required;
+ *  sessions are server-side so reattachment is automatic. */
+const CrashRecoveryChip: React.FC = () => {
+  const [show, setShow] = React.useState(false);
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    const api = (window as any).freeswarm as FreeSwarmAPI | undefined;
+    if (!api?.getCrashRecoveryInfo) return;
+    api.getCrashRecoveryInfo().then((info) => {
+      if (info) { setMounted(true); setShow(true); }
+    }).catch(() => {});
+  }, []);
+  React.useEffect(() => {
+    if (!show) return;
+    const t = setTimeout(() => setShow(false), 8000);
+    return () => clearTimeout(t);
+  }, [show]);
+  if (!mounted) return null;
+  return (
+    <Fade in={show} timeout={{ enter: 250, exit: 300 }} unmountOnExit>
+      <Box sx={{
+        position: 'fixed', top: 16, right: 16, zIndex: 1500,
+        display: 'flex', alignItems: 'center', gap: 1,
+        bgcolor: 'background.paper',
+        border: '1px solid', borderColor: 'divider',
+        boxShadow: 3, borderRadius: '10px',
+        px: 1.75, py: 1, fontSize: '0.85rem',
+        maxWidth: 360,
+      }}>
+        <Box component="span" sx={{
+          width: 8, height: 8, borderRadius: '50%',
+          bgcolor: 'success.main',
+        }} />
+        <Box component="span">
+          We had a hiccup and brought you back. Your sessions are still here.
+        </Box>
+      </Box>
+    </Fade>
+  );
+};
+
+const UpdateListener: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    const api = (window as any).freeswarm as FreeSwarmAPI | undefined;
+    if (!api?.getAppVersion) return;
+
+    api.getAppVersion().then((v: string) => dispatch(setAppVersion(v)));
+
+    api.getUpdateStatus?.().then((cached) => {
+      if (!cached) return;
+      if (cached.status === 'available' && cached.info?.version) {
+        dispatch(setUpdateAvailable(cached.info.version));
+      } else if (cached.status === 'not-available') {
+        dispatch(setUpdateNotAvailable());
+      } else if (cached.status === 'downloading' && cached.info?.percent != null) {
+        dispatch(setDownloading(cached.info.percent));
+      } else if (cached.status === 'downloaded') {
+        dispatch(setUpdateDownloaded());
+      } else if (cached.status === 'error' && cached.error) {
+        dispatch(setUpdateError(cached.error));
+      }
+    });
+
+    const cleanups = [
+      api.onUpdateAvailable?.((info: FreeSwarmUpdateInfo) => dispatch(setUpdateAvailable(info.version))),
+      api.onUpdateNotAvailable?.(() => dispatch(setUpdateNotAvailable())),
+      api.onDownloadProgress?.((p: FreeSwarmDownloadProgress) => dispatch(setDownloading(p.percent))),
+      api.onUpdateDownloaded?.(() => dispatch(setUpdateDownloaded())),
+      api.onUpdateError?.((msg: string) => dispatch(setUpdateError(msg))),
+    ];
+
+    return () => cleanups.forEach((fn: (() => void) | undefined) => fn?.());
+  }, [dispatch]);
+
+  return <>{children}</>;
+};
+
+const ThemedApp: React.FC = () => {
+  const c = useClaudeTokens();
+  const { mode } = useThemeMode();
+  const muiTheme = useMemo(() => buildMuiTheme(c, mode), [c, mode]);
+
+  useEffect(() => {
+    const handleUnload = () => {
+      const { appStartTs, currentPage } = getSessionTraceState();
+      report('app', 'last_action', {
+        last_page: currentPage,
+        time_spent_seconds: Math.round((Date.now() - appStartTs) / 1000),
+      }, { immediate: true });
+    };
+    const handleError = (event: ErrorEvent) => {
+      const { currentPage } = getSessionTraceState();
+      report('app', 'error', {
+        error_message: event.message,
+        error_stack: event.error?.stack?.slice(0, 500),
+        last_page: currentPage,
+        recent_actions: getRecentActions(10),
+      });
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    window.addEventListener('error', handleError);
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload);
+      window.removeEventListener('error', handleError);
+    };
+  }, []);
+
+  return (
+    <MuiThemeProvider theme={muiTheme}>
+      <CssBaseline />
+      <HashRouter>
+        <RouteTrackerMount />
+        <SettingsLoader>
+            <DefaultModelGuard>
+            <UpdateListener>
+              <CrashRecoveryChip />
+              <DeepLinkListener>
+                <ErrorBoundary scope="routes">
+                  <Suspense fallback={null}>
+                    <Routes>
+                      <Route element={<AppShell />}>
+                        <Route path="/" element={<DashboardSelection />} />
+                        {/* Dashboard renders persistently in AppShell so webviews survive nav. */}
+                        <Route path="/dashboard/:id" element={null} />
+                        <Route path="/customization" element={<Customization />} />
+                        <Route path="/skills" element={<Skills />} />
+                        <Route path="/actions" element={<Tools />} />
+                        <Route path="/modes" element={<Modes />} />
+                        <Route path="/apps" element={<Views />} />
+                        <Route path="/apps/:id" element={<Views />} />
+                        <Route path="/analytics" element={<Analytics />} />
+                      </Route>
+                    </Routes>
+                  </Suspense>
+                </ErrorBoundary>
+                <OnboardingErrorGuard>
+                  <Suspense fallback={null}>
+                    <OnboardingRoot />
+                  </Suspense>
+                </OnboardingErrorGuard>
+              </DeepLinkListener>
+            </UpdateListener>
+            </DefaultModelGuard>
+          </SettingsLoader>
+      </HashRouter>
+    </MuiThemeProvider>
+  );
+};
+
+/**
+ * Onboarding must never be able to take the whole app down. It mounts beside the
+ * routes (not under them), so before this guard a render throw bubbled to the root
+ * boundary and blanked everything. Here we catch it locally: keep the dashboard
+ * alive (fallback null), report it under its own scope so the stack finally shows
+ * up in telemetry, and dismiss the tour in storage so the next launch doesn't drop
+ * the user straight back into the same crash. Settings > restart tour re-enables it.
+ */
+const OnboardingErrorGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const dispatch = useAppDispatch();
+  return (
+    <ErrorBoundary
+      scope="onboarding"
+      fallback={null}
+      onError={() => {
+        try { dispatch(setPanelMode('hidden')); } catch {}
+        disableOnboardingAfterCrash();
+      }}
+    >
+      {children}
+    </ErrorBoundary>
+  );
+};
+
+// useRouteTracker calls useLocation, must be inside HashRouter.
+const RouteTrackerMount: React.FC = () => {
+  useRouteTracker();
+  return null;
+};
+
+const Main: React.FC = () => {
+  return (
+    <Provider store={store}>
+      <ThemeProvider>
+        <ThemedApp />
+      </ThemeProvider>
+    </Provider>
+  );
+};
+
+export default Main;

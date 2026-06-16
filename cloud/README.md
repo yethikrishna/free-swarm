@@ -24,14 +24,15 @@ contract.
 | POST | `/api/auth/signin-activate` | `{ token, signin_method, email }` -> profile + plan |
 | POST | `/api/auth/dev-login` | `{ email }` -> `{ token }` (dev only, `ALLOW_DEV_LOGIN=1`) |
 | GET  | `/api/auth/google` | OAuth start + callback (gated on `GOOGLE_*`) |
+| GET  | `/api/auth/github` | OAuth start + callback (gated on `GITHUB_*`) |
 | POST | `/api/subscription/sync` | Bearer -> `{ plan, current_period_end, status, synced }` |
 | POST | `/api/billing/portal` | Bearer -> `{ url }` (gated on `STRIPE_SECRET_KEY`) |
 | POST | `/api/billing/webhook` | Stripe webhook (gated on `STRIPE_WEBHOOK_SECRET`) |
 | POST | `/api/service/sync` | Usage ingest (web mode), idempotent |
 
 Working today: health, dev-login, signin-activate, me, subscription/sync,
-service/sync, Google OAuth (if GOOGLE_* env vars set), Stripe billing + webhook
-(if STRIPE_* env vars set).
+service/sync, Google OAuth (if GOOGLE_* env vars set), GitHub OAuth (if GITHUB_* env vars set),
+Stripe billing + webhook (if STRIPE_* env vars set).
 
 ## Deploy
 

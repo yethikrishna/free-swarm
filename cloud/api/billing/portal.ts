@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import Stripe from 'stripe';
 import { handlePreflight, json, methodNotAllowed } from '../../lib/http';
 import { extractBearer, verifyToken } from '../../lib/auth';
-import { getUserById } from '../../lib/db';
+import { getUserById, getSubscriptionWithStripe } from '../../lib/db';
 
 // POST /api/billing/portal -> { url }
 // Returns a Stripe Customer Portal URL the desktop/web opens in the browser.
@@ -17,12 +18,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = await getUserById(claims.sub);
   if (!user) return json(res, 401, { error: 'Unknown user' });
 
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (!stripeKey) {
     return json(res, 501, { error: 'Billing not configured' });
   }
 
-  // TODO: look up the user's stripe_customer_id, then
-  // stripe.billingPortal.sessions.create({ customer, return_url }) and return
-  // session.url. Left as a structured stub until Stripe keys exist.
-  json(res, 501, { error: 'Billing portal not yet implemented' });
+  const subscription = await getSubscriptionWithStripe(claims.sub);
+  if (!subscription.stripe_customer_id) {
+    return json(res, 400, { error: 'No active subscription' });
+  }
+
+  const stripe = new Stripe(stripeKey);
+  const session = await stripe.billingPortal.sessions.create({
+    customer: subscription.stripe_customer_id,
+    return_url: `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://freeswarm.myndlabs.tech'}/app`,
+  });
+
+  json(res, 200, { url: session.url });
 }

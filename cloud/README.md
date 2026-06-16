@@ -26,11 +26,12 @@ contract.
 | GET  | `/api/auth/google` | OAuth start + callback (gated on `GOOGLE_*`) |
 | POST | `/api/subscription/sync` | Bearer -> `{ plan, current_period_end, status, synced }` |
 | POST | `/api/billing/portal` | Bearer -> `{ url }` (gated on `STRIPE_SECRET_KEY`) |
+| POST | `/api/billing/webhook` | Stripe webhook (gated on `STRIPE_WEBHOOK_SECRET`) |
 | POST | `/api/service/sync` | Usage ingest (web mode), idempotent |
 
 Working today: health, dev-login, signin-activate, me, subscription/sync,
-service/sync. Structured stubs (deploy green, return 501 until configured):
-Google OAuth, Stripe billing.
+service/sync, Google OAuth (if GOOGLE_* env vars set), Stripe billing + webhook
+(if STRIPE_* env vars set).
 
 ## Deploy
 

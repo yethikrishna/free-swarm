@@ -237,7 +237,23 @@ def get_api_type(short_name: str) -> str:
 
 
 def resolve_model_id_for_sdk(short_name: str, settings: AppSettings) -> str:
-    """Short model name → id string for ClaudeAgentOptions."""
+    """Short model name → id string for ClaudeAgentOptions.
+
+    Handles combo:// prefixed names by returning the first model in the combo.
+    """
+    # Handle model combos (fallback stacks)
+    if short_name.startswith("combo://"):
+        combo_id = short_name[8:]
+        combos = getattr(settings, "model_combos", None) or []
+        for combo in combos:
+            if combo.get("id") == combo_id and combo.get("model_ids"):
+                # Return the first model in the combo; actual fallback logic
+                # (trying subsequent models if the first is unavailable) is
+                # handled elsewhere if needed, for now just use the first.
+                return str(combo["model_ids"][0])
+        # Fallback if combo not found
+        return short_name
+
     entry = _find_builtin_model(short_name)
     if entry is None:
         return short_name

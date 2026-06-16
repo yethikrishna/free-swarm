@@ -75,6 +75,19 @@ const Settings: React.FC = () => {
       grouped[prov] = models.map((m) => ({ value: m.value, label: m.label }));
       for (const m of models) flat.push({ value: m.value, label: m.label, provider: prov });
     }
+
+    // Add model combos to the selector
+    if (settings.model_combos && settings.model_combos.length > 0) {
+      const combos = settings.model_combos.map((c) => ({
+        value: `combo://${c.id}`,
+        label: c.name,
+      }));
+      grouped['Combos'] = combos;
+      for (const combo of combos) {
+        flat.push({ ...combo, provider: 'Combos' });
+      }
+    }
+
     // Guarantee the currently-selected default is always a valid option, even if
     // the live list doesn't carry it (custom/OpenRouter value, or a stored model
     // not in the current registry). Without this the dropdown gets an MUI
@@ -86,7 +99,7 @@ const Settings: React.FC = () => {
       flat.push({ value: sel, label: sel, provider: other });
     }
     return { grouped, flat };
-  }, [modelsByProvider, modelsLoaded, settings.connection_mode, settings.default_model]);
+  }, [modelsByProvider, modelsLoaded, settings.connection_mode, settings.default_model, settings.model_combos]);
 
   const initialTab = useAppSelector((s) => s.settings.initialTab);
   const TAB_VALUES = ['general', 'models', 'usage', 'commands'] as const;

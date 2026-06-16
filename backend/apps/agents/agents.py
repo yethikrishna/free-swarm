@@ -986,3 +986,38 @@ async def subscriptions_set_strategy(provider: str, body: dict):
             return {"ok": False, "error": f"Failed to set strategy: {r.status_code}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents.router.post("/combos/sync")
+async def combos_sync(body: dict):
+    """Sync FreeSwarm model combos to 9router.
+
+    FreeSwarm's combo list is stored locally; this endpoint posts each combo
+    to 9router's /api/combos so they're available for fallback/round-robin routing.
+    """
+    import httpx
+    from backend.apps.nine_router import NINE_ROUTER_API
+
+    combos = body.get("combos", [])
+    if not isinstance(combos, list):
+        raise HTTPException(status_code=400, detail="combos must be a list")
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for combo in combos:
+                combo_data = {
+                    "name": combo.get("name"),
+                    "models": combo.get("model_ids", []),
+                }
+                if combo.get("strategy"):
+                    combo_data["strategy"] = combo["strategy"]
+                if combo.get("description"):
+                    combo_data["description"] = combo["description"]
+
+                r = await client.post(f"{NINE_ROUTER_API}/api/combos", json=combo_data)
+                if r.status_code not in (200, 201):
+                    return {"ok": False, "error": f"Failed to sync combo '{combo.get('name')}': {r.status_code}"}
+
+            return {"ok": True, "synced": len(combos)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

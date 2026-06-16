@@ -13,6 +13,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Chip from '@mui/material/Chip';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import { AppSettings, ModelCombo } from '@/shared/state/settingsSlice';
+import { API_BASE } from '@/shared/config';
 import type { SettingsStyles } from '../settingsStyles';
 
 const CombosEditor: React.FC<{
@@ -34,16 +35,28 @@ const CombosEditor: React.FC<{
       name: '',
       description: '',
       model_ids: [],
+      strategy: 'fallback',
     });
   };
 
-  const saveCombo = () => {
+  const saveCombo = async () => {
     if (!editingCombo?.id || !editingCombo.name?.trim() || !editingCombo.model_ids?.length) {
       return;
     }
     const updated = combos.filter(c => c.id !== editingCombo.id);
     updated.push(editingCombo as ModelCombo);
     setForm(prev => ({ ...prev, model_combos: updated }));
+
+    try {
+      await fetch(`${API_BASE}/agents/combos/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ combos: updated }),
+      });
+    } catch (err) {
+      console.error('Failed to sync combos to 9router:', err);
+    }
+
     setEditingId(null);
     setEditingCombo(null);
   };
@@ -72,6 +85,9 @@ const CombosEditor: React.FC<{
 
       <Typography sx={{ ...descSx, mb: -1 }}>
         Define fallback stacks: pick 2-3 models in order, and requests will route to the first available.
+      </Typography>
+      <Typography sx={{ fontSize: '0.75rem', color: c.text.muted, p: 1, bgcolor: c.bg.secondary, borderRadius: `${c.radius.sm}px`, fontStyle: 'italic' }}>
+        Note: combo routing is currently managed via 9router. Use the 9router dashboard for full fallback + round-robin control.
       </Typography>
 
       {combos.length > 0 && (
@@ -246,40 +262,24 @@ const CombosEditor: React.FC<{
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 1.5, borderRadius: `${c.radius.sm}px`, bgcolor: c.bg.elevated, border: `1px solid ${c.border.subtle}` }}>
             <Typography sx={{ fontSize: '0.8rem', color: c.text.primary, fontWeight: 500 }}>
-              Advanced Options
+              Fallback Strategy
             </Typography>
             <FormControlLabel
               control={
                 <Checkbox
-                  checked={editingCombo.retryOnError ?? false}
-                  onChange={e => setEditingCombo(prev => ({ ...prev, retryOnError: e.target.checked }))}
+                  checked={(editingCombo.strategy ?? 'fallback') === 'fallback'}
+                  onChange={e => setEditingCombo(prev => ({ ...prev, strategy: e.target.checked ? 'fallback' : 'round-robin' }))}
                   size="small"
                 />
               }
-              label={<Typography sx={{ fontSize: '0.75rem' }}>Retry on error</Typography>}
+              label={<Typography sx={{ fontSize: '0.75rem' }}>Use fallback (try models in order) vs round-robin</Typography>}
               sx={{ m: 0 }}
             />
-            {editingCombo.retryOnError && (
-              <TextField
-                size="small"
-                type="number"
-                label="Retry delay (ms)"
-                value={editingCombo.retryDelayMs ?? 1000}
-                onChange={e => setEditingCombo(prev => ({ ...prev, retryDelayMs: parseInt(e.target.value) || 1000 }))}
-                inputProps={{ min: 100, max: 10000, step: 100 }}
-                sx={{ '& .MuiOutlinedInput-root': { fontSize: '0.85rem' } }}
-              />
-            )}
-            <TextField
-              size="small"
-              type="number"
-              label="Timeout (ms)"
-              value={editingCombo.timeoutMs ?? 30000}
-              onChange={e => setEditingCombo(prev => ({ ...prev, timeoutMs: parseInt(e.target.value) || 30000 }))}
-              inputProps={{ min: 1000, max: 300000, step: 1000 }}
-              sx={{ '& .MuiOutlinedInput-root': { fontSize: '0.85rem' } }}
-              helperText="Max wait time per model before fallback"
-            />
+            <Typography sx={{ fontSize: '0.7rem', color: c.text.muted, mt: 1 }}>
+              {(editingCombo.strategy ?? 'fallback') === 'fallback'
+                ? 'Falls back to the next model if the current one fails.'
+                : 'Distributes requests evenly across all models in the combo.'}
+            </Typography>
           </Box>
 
           <Box sx={{ display: 'flex', gap: 1 }}>

@@ -32,9 +32,7 @@ export interface ModelCombo {
   name: string;
   description?: string;
   model_ids: string[];
-  retryOnError?: boolean;
-  retryDelayMs?: number;
-  timeoutMs?: number;
+  strategy?: 'fallback' | 'round-robin';
 }
 
 export interface ModelAlias {

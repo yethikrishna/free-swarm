@@ -23,6 +23,18 @@ async function bootstrap() {
     return;
   }
 
+  // On the hosted web build, OAuth redirects back to /app?token=...; capture it into
+  // cloud-token storage before the canvas mounts so Settings can read the sign-in, then clean the URL.
+  if (IS_WEB) {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
+    if (urlToken) {
+      const { setCloudToken } = await import('./shared/cloud');
+      setCloudToken(urlToken);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }
+
   // Must run before ensureAuthToken reads localStorage; v1.0.31 migration force-clears auth+onboarding so the stale token doesn't survive.
   if (!IS_WEB) runStartupMigrations();
 

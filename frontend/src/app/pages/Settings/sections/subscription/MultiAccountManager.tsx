@@ -46,6 +46,9 @@ const MultiAccountManager: React.FC<MultiAccountManagerProps> = ({ provider, onA
       const data = await res.json();
       if (data.ok) {
         setAccounts(data.accounts);
+        if (data.strategy === 'round-robin' || data.strategy === 'fill-first') {
+          setStrategy(data.strategy);
+        }
         setError(null);
       } else {
         setError(data.error || 'Failed to load accounts');

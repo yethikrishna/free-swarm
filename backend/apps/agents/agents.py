@@ -887,8 +887,9 @@ async def subscriptions_disconnect(body: dict):
 
 @agents.router.get("/subscriptions/{provider}/accounts")
 async def subscriptions_list_accounts(provider: str):
-    """List all accounts (connections) for a given provider."""
-    from backend.apps.nine_router import get_providers
+    """List all accounts (connections) for a provider + its routing strategy."""
+    import httpx
+    from backend.apps.nine_router import get_providers, NINE_ROUTER_API
     try:
         connections = await get_providers()
         provider_accounts = [
@@ -907,7 +908,18 @@ async def subscriptions_list_accounts(provider: str):
             for c in connections
             if c.get("provider") == provider
         ]
-        return {"ok": True, "accounts": provider_accounts}
+        # Surface the persisted routing strategy so the toggle reflects reality.
+        strategy = "fill-first"
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                s = await client.get(f"{NINE_ROUTER_API}/settings")
+                if s.status_code == 200:
+                    data = s.json()
+                    override = (data.get("providerStrategies") or {}).get(provider) or {}
+                    strategy = override.get("fallbackStrategy") or data.get("fallbackStrategy") or "fill-first"
+        except Exception:
+            pass
+        return {"ok": True, "accounts": provider_accounts, "strategy": strategy}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -940,7 +952,13 @@ async def subscriptions_delete_account(provider: str, connection_id: str):
 
 @agents.router.post("/subscriptions/{provider}/strategy")
 async def subscriptions_set_strategy(provider: str, body: dict):
-    """Set routing strategy for a provider (round-robin or fill-first)."""
+    """Set routing strategy for a provider (round-robin or fill-first).
+
+    9Router persists this under settings.providerStrategies[provider]; its
+    settings endpoint is PATCH with a SHALLOW merge, so we read the current
+    providerStrategies, splice in this provider, and write the whole object
+    back, otherwise we'd wipe every other provider's strategy.
+    """
     import httpx
     from backend.apps.nine_router import NINE_ROUTER_API
 
@@ -948,21 +966,20 @@ async def subscriptions_set_strategy(provider: str, body: dict):
     if strategy not in ("round-robin", "fill-first"):
         raise HTTPException(status_code=400, detail="strategy must be 'round-robin' or 'fill-first'")
 
+    sticky_limit = body.get("stickyRoundRobinLimit", 3)
     try:
-        sticky_limit = body.get("stickyRoundRobinLimit", 3)
-        payload = {
-            "providerStrategies": {
-                provider: {
-                    "fallbackStrategy": strategy,
-                    "stickyRoundRobinLimit": sticky_limit,
-                }
-            }
-        }
-
         async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.post(
+            cur = await client.get(f"{NINE_ROUTER_API}/settings")
+            existing = (cur.json().get("providerStrategies") if cur.status_code == 200 else None) or {}
+            if not isinstance(existing, dict):
+                existing = {}
+            existing[provider] = {
+                "fallbackStrategy": strategy,
+                "stickyRoundRobinLimit": sticky_limit,
+            }
+            r = await client.patch(
                 f"{NINE_ROUTER_API}/settings",
-                json=payload,
+                json={"providerStrategies": existing},
             )
             if r.status_code in (200, 204):
                 return {"ok": True, "strategy": strategy}

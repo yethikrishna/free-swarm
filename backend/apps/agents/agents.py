@@ -883,3 +883,89 @@ async def subscriptions_disconnect(body: dict):
         return {"ok": False, "error": "Connection not found"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents.router.get("/subscriptions/{provider}/accounts")
+async def subscriptions_list_accounts(provider: str):
+    """List all accounts (connections) for a given provider."""
+    from backend.apps.nine_router import get_providers
+    try:
+        connections = await get_providers()
+        provider_accounts = [
+            {
+                "id": c.get("id"),
+                "provider": c.get("provider"),
+                "name": c.get("name"),
+                "displayName": c.get("displayName"),
+                "email": c.get("email"),
+                "isActive": c.get("isActive", True),
+                "testStatus": c.get("testStatus"),
+                "priority": c.get("priority"),
+                "lastUsedAt": c.get("lastUsedAt"),
+                "consecutiveUseCount": c.get("consecutiveUseCount", 0),
+            }
+            for c in connections
+            if c.get("provider") == provider
+        ]
+        return {"ok": True, "accounts": provider_accounts}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents.router.delete("/subscriptions/{provider}/accounts/{connection_id}")
+async def subscriptions_delete_account(provider: str, connection_id: str):
+    """Delete a specific account/connection for a provider."""
+    import httpx
+    from backend.apps.nine_router import NINE_ROUTER_API, get_providers
+    try:
+        connections = await get_providers()
+        connection = next(
+            (c for c in connections if c.get("id") == connection_id and c.get("provider") == provider),
+            None,
+        )
+        if not connection:
+            return {"ok": False, "error": "Account not found"}
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.delete(f"{NINE_ROUTER_API}/providers/{connection_id}")
+            if r.status_code in (200, 204):
+                from backend.apps.service.client import sync as _sync
+                from backend.apps.settings.settings import load_settings
+                _sync(load_settings().model_dump())
+                return {"ok": True}
+            return {"ok": False, "error": f"Failed to delete: {r.status_code}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents.router.post("/subscriptions/{provider}/strategy")
+async def subscriptions_set_strategy(provider: str, body: dict):
+    """Set routing strategy for a provider (round-robin or fill-first)."""
+    import httpx
+    from backend.apps.nine_router import NINE_ROUTER_API
+
+    strategy = body.get("strategy", "fill-first")
+    if strategy not in ("round-robin", "fill-first"):
+        raise HTTPException(status_code=400, detail="strategy must be 'round-robin' or 'fill-first'")
+
+    try:
+        sticky_limit = body.get("stickyRoundRobinLimit", 3)
+        payload = {
+            "providerStrategies": {
+                provider: {
+                    "fallbackStrategy": strategy,
+                    "stickyRoundRobinLimit": sticky_limit,
+                }
+            }
+        }
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(
+                f"{NINE_ROUTER_API}/settings",
+                json=payload,
+            )
+            if r.status_code in (200, 204):
+                return {"ok": True, "strategy": strategy}
+            return {"ok": False, "error": f"Failed to set strategy: {r.status_code}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

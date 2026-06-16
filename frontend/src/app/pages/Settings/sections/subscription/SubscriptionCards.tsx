@@ -164,6 +164,10 @@ const SubscriptionCards: React.FC = () => {
           connecting={connecting === p.id}
           disconnecting={disconnecting === p.id}
           userCode={connecting === p.id ? userCode : undefined}
+          onAccountsChange={() => {
+            fetchStatus();
+            refreshPickerModels();
+          }}
         />
       ))}
     </Box>

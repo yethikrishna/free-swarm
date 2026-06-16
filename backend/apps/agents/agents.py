@@ -538,6 +538,51 @@ async def probe_model(body: dict):
         return {"ok": False, "error": msg[:240]}
 
 
+@agents.router.post("/discover-models")
+async def discover_models(body: dict):
+    """List models from a custom OpenAI-compatible endpoint's GET /models.
+
+    Lets the custom-provider editor auto-populate models instead of making the
+    user type every id. SSRF-guarded (loopback is allowed on purpose so local
+    servers like Ollama/LM Studio work). Returns a friendly error, never raises.
+    """
+    base_url = ((body or {}).get("base_url") or "").strip()
+    api_key = ((body or {}).get("api_key") or "").strip()
+    if not base_url:
+        return {"ok": False, "error": "Add a base URL first."}
+    try:
+        from backend.apps.nine_router import normalize_openai_compat_base_url
+        from backend.apps.agents.tools.ssrf_guard import safe_fetch, SSRFBlocked
+        normalized = normalize_openai_compat_base_url(base_url)
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
+        try:
+            resp = await safe_fetch(f"{normalized}/models", headers=headers, timeout=10.0)
+        except SSRFBlocked:
+            return {"ok": False, "error": "That address isn't allowed."}
+        if resp.status_code == 401 or resp.status_code == 403:
+            return {"ok": False, "error": "The endpoint rejected the key."}
+        if resp.status_code >= 300:
+            return {"ok": False, "error": "Couldn't reach a model list there."}
+        data = resp.json()
+        # OpenAI shape: {"data": [{"id": "..."}]}; some servers return a bare list.
+        rows = data.get("data") if isinstance(data, dict) else data
+        if not isinstance(rows, list):
+            return {"ok": False, "error": "That endpoint didn't return a model list."}
+        models = []
+        seen = set()
+        for r in rows:
+            mid = r.get("id") if isinstance(r, dict) else (r if isinstance(r, str) else None)
+            if isinstance(mid, str) and mid and mid not in seen:
+                seen.add(mid)
+                models.append({"value": mid, "label": mid})
+        if not models:
+            return {"ok": False, "error": "No models listed at that endpoint."}
+        return {"ok": True, "models": models}
+    except Exception as e:
+        logger.warning(f"discover-models failed: {e}")
+        return {"ok": False, "error": "Couldn't load models. Add them by hand."}
+
+
 @agents.router.get("/models")
 async def list_models():
     """Picker model list, grouped by provider, intersected with available creds."""

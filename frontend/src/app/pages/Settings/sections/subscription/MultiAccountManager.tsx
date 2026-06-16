@@ -2,27 +2,13 @@ import React, { useState, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import CircularProgress from '@mui/material/CircularProgress';
 import DeleteIcon from '@mui/icons-material/Delete';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import Chip from '@mui/material/Chip';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import { API_BASE } from '@/shared/config';
-
-interface Account {
-  id: string;
-  email?: string;
-  name?: string;
-  displayName?: string;
-  isActive?: boolean;
-  testStatus?: string;
-  priority?: number;
-  lastUsedAt?: string;
-  consecutiveUseCount?: number;
-}
+import AccountRow, { Account } from './AccountRow';
 
 interface MultiAccountManagerProps {
   provider: string;
@@ -82,6 +68,29 @@ const MultiAccountManager: React.FC<MultiAccountManagerProps> = ({ provider, onA
     } finally {
       setDeletingId(null);
       setMenuAnchor(null);
+    }
+  };
+
+  const reorder = async (from: number, to: number) => {
+    if (to < 0 || to >= accounts.length) return;
+    const next = [...accounts];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setAccounts(next); // optimistic; refetch only on failure to avoid a flash
+    try {
+      const res = await fetch(`${API_BASE}/agents/subscriptions/${provider}/accounts/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedIds: next.map(a => a.id) }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setError(data.error || 'Failed to reorder');
+        fetchAccounts();
+      }
+    } catch (err) {
+      setError('Failed to reorder');
+      fetchAccounts();
     }
   };
 
@@ -165,49 +174,21 @@ const MultiAccountManager: React.FC<MultiAccountManagerProps> = ({ provider, onA
         </Typography>
       )}
 
-      {accounts.map((account) => (
-        <Box
+      {accounts.map((account, idx) => (
+        <AccountRow
           key={account.id}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            p: 1,
-            borderRadius: `${c.radius.sm}px`,
-            bgcolor: c.bg.surface,
-            border: `1px solid ${c.border.subtle}`,
+          account={account}
+          isFirst={idx === 0}
+          isLast={idx === accounts.length - 1}
+          reorderable={accounts.length > 1}
+          showRotation={strategy === 'round-robin'}
+          onMoveUp={() => reorder(idx, idx - 1)}
+          onMoveDown={() => reorder(idx, idx + 1)}
+          onMenuOpen={(el) => {
+            setSelectedAccount(account.id);
+            setMenuAnchor(el);
           }}
-        >
-          <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography sx={{ fontSize: '0.75rem', color: c.text.primary, fontWeight: 500 }}>
-              {account.displayName || account.email || account.name || 'Unknown'}
-            </Typography>
-            {account.testStatus && (
-              <Chip
-                label={account.testStatus === 'active' ? 'Active' : 'Error'}
-                size="small"
-                sx={{
-                  mt: 0.5,
-                  fontSize: '0.65rem',
-                  height: '18px',
-                  backgroundColor: account.testStatus === 'active' ? c.status.success + '20' : c.status.error + '20',
-                  color: account.testStatus === 'active' ? c.status.success : c.status.error,
-                }}
-              />
-            )}
-          </Box>
-
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              setSelectedAccount(account.id);
-              setMenuAnchor(e.currentTarget);
-            }}
-            sx={{ color: c.text.muted }}
-          >
-            <MoreVertIcon fontSize="small" />
-          </IconButton>
-        </Box>
+        />
       ))}
 
       <Menu

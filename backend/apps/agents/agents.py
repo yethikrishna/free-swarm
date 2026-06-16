@@ -901,6 +901,8 @@ async def subscriptions_list_accounts(provider: str):
                 "email": c.get("email"),
                 "isActive": c.get("isActive", True),
                 "testStatus": c.get("testStatus"),
+                "lastError": c.get("lastError"),
+                "lastErrorAt": c.get("lastErrorAt"),
                 "priority": c.get("priority"),
                 "lastUsedAt": c.get("lastUsedAt"),
                 "consecutiveUseCount": c.get("consecutiveUseCount", 0),
@@ -908,6 +910,8 @@ async def subscriptions_list_accounts(provider: str):
             for c in connections
             if c.get("provider") == provider
         ]
+        # Priority orders the round-robin pool; present them in that order.
+        provider_accounts.sort(key=lambda a: (a.get("priority") if a.get("priority") is not None else 1_000_000))
         # Surface the persisted routing strategy so the toggle reflects reality.
         strategy = "fill-first"
         try:
@@ -946,6 +950,35 @@ async def subscriptions_delete_account(provider: str, connection_id: str):
                 _sync(load_settings().model_dump())
                 return {"ok": True}
             return {"ok": False, "error": f"Failed to delete: {r.status_code}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents.router.post("/subscriptions/{provider}/accounts/reorder")
+async def subscriptions_reorder_accounts(provider: str, body: dict):
+    """Set per-account priority from a desired ordering.
+
+    The UI sends orderedIds (top = highest priority); we PUT priority=index to
+    each connection on 9router, which is what drives both fill-first selection
+    order and round-robin rotation order.
+    """
+    import httpx
+    from backend.apps.nine_router import NINE_ROUTER_API
+
+    ordered_ids = body.get("orderedIds")
+    if not isinstance(ordered_ids, list) or not ordered_ids:
+        raise HTTPException(status_code=400, detail="orderedIds must be a non-empty list")
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for index, connection_id in enumerate(ordered_ids):
+                r = await client.put(
+                    f"{NINE_ROUTER_API}/providers/{connection_id}",
+                    json={"priority": index + 1},
+                )
+                if r.status_code not in (200, 204):
+                    return {"ok": False, "error": f"Failed to reorder {connection_id}: {r.status_code}"}
+        return {"ok": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

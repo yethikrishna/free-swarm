@@ -1,0 +1,18 @@
+{
+  "name": "freeswarm-cloud",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FreeSwarm cloud service: auth, subscription, billing, usage ingest. Vercel serverless + Neon. Both the desktop and web apps call this at api.freeswarm.myndlabs.tech.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "migrate": "psql \"$DATABASE_URL\" -f db/schema.sql"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.2.24",
+    "typescript": "^5.6.3"
+  }
+}

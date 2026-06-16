@@ -144,10 +144,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // No desktop (timeout or fetch failed); fall through to web path.
       }
 
-      // Web path: store token in localStorage and redirect to the web app
+      // Web path: pass token in URL so the web app's origin can store it in its own localStorage.
+      // localStorage is origin-scoped; setting it here (api.*) would not be visible on the web app domain.
       try {
-        localStorage.setItem('fs_web_token', token);
-        window.location.href = webAppUrl;
+        const url = new URL(webAppUrl);
+        url.searchParams.set('token', token);
+        window.location.href = url.toString();
       } catch (err) {
         document.body.innerHTML = '<div class="container"><h1>Error</h1><p>Could not sign in. Please try again.</p></div>';
       }

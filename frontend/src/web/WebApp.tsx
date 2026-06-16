@@ -144,9 +144,21 @@ const AccountView: React.FC<{ me: CloudMe; onRefresh: () => void; onSignOut: () 
 };
 
 const WebApp: React.FC = () => {
-  const [token, setToken] = useState<string>(getCloudToken());
+  // Consume ?token= from OAuth redirect and store it, then clean the URL.
+  const initialToken = React.useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
+    if (urlToken) {
+      setCloudToken(urlToken);
+      window.history.replaceState({}, '', window.location.pathname);
+      return urlToken;
+    }
+    return getCloudToken();
+  }, []);
+
+  const [token, setToken] = useState<string>(initialToken);
   const [me, setMe] = useState<CloudMe | null>(null);
-  const [loading, setLoading] = useState<boolean>(!!getCloudToken());
+  const [loading, setLoading] = useState<boolean>(!!initialToken);
   const [error, setError] = useState<string | null>(null);
 
   const load = React.useCallback(async (t: string) => {

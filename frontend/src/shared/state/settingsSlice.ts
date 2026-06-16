@@ -27,6 +27,13 @@ export interface CustomProvider {
   models: Array<{ value: string; label: string; context_window?: number }>;
 }
 
+export interface ModelCombo {
+  id: string;
+  name: string;
+  description?: string;
+  model_ids: string[];
+}
+
 export interface SubscriptionUsage {
   requests_in_window: number;
   plan_limit: number;
@@ -50,6 +57,7 @@ export interface AppSettings {
   google_api_key?: string | null;
   openrouter_api_key?: string | null;
   custom_providers?: CustomProvider[];
+  model_combos?: ModelCombo[];
   browser_homepage: string;
   auto_select_mode_on_new_agent: boolean;
   expand_new_chats_in_dashboard: boolean;

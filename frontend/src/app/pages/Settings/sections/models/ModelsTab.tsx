@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
@@ -7,6 +7,7 @@ import FreeSwarmProCard from '../subscription/FreeSwarmProCard';
 import SubscriptionCards from '../subscription/SubscriptionCards';
 import ApiKeyCard, { API_KEY_CARDS } from './ApiKeyCard';
 import CustomProvidersEditor from './CustomProvidersEditor';
+import CombosEditor from './CombosEditor';
 import type { SettingsStyles } from '../settingsStyles';
 
 const ModelsTab: React.FC<{
@@ -18,6 +19,23 @@ const ModelsTab: React.FC<{
 }> = ({ form, setForm, showApiKey, setShowApiKey, styles }) => {
   const c = useClaudeTokens();
   const { descSx } = styles;
+
+  const allModels = useMemo(() => {
+    const models: Array<{ value: string; label: string }> = [];
+    const seen = new Set<string>();
+
+    form.custom_providers?.forEach(provider => {
+      provider.models.forEach(m => {
+        if (!seen.has(m.value)) {
+          seen.add(m.value);
+          models.push(m);
+        }
+      });
+    });
+
+    return models;
+  }, [form.custom_providers]);
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', pt: 2.5, pb: 1, gap: 2.5, animation: 'fadeIn 0.2s ease', '@keyframes fadeIn': { from: { opacity: 0 }, to: { opacity: 1 } } }}>
 
@@ -66,6 +84,13 @@ const ModelsTab: React.FC<{
           setForm={setForm}
           showApiKey={showApiKey}
           setShowApiKey={setShowApiKey}
+          styles={styles}
+        />
+
+        <CombosEditor
+          form={form}
+          setForm={setForm}
+          allModels={allModels}
           styles={styles}
         />
       </Box>

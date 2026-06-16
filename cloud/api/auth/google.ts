@@ -59,6 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const tokenJson = JSON.stringify(bearer);
   const userIdJson = JSON.stringify(user.id);
   const emailJson = JSON.stringify(email);
+  const webAppUrl = JSON.stringify((process.env.WEB_APP_ORIGIN || 'https://freeswarm.myndlabs.tech') + '/app');
 
   const html = `
 <!DOCTYPE html>
@@ -121,6 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const token = ${tokenJson};
     const userId = ${userIdJson};
     const email = ${emailJson};
+    const webAppUrl = ${webAppUrl};
 
     async function handoff() {
       // Try desktop localhost first (Electron app)
@@ -142,10 +144,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // No desktop (timeout or fetch failed); fall through to web path.
       }
 
-      // Web path: store token in localStorage and redirect to /app
+      // Web path: store token in localStorage and redirect to the web app
       try {
         localStorage.setItem('fs_web_token', token);
-        window.location.href = '/app';
+        window.location.href = webAppUrl;
       } catch (err) {
         document.body.innerHTML = '<div class="container"><h1>Error</h1><p>Could not sign in. Please try again.</p></div>';
       }

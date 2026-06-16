@@ -76,3 +76,9 @@ Thumbs.db
 ehthumbs.db
 desktop.ini
 frontend/tsconfig.tsbuildinfo
+
+# Build artifacts
+/public/app
+/.next
+/frontend/dist
+node_modules/

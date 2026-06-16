@@ -1021,3 +1021,19 @@ async def combos_sync(body: dict):
             return {"ok": True, "synced": len(combos)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents.router.delete("/combos/{combo_name}")
+async def combo_delete(combo_name: str):
+    """Delete a combo from 9router by name."""
+    import httpx
+    from backend.apps.nine_router import NINE_ROUTER_API
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.delete(f"{NINE_ROUTER_API}/api/combos/{combo_name}")
+            if r.status_code in (200, 204):
+                return {"ok": True}
+            return {"ok": False, "error": f"Failed to delete combo: {r.status_code}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

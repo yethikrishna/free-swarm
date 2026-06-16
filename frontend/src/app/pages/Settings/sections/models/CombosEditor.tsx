@@ -61,11 +61,23 @@ const CombosEditor: React.FC<{
     setEditingCombo(null);
   };
 
-  const deleteCombo = (id: string) => {
+  const deleteCombo = async (id: string) => {
+    const combo = combos.find(c => c.id === id);
+    const updated = combos.filter(c => c.id !== id);
     setForm(prev => ({
       ...prev,
-      model_combos: combos.filter(c => c.id !== id),
+      model_combos: updated,
     }));
+
+    if (combo?.name) {
+      try {
+        await fetch(`${API_BASE}/agents/combos/${encodeURIComponent(combo.name)}`, {
+          method: 'DELETE',
+        });
+      } catch (err) {
+        console.error('Failed to delete combo from 9router:', err);
+      }
+    }
   };
 
   const cancelEdit = () => {

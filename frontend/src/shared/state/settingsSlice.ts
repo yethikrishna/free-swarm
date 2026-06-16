@@ -70,7 +70,7 @@ export interface AppSettings {
   /** Identity populated by /api/auth/signin-activate; Stripe checkout also fills these. */
   user_id?: string | null;
   user_email?: string | null;
-  signin_method?: 'google' | 'email' | 'stripe' | null;
+  signin_method?: 'google' | 'github' | 'email' | 'stripe' | null;
   /** Anonymous device id (first-run generated); stitches anon to authed PostHog Persons. */
   installation_id?: string | null;
 }

@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useAppDispatch, useAppSelector } from '@/shared/hooks';
-import { signOut } from '@/shared/state/settingsSlice';
+import { fetchSettings, signOut } from '@/shared/state/settingsSlice';
 import { FREESWARM_DEFAULT_PROXY_URL } from '@/shared/config';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import SignInDialog from '@/app/components/overlays/SignInDialog';
@@ -28,6 +28,19 @@ const AccountCard: React.FC = () => {
   const proxyUrl = useAppSelector((s) => s.settings.data.freeswarm_proxy_url || FREESWARM_DEFAULT_PROXY_URL);
   const [signingOut, setSigningOut] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
+  const [polling, setPolling] = useState(false);
+
+  // Poll for settings updates for up to 60s after the user initiates an OAuth flow.
+  useEffect(() => {
+    if (!polling) return;
+    let ticks = 0;
+    const id = setInterval(() => {
+      dispatch(fetchSettings());
+      ticks++;
+      if (ticks >= 30) { clearInterval(id); setPolling(false); }
+    }, 2000);
+    return () => clearInterval(id);
+  }, [polling, dispatch]);
 
   const methodLabel = (() => {
     switch (signinMethod) {
@@ -50,24 +63,32 @@ const AccountCard: React.FC = () => {
     }
   };
 
+  const openOAuth = (path: string) => {
+    const api = (window as any).freeswarm;
+    const url = proxyUrl.replace(/\/$/, '') + path;
+    setPolling(true);
+    if (api?.openExternal) api.openExternal(url);
+    else window.open(url, '_blank');
+  };
+
   const onSignIn = () => {
-    // Pass local_port so the bearer-handoff page POSTs to the right backend (Electron binds in 8324..8424).
     const localPort = (window as any).__FREESWARM_PORT__ || 8324;
     const params = new URLSearchParams({
       install_id: installId,
       local_port: String(localPort),
+      redirect_to: '/app',
     });
-    const startUrl = proxyUrl.replace(/\/$/, '') + '/api/auth/google/start?' + params.toString();
-    const api = (window as any).freeswarm;
-    if (api?.openExternal) api.openExternal(startUrl);
-    else window.open(startUrl, '_blank');
+    openOAuth('/api/auth/google/start?' + params.toString());
   };
 
   const onConnectGitHub = () => {
-    const startUrl = proxyUrl.replace(/\/$/, '') + '/api/auth/github';
-    const api = (window as any).freeswarm;
-    if (api?.openExternal) api.openExternal(startUrl);
-    else window.open(startUrl, '_blank');
+    const localPort = (window as any).__FREESWARM_PORT__ || 8324;
+    const params = new URLSearchParams({
+      install_id: installId,
+      local_port: String(localPort),
+      redirect_to: '/app',
+    });
+    openOAuth('/api/auth/github?' + params.toString());
   };
 
   const githubConnected = signinMethod === 'github';

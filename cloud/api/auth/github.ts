@@ -19,11 +19,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const code = typeof req.query.code === 'string' ? req.query.code : null;
   if (!code) {
+    const localPort = typeof req.query.local_port === 'string' ? req.query.local_port : '8324';
+    const redirectTo = req.query.redirect_to === '/app' ? '/app' : '/account';
+    const state = Buffer.from(JSON.stringify({ local_port: localPort, redirect_to: redirectTo })).toString('base64url');
     const url = new URL('https://github.com/login/oauth/authorize');
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('scope', 'user:email');
     url.searchParams.set('allow_signup', 'true');
+    url.searchParams.set('state', state);
     res.redirect(302, url.toString());
     return;
   }
@@ -57,12 +61,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = await upsertUser(primaryEmail.toLowerCase(), 'github');
   const bearer = await mintToken({ sub: user.id, email: user.email });
 
+  // Decode state to recover local_port and redirect_to from the initiating page.
+  let localPort = '8324';
+  let redirectTo = '/account';
+  try {
+    const stateRaw = typeof req.query.state === 'string' ? req.query.state : '';
+    const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString());
+    if (typeof state.local_port === 'string' && /^\d+$/.test(state.local_port)) localPort = state.local_port;
+    if (state.redirect_to === '/app') redirectTo = '/app';
+  } catch {}
+
   // Render the bearer-handoff page.
   const displayEmail = primaryEmail.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
   const tokenJson = JSON.stringify(bearer);
   const userIdJson = JSON.stringify(user.id);
   const emailJson = JSON.stringify(primaryEmail.toLowerCase());
-  const webAppUrl = JSON.stringify((process.env.WEB_APP_ORIGIN || 'https://freeswarm.myndlabs.tech') + '/account');
+  const localPortJson = JSON.stringify(localPort);
+  const webAppUrl = JSON.stringify((process.env.WEB_APP_ORIGIN || 'https://freeswarm.myndlabs.tech') + redirectTo);
 
   const html = `
 <!DOCTYPE html>
@@ -125,13 +140,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const token = ${tokenJson};
     const userId = ${userIdJson};
     const email = ${emailJson};
+    const localPort = ${localPortJson};
     const webAppUrl = ${webAppUrl};
 
     async function handoff() {
       // Try desktop localhost first (Electron app)
       try {
         const response = await Promise.race([
-          fetch('http://localhost:8324/api/auth/signin-activate', {
+          fetch('http://localhost:' + localPort + '/api/auth/signin-activate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token, signin_method: 'github', email }),

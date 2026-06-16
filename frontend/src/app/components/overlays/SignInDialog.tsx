@@ -48,11 +48,15 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
 
   const onGoogle = () => {
     const localPort = (window as any).__FREESWARM_PORT__ || 8324;
-    const params = new URLSearchParams({ install_id: installId, local_port: String(localPort) });
+    const params = new URLSearchParams({ install_id: installId, local_port: String(localPort), redirect_to: '/app' });
     openOAuth(`/api/auth/google/start?${params.toString()}`, 'google_clicked');
   };
 
-  const onGitHub = () => openOAuth('/api/auth/github', 'github_clicked');
+  const onGitHub = () => {
+    const localPort = (window as any).__FREESWARM_PORT__ || 8324;
+    const params = new URLSearchParams({ install_id: installId, local_port: String(localPort), redirect_to: '/app' });
+    openOAuth(`/api/auth/github?${params.toString()}`, 'github_clicked');
+  };
 
   return (
     <Modal

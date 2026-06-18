@@ -1,9 +1,6 @@
 {
-  "buildCommand": "echo 'Skipping build for static website'",
+  "buildCommand": "echo 'Static HTML site'",
   "outputDirectory": "website",
-  "public": true,
-  "github": {
-    "enabled": true,
-    "autoAlias": false
-  }
+  "framework": "other",
+  "public": true
 }

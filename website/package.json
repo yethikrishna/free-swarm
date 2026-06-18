@@ -1,0 +1,8 @@
+{
+  "name": "freeswarm-router-website",
+  "version": "1.0.0",
+  "description": "FreeSwarm Router marketing website",
+  "scripts": {
+    "build": "echo 'Static site - no build needed'"
+  }
+}

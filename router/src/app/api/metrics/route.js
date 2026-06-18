@@ -307,14 +307,3 @@ export async function POST(request) {
 
   return Response.json({ message: "Metrics reset" });
 }
-
-// Export tracking functions for use throughout the router
-export {
-  trackRequest,
-  trackRoutingStrategy,
-  trackFallback,
-  trackAccountSwitch,
-  trackConnectionFailure,
-  trackModelLock,
-  trackQuotaExhaustion,
-};

@@ -255,7 +255,10 @@ try {
     # npm ci (not install): installs exactly what package-lock.json pins, never
     # silently mutates the lock, fails loudly on drift. Reproducible builds
     # (pillar 3) depend on the lock being boss.
-    & npm ci
+    # --include=dev: the CI workflow sets NODE_ENV=production, which makes npm ci
+    # omit devDependencies. The webpack/Next.js build tooling (html-webpack-plugin,
+    # babel-loader, electron-builder, etc.) all live in devDependencies, so force them in.
+    & npm ci --include=dev
     if ($LASTEXITCODE -ne 0) { throw "npm ci (frontend) failed" }
     & npm run build
     if ($LASTEXITCODE -ne 0) { throw "frontend build failed" }
@@ -270,7 +273,7 @@ Write-Host ""
 Write-Host "[2/5] Building FreeSwarm Router fork..."
 Push-Location (Join-Path $ProjectRoot 'router')
 try {
-    & npm ci
+    & npm ci --include=dev
     if ($LASTEXITCODE -ne 0) { throw "npm ci (router) failed" }
     & npm run build
     if ($LASTEXITCODE -ne 0) { throw "router build failed" }
@@ -466,7 +469,7 @@ Write-Host "[6/6] Packaging with electron-builder..."
 Push-Location (Join-Path $ProjectRoot 'electron')
 try {
     # npm ci: lockfile-exact, no drift. See frontend note above.
-    & npm ci
+    & npm ci --include=dev
     if ($LASTEXITCODE -ne 0) { throw "npm ci (electron) failed" }
 
     if (-not $Sign) {

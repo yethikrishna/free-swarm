@@ -249,8 +249,10 @@ echo "[1/4] Building frontend..."
 cd "$PROJECT_ROOT/frontend"
 # npm ci (not install): installs exactly what package-lock.json pins, never
 # silently mutates the lock, and fails loudly on any drift. Reproducible builds
-# (pillar 3) depend on the lock being boss.
-npm ci
+# (pillar 3) depend on the lock being boss. --include=dev: build tooling
+# (html-webpack-plugin, electron-builder, etc.) lives in devDependencies; force
+# it in so a NODE_ENV=production environment can't omit it.
+npm ci --include=dev
 npm run build
 
 if [[ ! -f "$PROJECT_ROOT/frontend/dist/index.html" ]]; then
@@ -274,7 +276,7 @@ echo ""
 # Step 2a: Build Router fork
 echo "[2a/5] Building FreeSwarm Router fork..."
 cd "$PROJECT_ROOT/router"
-npm ci
+npm ci --include=dev
 npm run build
 
 # The standalone server lives at .next/standalone/router/server.js (nested,
@@ -473,7 +475,8 @@ echo "Stamped build-info.json: sha=${BUILD_SHA:0:12} channel=$BUILD_CHANNEL"
 echo "[6/6] Packaging with electron-builder..."
 cd "$PROJECT_ROOT/electron"
 # npm ci: lockfile-exact, no drift. See frontend note above.
-npm ci
+# --include=dev: electron-builder is a devDependency.
+npm ci --include=dev
 
 # macOS mouse-clamp native addon: compile both arches into build-staging/mouseclamp/<arch>
 # so extraResources (mouseclamp/${arch}) is populated whichever target gets packed.

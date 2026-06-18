@@ -21,11 +21,20 @@ const nextConfig = {
         path: false,
       };
     }
-    // Prevent webpack from following Windows junction points (EPERM on
-    // 'Application Data', 'AppData\Local\Application Data', etc.). Without
-    // this, enhanced-resolve follows junctions during module resolution and
-    // crashes FlightClientEntryPlugin on Windows CI runners.
+    // Windows EPERM fix: enhanced-resolve and Next.js's internal glob calls
+    // walk parent directories looking for node_modules and hit Windows junction
+    // points (e.g. 'Application Data' -> AppData\Roaming) which throw EPERM.
+    // The EPERM leaves FlightClientEntryPlugin's module map incomplete, causing
+    // createActionAssets to crash with 'Cannot read properties of undefined'.
+    //
+    // Two-pronged fix:
+    // 1. symlinks:false — stop enhanced-resolve from following junction targets
+    // 2. absolute modules path — stop the upward directory walk beyond router/
     config.resolve.symlinks = false;
+    config.resolve.modules = [
+      path.resolve(__dirname, 'node_modules'),
+      'node_modules',
+    ];
     // Prevent webpack from scanning problematic paths during watch mode
     config.watchOptions = { ...config.watchOptions, ignored: /[\\/](logs|\.next|node_modules|\.git)[\\/]/ };
     return config;

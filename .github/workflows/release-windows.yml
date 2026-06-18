@@ -130,7 +130,7 @@ jobs:
           "SIGNTOOL_PATH=$signtool" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "SIGNTOOL_PATH=$signtool"
 
-            - name: Build app
+      - name: Build app
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -148,10 +148,8 @@ jobs:
           # Inject local node_modules bin folders to Windows PATH dynamically
           $env:PATH = "$(Get-Location)\node_modules\.bin;$env:PATH"
           Write-Host "Injected local binary resolution paths."
-
           $version = (Get-Content electron/package.json | ConvertFrom-Json).version
           Write-Host "Compiling Version: $version"
-
           if ($env:AZURE_CLIENT_ID) {
             Write-Host "Azure signing secrets present: building SIGNED."
             pwsh -NoProfile -File scripts\build-app-win.ps1 -Sign -Squirrel
@@ -159,7 +157,6 @@ jobs:
             Write-Host "No Azure signing secrets: building UNSIGNED."
             pwsh -NoProfile -File scripts\build-app-win.ps1 -Squirrel
           }
-
           if ($LASTEXITCODE -ne 0) { 
             Write-Error "build-app-win.ps1 failed with native exit code: $LASTEXITCODE"
             exit $LASTEXITCODE

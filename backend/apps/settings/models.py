@@ -86,6 +86,8 @@ class AppSettings(BaseModel):
     preflight_enabled: bool = True
     # 0-100; the cohort gate compares (hash(installation_id) % 100) < pct. 100 = everyone, 0 = nobody, used as the kill switch if a staged rollout finds a false-positive spike.
     preflight_rollout_pct: int = 100
+    # Track extended thinking token usage from 9Router; used for cost/perf analysis.
+    track_reasoning_tokens: bool = False
 
 
 class CustomProvider(BaseModel):

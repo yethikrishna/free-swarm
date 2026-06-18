@@ -425,6 +425,17 @@ async function startFrontendServer() {
   const server = http.createServer((req, res) => {
     try {
       let pathname = decodeURIComponent((req.url || '/').split('?')[0]);
+      // The production frontend bundle is built with webpack publicPath '/app/'
+      // (so the same bundle works when the website serves it at
+      // freeswarm.myndlabs.tech/app). The desktop embedded server serves that
+      // bundle from the root, so every asset + async chunk is requested as
+      // '/app/<file>'. Strip the '/app' prefix to map it back onto frontendDir.
+      // Without this, '/app/bundle.js' 404s, the SPA fallback below returns
+      // index.html as the script body, the renderer can't parse HTML as JS, and
+      // the window shows a black screen. See frontend/webpack.config.js.
+      if (pathname === '/app' || pathname.startsWith('/app/')) {
+        pathname = pathname.slice('/app'.length) || '/';
+      }
       if (pathname === '/' || pathname === '') pathname = '/index.html';
       const resolved = path.normalize(path.join(frontendDir, pathname));
       // Defense-in-depth path-traversal guard; loopback-only listener already prevents external access but a misparsed URL must not escape the frontend dir.

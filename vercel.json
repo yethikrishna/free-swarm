@@ -1,4 +1,4 @@
 {
-  "buildCommand": "cd frontend && npm install --include=dev && npm run build && cd .. && mkdir -p public/app && cp -r frontend/dist/* public/app/ && rm -rf .next/cache && next build",
-  "outputDirectory": ".next"
+  "framework": "nextjs",
+  "buildCommand": "cd frontend && npm install --include=dev && npm run build && cd .. && mkdir -p public/app && cp -r frontend/dist/* public/app/ && rm -rf .next/cache && next build"
 }

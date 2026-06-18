@@ -1,40 +1,9 @@
 {
-  "buildCommand": "npm run build",
-  "framework": "nextjs",
-  "rewrites": [
-    {
-      "source": "/app",
-      "destination": "/app/index.html"
-    },
-    {
-      "source": "/app/",
-      "destination": "/app/index.html"
-    },
-    {
-      "source": "/account",
-      "destination": "/app/index.html"
-    },
-    {
-      "source": "/account/",
-      "destination": "/app/index.html"
-    },
-    {
-      "source": "/app/:path*",
-      "destination": "/app/:path*"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "X-XSS-Protection", "value": "1; mode=block" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
-      ]
-    }
-  ],
-  "env": {
-    "NEXT_PUBLIC_SITE_URL": "https://freeswarm.myndlabs.tech"
+  "buildCommand": "echo 'Skipping build for static website'",
+  "outputDirectory": "website",
+  "public": true,
+  "github": {
+    "enabled": true,
+    "autoAlias": false
   }
 }

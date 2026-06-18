@@ -1,6 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  // Pin the file-tracing root to this directory. Otherwise Next.js infers the
+  // workspace root from the nearest lockfile and, because the desktop build
+  // checks out the router inside the monorepo (two package-lock.json files),
+  // it walks UP into the parent. On Windows that upward scan reaches the
+  // legacy `C:\Users\<user>\Application Data` junction, which throws
+  // EPERM: scandir and crashes the standalone build. Pinning the root keeps
+  // tracing inside router/ and silences the multi-lockfile warning.
+  outputFileTracingRoot: import.meta.dirname,
   serverExternalPackages: ["better-sqlite3"],
   images: {
     unoptimized: true

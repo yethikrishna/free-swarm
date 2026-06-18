@@ -1,11 +1,10 @@
 #!/bin/bash
-# Fetch the pre-built 9router Next.js app from npm and stage it for packaging.
+# Stage the FreeSwarm Router (9router fork) for packaging.
 # Usage: bash scripts/fetch-router.sh <dest_dir>
 #
-# NOTE: the FreeSwarm Router fork source lives in ../router (see
-# router/FREESWARM_FORK.md). The runtime still uses the pinned npm build below
-# until that fork is built and validated against backend providers/registry.py;
-# do not repoint this script at the fork without doing that validation first.
+# FreeSwarm now uses its own fork of 9router (vendored in ./router, built to
+# ./.next/standalone/router). This script copies the Next.js standalone build
+# to the destination directory for inclusion in the final package.
 
 set -euo pipefail
 
@@ -15,23 +14,17 @@ if [[ -z "$DEST" ]]; then
     exit 1
 fi
 
-ROUTER_VERSION="${ROUTER_VERSION:-0.3.60}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+ROUTER_FORK="$REPO_ROOT/router/.next/standalone/router"
 
-echo "Fetching 9router@${ROUTER_VERSION} from npm..."
+echo "Staging FreeSwarm Router from fork..."
 
-SCRATCH="$(mktemp -d)"
-trap 'rm -rf "$SCRATCH"' EXIT
-
-cd "$SCRATCH"
-printf '{"name":"_fetch","version":"0.0.0","private":true}\n' > package.json
-npm install "9router@${ROUTER_VERSION}" --no-save --no-audit --no-fund --silent --ignore-scripts
-
-SRC="$SCRATCH/node_modules/9router/app"
-if [[ ! -d "$SRC" ]]; then
-    echo "ERROR: 9router@${ROUTER_VERSION} did not install to expected layout ($SRC missing)" >&2
+if [[ ! -d "$ROUTER_FORK" ]]; then
+    echo "ERROR: Router fork not built. Run: cd $REPO_ROOT/router && npm run build" >&2
     exit 1
 fi
 
 mkdir -p "$DEST"
-rsync -a --delete "$SRC/" "$DEST/"
-echo "9router staged at: $DEST"
+rsync -a --delete "$ROUTER_FORK/" "$DEST/"
+echo "FreeSwarm Router staged at: $DEST (from $ROUTER_FORK)"

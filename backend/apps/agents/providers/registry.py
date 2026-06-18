@@ -67,9 +67,7 @@ BUILTIN_MODELS: dict[str, list[dict[str, Any]]] = {
          "model_id": "claude-haiku-4-5", "router_model_id": "cc/claude-haiku-4-5-20251001", "api": "anthropic", "reasoning": True, "route": "cc"},
 
         # Fable 5 (released 2026-05-28): new flagship tier ABOVE Opus, 1M ctx,
-        # 128k out, $10/$50. The cc/ sub row is on trial: brand-new ids have 404'd
-        # our pinned 9Router 0.3.60 before (GPT-5.5's cx entry did) and Claude-sub
-        # serving of Fable is unverified, so pull this row if it errors live.
+        # 128k out, $10/$50. Available via cc/ subscription route on FreeSwarm Router fork.
         {"value": "fable-5-cc", "label": "Claude Fable 5", "context_window": 1_000_000,
          "model_id": "claude-fable-5", "router_model_id": "cc/claude-fable-5", "api": "anthropic", "reasoning": True, "route": "cc"},
         {"value": "fable-5-api", "label": "Claude Fable 5 (API key)", "context_window": 1_000_000,
@@ -87,7 +85,7 @@ BUILTIN_MODELS: dict[str, list[dict[str, Any]]] = {
     ],
 
     "OpenAI": [
-        # GPT-5.5 cx/ entry 404s on 9Router 0.3.60 (our pin); API-key route below works.
+        # GPT-5.5: now available via cx/ Codex subscription route on FreeSwarm Router fork.
         {"value": "gpt-5.5", "label": "GPT-5.5",
          "context_window": 1_000_000, "router_model_id": "cx/gpt-5.5",
          "api": "codex", "subscription_only": True, "reasoning": True},
@@ -122,12 +120,11 @@ BUILTIN_MODELS: dict[str, list[dict[str, Any]]] = {
     # but tools and thinking work). 3-pro / 3-flash route via Antigravity when
     # the AG OAuth lane is active; gc/ otherwise.
     "Google": [
-        # Gemini 3.5 Flash (GA 2026-05-19) is offered on the API-key route ONLY (see
-        # the api entry below). Its gc/ subscription entry was pulled because the
-        # pinned 9Router 0.3.60 registry has no gemini-3.5-flash and the gc/ route
-        # allowlists (every other shipped Gemini sub model IS in 0.3.60), so gc/
-        # gemini-3.5-flash would 404. Re-add the gc/ entry once 9Router is bumped
-        # past 0.3.60 (gated by the WebSearch-translation regression; see CLAUDE.md).
+        # Gemini 3.5 Flash (GA 2026-05-19) is now available via gc/ subscription route
+        # on FreeSwarm Router fork (previously unavailable on pinned 0.3.60).
+        {"value": "gemini-3.5-flash", "label": "Gemini 3.5 Flash",
+         "context_window": 1_000_000, "router_model_id": "gc/gemini-3.5-flash",
+         "api": "gemini-cli", "subscription_only": True, "reasoning": False},
         {"value": "gemini-3.1-pro", "label": "Gemini 3.1 Pro",
          "context_window": 1_000_000, "router_model_id": "gc/gemini-3.1-pro-preview",
          "api": "gemini-cli", "subscription_only": True, "reasoning": True},

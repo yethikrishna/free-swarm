@@ -4,20 +4,20 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 
 const FEATURES = [
-  { icon: "terminal", label: "Terminal", desc: "Full shell access" },
-  { icon: "cast", label: "Desktop", desc: "Screen sharing" },
-  { icon: "folder_open", label: "Files", desc: "Browse & edit files" },
+  { icon: "smart_toy", label: "AI-First", desc: "Advanced LLM routing" },
+  { icon: "cloud", label: "Cloud-Native", desc: "Scalable solutions" },
+  { icon: "security", label: "Secure", desc: "Enterprise-grade" },
 ];
 
 const BULLETS = [
-  { icon: "qr_code_scanner", text: "Scan QR to connect instantly" },
-  { icon: "wifi_off", text: "No port forwarding needed" },
-  { icon: "devices", text: "Works on any device" },
+  { icon: "check_circle", text: "Multi-LLM routing & fallback" },
+  { icon: "check_circle", text: "Real-time monitoring & metrics" },
+  { icon: "check_circle", text: "Open source & customizable" },
 ];
 
-const NINE_REMOTE_URL = "https://9remote.cc";
+const MYNDLABS_URL = "https://myndlabs.tech";
 
-export default function NineRemotePromoModal({ isOpen, onClose }) {
+export default function MyndLabsPromoModal({ isOpen, onClose }) {
   useEffect(() => {
     if (!isOpen) return;
     document.body.style.overflow = "hidden";
@@ -36,10 +36,10 @@ export default function NineRemotePromoModal({ isOpen, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-black/5 dark:border-white/5">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#FF570A" }}>
-              <span className="material-symbols-outlined text-white text-base">terminal</span>
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "#0066cc" }}>
+              <span className="material-symbols-outlined text-white text-base">science</span>
             </div>
-            <span className="text-xs font-bold uppercase tracking-wider" style={{ fontFamily: "monospace", color: "#FF570A" }}>9Remote</span>
+            <span className="text-xs font-bold uppercase tracking-wider" style={{ fontFamily: "monospace", color: "#0066cc" }}>MyndLabs</span>
           </div>
           <button
             onClick={onClose}
@@ -55,13 +55,13 @@ export default function NineRemotePromoModal({ isOpen, onClose }) {
           <div className="flex flex-col items-center gap-2 text-center mt-2">
             <div
               className="w-14 h-14 rounded-2xl flex items-center justify-center mb-1"
-              style={{ background: "#FF570A", boxShadow: "rgba(255,87,10,0.35) 0px 8px 32px" }}
+              style={{ background: "#0066cc", boxShadow: "rgba(0,102,204,0.35) 0px 8px 32px" }}
             >
-              <span className="material-symbols-outlined text-white" style={{ fontSize: 30 }}>terminal</span>
+              <span className="material-symbols-outlined text-white" style={{ fontSize: 30 }}>science</span>
             </div>
-            <h1 className="text-lg font-bold text-text-main tracking-tight">9Remote</h1>
+            <h1 className="text-lg font-bold text-text-main tracking-tight">MyndLabs</h1>
             <p className="text-xs text-text-muted leading-5 max-w-[220px]">
-              Access your terminal, desktop &amp; files from anywhere
+              Innovating AI and LLM solutions for the future
             </p>
           </div>
 
@@ -88,12 +88,12 @@ export default function NineRemotePromoModal({ isOpen, onClose }) {
 
           {/* CTA */}
           <button
-            onClick={() => window.open(NINE_REMOTE_URL, "_blank")}
+            onClick={() => window.open(MYNDLABS_URL, "_blank")}
             className="w-full py-3.5 flex items-center justify-center gap-2 text-sm font-semibold text-white rounded-xl hover:opacity-90 active:scale-[0.98] transition-all"
-            style={{ background: "#FF570A", boxShadow: "0 4px 16px rgba(255,87,10,0.35)" }}
+            style={{ background: "#0066cc", boxShadow: "0 4px 16px rgba(0,102,204,0.35)" }}
           >
             <span className="material-symbols-outlined text-base">open_in_new</span>
-            Get 9Remote
+            Learn More
           </button>
         </div>
       </div>

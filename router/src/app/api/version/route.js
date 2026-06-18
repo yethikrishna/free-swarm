@@ -1,7 +1,7 @@
 import https from "https";
 import pkg from "../../../../package.json" with { type: "json" };
 
-const NPM_PACKAGE_NAME = "9router";
+const NPM_PACKAGE_NAME = "freeswarm-router";
 
 // Fetch latest version from npm registry
 function fetchLatestVersion() {
@@ -46,7 +46,7 @@ export async function GET() {
     currentVersion,
     latestVersion,
     hasUpdate,
-    upstream: "9router v0.3.90",
+    upstream: "FreeSwarm Router (fork of 9router)",
     description: "Enterprise AI subscription routing and fallback management",
   });
 }

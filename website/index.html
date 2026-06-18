@@ -594,7 +594,8 @@
         <div class="container">
             <h2 class="section-title">Download FreeSwarm Router</h2>
             <p style="text-align: center; font-size: 1.1em; color: #666; margin-bottom: 30px;">
-                Free, open-source. Runs locally. Works offline (except OAuth).
+                Free, open-source. Runs locally. Each bundle ships its own Node.js runtime,
+                so there is nothing else to install. Extract and run the start script.
             </p>
 
             <div class="download-grid">
@@ -603,21 +604,35 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
                         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6M12 3v10M8 9l4-4 4 4"/>
                     </svg>
-                    Download (arm64)
+                    Download (.tar.gz)
                 </button>
                 <button class="download-btn" onclick="downloadForPlatform('mac-x64')">
                     <span class="system-label">macOS Intel</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
                         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6M12 3v10M8 9l4-4 4 4"/>
                     </svg>
-                    Download (x64)
+                    Download (.tar.gz)
                 </button>
                 <button class="download-btn" onclick="downloadForPlatform('win-x64')">
                     <span class="system-label">Windows 10+</span>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
                         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6M12 3v10M8 9l4-4 4 4"/>
                     </svg>
-                    Download (x64)
+                    Download (.zip)
+                </button>
+                <button class="download-btn" onclick="downloadForPlatform('linux-x64')">
+                    <span class="system-label">Linux x64</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6M12 3v10M8 9l4-4 4 4"/>
+                    </svg>
+                    Download (.tar.gz)
+                </button>
+                <button class="download-btn" onclick="downloadForPlatform('linux-arm64')">
+                    <span class="system-label">Linux arm64</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6M12 3v10M8 9l4-4 4 4"/>
+                    </svg>
+                    Download (.tar.gz)
                 </button>
                 <button class="download-btn secondary" onclick="window.location='https://github.com/yethikrishna/free-swarm/releases'">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
@@ -627,6 +642,12 @@
                     All Versions & Releases
                 </button>
             </div>
+
+            <p style="text-align: center; font-size: 1em; color: #666; margin-top: 28px;">
+                Prefer the command line? If you have Node.js 18+:
+                <code style="background:#f0f0f0; padding: 3px 8px; border-radius: 4px;">npx freeswarm-router</code>
+                &nbsp;·&nbsp; Or run it in <a href="https://github.com/yethikrishna/free-swarm/blob/HEAD/router/DOCKER.md">Docker</a>.
+            </p>
 
             <div id="download-status"></div>
         </div>
@@ -687,7 +708,8 @@
                 return 'mac-x64';
             }
             if (userAgent.includes('Windows')) return 'win-x64';
-            if (userAgent.includes('Linux')) return 'linux';
+            // Default Linux to x64 (most common); arm64 users use the explicit button.
+            if (userAgent.includes('Linux')) return 'linux-x64';
             return null;
         }
 
@@ -708,16 +730,29 @@
                 statusDiv.innerHTML = `<span class="loading">●</span> Detected ${platform}, preparing download...`;
             }
 
-            // Fetch latest release from GitHub API
-            fetch('https://api.github.com/repos/yethikrishna/free-swarm/releases/latest')
+            // Fetch the latest Router release. The repo also ships the desktop
+            // app on v* tags, so /releases/latest (newest by date) is wrong —
+            // pick the most recent release whose tag starts with "router-v".
+            fetch('https://api.github.com/repos/yethikrishna/free-swarm/releases?per_page=30')
                 .then(r => r.json())
-                .then(release => {
-                    const version = release.tag_name.replace('v', '');
+                .then(releases => {
+                    const release = Array.isArray(releases)
+                        ? releases.find(r => r.tag_name && r.tag_name.startsWith('router-v'))
+                        : null;
+                    if (!release) {
+                        statusDiv.innerHTML = '⚠ No Router release found yet. <a href="https://github.com/yethikrishna/free-swarm/releases">View all releases</a>';
+                        return;
+                    }
+                    const version = release.tag_name.replace('router-v', '');
 
+                    // Per-platform self-contained bundles produced by
+                    // scripts/package-router.sh (see .github/workflows/release-router.yml).
                     const downloadMap = {
-                        'mac-arm64': `FreeSwarm-arm64.dmg`,
-                        'mac-x64': `FreeSwarm-x64.dmg`,
-                        'win-x64': `FreeSwarm-Setup-x64.exe`,
+                        'mac-arm64': `freeswarm-router-v${version}-macos-arm64.tar.gz`,
+                        'mac-x64': `freeswarm-router-v${version}-macos-x64.tar.gz`,
+                        'win-x64': `freeswarm-router-v${version}-win-x64.zip`,
+                        'linux-x64': `freeswarm-router-v${version}-linux-x64.tar.gz`,
+                        'linux-arm64': `freeswarm-router-v${version}-linux-arm64.tar.gz`,
                     };
 
                     if (!downloadMap[platform]) {
@@ -726,10 +761,10 @@
                     }
 
                     const fileName = downloadMap[platform];
-                    const asset = release.assets.find(a => a.name === fileName);
+                    const asset = (release.assets || []).find(a => a.name === fileName);
 
                     if (!asset) {
-                        statusDiv.innerHTML = `⚠ ${fileName} not found in release. <a href="https://github.com/yethikrishna/free-swarm/releases">View all releases</a>`;
+                        statusDiv.innerHTML = `⚠ ${fileName} not found in release. <a href="${release.html_url}">View release</a> · or <code>npx freeswarm-router</code>`;
                         return;
                     }
 

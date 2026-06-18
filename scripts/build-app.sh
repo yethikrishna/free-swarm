@@ -505,6 +505,9 @@ elif $SIGN_MODE; then
     fi
 else
     export CSC_IDENTITY_AUTO_DISCOVERY=false
+    # Unset empty signing env vars to prevent electron-builder from treating
+    # them as file paths in unsigned mode
+    unset CSC_LINK CSC_KEY_PASSWORD CSC_FOR_PULL_REQUEST
     ARCH=$(uname -m)
     if [[ "$ARCH" == "arm64" ]]; then
         npx electron-builder --mac --arm64 --publish never

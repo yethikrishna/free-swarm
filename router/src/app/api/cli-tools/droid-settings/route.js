@@ -1,11 +1,10 @@
-"use server";
-
 import { NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
+import { parseJSONC } from "confbox";
 
 const execAsync = promisify(exec);
 
@@ -37,7 +36,10 @@ const readSettings = async () => {
   try {
     const settingsPath = getDroidSettingsPath();
     const content = await fs.readFile(settingsPath, "utf-8");
-    return JSON.parse(content);
+    // Factory writes settings.json as JSONC (leading "// Factory" comment,
+    // possible trailing commas), so plain JSON.parse throws. parseJSONC
+    // tolerates comments/trailing commas.
+    return parseJSONC(content);
   } catch (error) {
     if (error.code === "ENOENT") return null;
     throw error;
@@ -96,7 +98,7 @@ export async function POST(request) {
     let settings = {};
     try {
       const existingSettings = await fs.readFile(settingsPath, "utf-8");
-      settings = JSON.parse(existingSettings);
+      settings = parseJSONC(existingSettings);
     } catch { /* No existing settings */ }
 
     // Ensure customModels array exists
@@ -148,7 +150,7 @@ export async function DELETE() {
     let settings = {};
     try {
       const existingSettings = await fs.readFile(settingsPath, "utf-8");
-      settings = JSON.parse(existingSettings);
+      settings = parseJSONC(existingSettings);
     } catch (error) {
       if (error.code === "ENOENT") {
         return NextResponse.json({

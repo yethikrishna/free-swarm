@@ -470,6 +470,11 @@ try {
 
     if (-not $Sign) {
         $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+        # Unset empty signing env vars to prevent electron-builder from treating
+        # them as file paths in unsigned mode
+        if ([string]::IsNullOrEmpty($env:CSC_LINK)) { Remove-Item -Path Env:CSC_LINK -ErrorAction SilentlyContinue }
+        if ([string]::IsNullOrEmpty($env:CSC_KEY_PASSWORD)) { Remove-Item -Path Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue }
+        if ([string]::IsNullOrEmpty($env:CSC_FOR_PULL_REQUEST)) { Remove-Item -Path Env:CSC_FOR_PULL_REQUEST -ErrorAction SilentlyContinue }
     }
 
     if ($DirOnly) {

@@ -28,9 +28,9 @@ export default function HowItWorks() {
             </div>
           </div>
 
-          {/* Step 2: 9Router Hub */}
+          {/* Step 2: FreeSwarm Hub */}
           <div className="flex flex-col gap-6 relative group md:items-center md:text-center">
-            <div className="w-24 h-24 rounded-2xl bg-[#181411] border-2 border-[#D97757] flex items-center justify-center shadow-[0_0_30px_rgba(249,120,21,0.2)] z-10 mx-auto">
+            <div className="w-24 h-24 rounded-2xl bg-[#181411] border-2 border-[#D97757] flex items-center justify-center shadow-[0_0_30px_rgba(217,119,87,0.2)] z-10 mx-auto">
               <span className="material-symbols-outlined text-4xl text-[#D97757] animate-pulse">hub</span>
             </div>
             <div>

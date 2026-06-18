@@ -276,7 +276,10 @@ async def ensure_running():
             cmd += ["--require", _patch]
         cmd.append(standalone_server)
         cwd = os.path.dirname(standalone_server)
-        env = {**os.environ, "PORT": str(NINE_ROUTER_PORT), "NODE_ENV": "production"}
+        # FREESWARM_BUNDLED tells the router it runs inside the desktop app
+        # (updated via Electron auto-updater), so it suppresses the npm
+        # "new version available" nag. See router/src/app/api/version/route.js.
+        env = {**os.environ, "PORT": str(NINE_ROUTER_PORT), "NODE_ENV": "production", "FREESWARM_BUNDLED": "1"}
         if node == os.environ.get("FREESWARM_ELECTRON_PATH"):
             env["ELECTRON_RUN_AS_NODE"] = "1"
 
@@ -325,7 +328,8 @@ async def ensure_running():
             cmd += ["--require", _patch]
         cmd.append(dev_router_path)
         cwd = os.path.dirname(dev_router_path)
-        env = {**os.environ, "PORT": str(NINE_ROUTER_PORT), "NODE_ENV": "production"}
+        # See packaged branch above: suppress npm update nag when bundled.
+        env = {**os.environ, "PORT": str(NINE_ROUTER_PORT), "NODE_ENV": "production", "FREESWARM_BUNDLED": "1"}
 
     # By default, 9Router's stdout/stderr go to /dev/null (Next.js dev mode
     # is extremely chatty and floods the freeswarm console otherwise). When

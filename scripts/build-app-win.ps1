@@ -1,4 +1,4 @@
-# Master build script for the OpenSwarm desktop app on Windows.
+# Master build script for the FreeSwarm desktop app on Windows.
 #
 # Usage:
 #   pwsh scripts\build-app-win.ps1                Local dev build (unsigned)
@@ -13,7 +13,7 @@ param(
     [switch]$Publish,
     # Fast CI gate path: build only the unpacked win-unpacked\ dir (no NSIS
     # installer, no LZMA compression of the ~1GB tree - the slowest packaging
-    # phase). verify-all + Playwright drive the unpacked OpenSwarm.exe directly.
+    # phase). verify-all + Playwright drive the unpacked FreeSwarm.exe directly.
     [switch]$DirOnly,
     # Phase 7 A/B: build a Squirrel.Windows installer instead of the default
     # NSIS one, from the SAME staged tree / SAME commit. Opt-in only; NSIS stays
@@ -26,7 +26,7 @@ $ErrorActionPreference = 'Stop'
 if ($Publish) { $Sign = $true }
 # Override only the win target; everything else (signing hook, extraResources,
 # publish config) merges from electron/package.json's build block unchanged.
-$TargetOverride = if ($Squirrel) { @('--config.win.target=squirrel', '--config.squirrelWindows.iconUrl=https://raw.githubusercontent.com/openswarm-ai/openswarm/main/electron/build/icon.ico') } else { @() }
+$TargetOverride = if ($Squirrel) { @('--config.win.target=squirrel', '--config.squirrelWindows.iconUrl=https://raw.githubusercontent.com/yethikrishna/free-swarm/main/electron/build/icon.ico') } else { @() }
 
 $ScriptDir   = Split-Path -Parent $PSCommandPath
 $ProjectRoot = Split-Path -Parent $ScriptDir
@@ -49,7 +49,7 @@ if (Test-Path $EnvFile) {
 }
 
 Write-Host "========================================"
-Write-Host "  OpenSwarm Desktop App Builder (Windows)"
+Write-Host "  FreeSwarm Desktop App Builder (Windows)"
 if     ($Publish) { Write-Host "  Mode: PRODUCTION (sign + publish to GitHub Releases)" }
 elseif ($Sign)    { Write-Host "  Mode: SIGNED (sign, no publish)" }
 else              { Write-Host "  Mode: LOCAL (unsigned)" }
@@ -396,26 +396,27 @@ if (Test-Path $EnvExampleSrc) {
     Copy-Item -Force $EnvExampleSrc $EnvExampleDst
     Write-Host "Restored webapp_template/.env.example (stripped by the .env.* exclude)"
 }
-# data: backend/config/paths.py points DATA_ROOT at %APPDATA%/OpenSwarm/data in
+# data: backend/config/paths.py points DATA_ROOT at %APPDATA%/FreeSwarm/data in
 # packaged mode and no code seeds from the bundle, so the entire shipped
 # backend/data/ tree was dead weight (and was leaking the dev machine's
 # auth.token + install_id + dev session artifacts).
 # uv-bin: source dir holds the binary so dev works; staged separately below
 # so extraResources can substitute ${arch} (matches the mac build).
 
-# Production .env: OAuth helper base URL + Google credentials. See
-# Google client_id/secret are no longer shipped: nothing reads them at runtime,
-# so we don't bake a secret into the .env.
-$ShipOauthBaseUrl = if ($env:OPENSWARM_OAUTH_BASE_URL_OVERRIDE) {
-    $env:OPENSWARM_OAUTH_BASE_URL_OVERRIDE
+# Production .env: just the OAuth helper base URL. Google client_id/secret are
+# no longer shipped: nothing reads them at runtime, so we don't bake a secret
+# into the .env. Must match build-app.sh: the backend reads FREESWARM_OAUTH_BASE_URL
+# (backend/apps/tools_lib/oauth_config.py).
+$ShipOauthBaseUrl = if ($env:FREESWARM_OAUTH_BASE_URL_OVERRIDE) {
+    $env:FREESWARM_OAUTH_BASE_URL_OVERRIDE
 } else {
-    'https://api.openswarm.com'
+    'https://api.freeswarm.myndlabs.tech'
 }
 $ShipEnvPath = Join-Path $Staging 'backend\.env'
 New-Item -ItemType Directory -Force -Path (Split-Path $ShipEnvPath -Parent) | Out-Null
 @(
     "# OAuth helper base URL.",
-    "OPENSWARM_OAUTH_BASE_URL=$ShipOauthBaseUrl"
+    "FREESWARM_OAUTH_BASE_URL=$ShipOauthBaseUrl"
 ) | Set-Content -Path $ShipEnvPath
 Write-Host "Staged production .env"
 
@@ -480,7 +481,7 @@ try {
     if ($DirOnly) {
         # Unpacked-only build for the fast CI gate. afterPack (router node_modules)
         # and locale-pak filtering still run during the pack phase, so the produced
-        # win-unpacked\OpenSwarm.exe is fully functional; only the NSIS installer +
+        # win-unpacked\FreeSwarm.exe is fully functional; only the NSIS installer +
         # update feed are skipped (verify-update-feed skips cleanly when absent).
         & npx electron-builder --win --x64 --dir $TargetOverride --publish never
     } elseif ($Publish) {
@@ -493,7 +494,7 @@ try {
         try {
             $pkgJson = Get-Content -Raw (Join-Path $ProjectRoot 'electron\package.json') | ConvertFrom-Json
             $version = $pkgJson.version
-            $macYmlUrl = "https://github.com/openswarm-ai/openswarm/releases/download/v$version/latest-mac.yml"
+            $macYmlUrl = "https://github.com/yethikrishna/free-swarm/releases/download/v$version/latest-mac.yml"
             $null = Invoke-WebRequest -Uri $macYmlUrl -Method Head -UseBasicParsing -ErrorAction Stop -TimeoutSec 10
             Write-Host "  > Mac release v$version detected on GitHub (latest-mac.yml present). OK to proceed."
         } catch {
@@ -524,8 +525,8 @@ Remove-Item -Recurse -Force $Staging -ErrorAction SilentlyContinue
 # --- Step 6b: Stable-named installer alias for the website download button ---
 # Squirrel names the local installer per `artifactName` (in
 # dist\squirrel-windows\) but RENAMES the published asset to
-# `openswarm-Setup-<version>.exe`, so the fixed openswarm.com download link
-# 404s without this stable-named copy. -Recurse because the .exe sits in the
+# `freeswarm-Setup-<version>.exe`, so the fixed freeswarm.myndlabs.tech download
+# link 404s without this stable-named copy. -Recurse because the .exe sits in the
 # squirrel-windows\ subdir, not the dist\ root. Byte copy keeps the signature;
 # invisible to the updater, which keys off RELEASES + .nupkg, not the filename.
 if ($Publish) {
@@ -535,7 +536,7 @@ if ($Publish) {
     $SetupExe = Get-ChildItem -Path $DistDir -Recurse -Filter '*Setup*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $SetupExe) { throw "No Squirrel Setup .exe found under $DistDir to alias" }
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-        throw "gh CLI not found; cannot upload OpenSwarm-Setup-x64.exe alias (install gh or upload it manually)"
+        throw "gh CLI not found; cannot upload FreeSwarm-Setup-x64.exe alias (install gh or upload it manually)"
     }
     $AliasExe = Join-Path $DistDir 'FreeSwarm-Setup-x64.exe'
     Copy-Item -Force $SetupExe.FullName $AliasExe

@@ -160,12 +160,12 @@ export default function CodexToolCard({ tool, isExpanded, onToggle, baseUrl, api
     
     const effectiveSubagentModel = subagentModel || selectedModel;
     
-    const configContent = `# 9Router Configuration for Codex CLI
+    const configContent = `# FreeSwarm Router Configuration for Codex CLI
 model = "${selectedModel}"
 model_provider = "freeswarm"
 
 [model_providers.freeswarm]
-name = "9Router"
+name = "FreeSwarm Router"
 base_url = "${getEffectiveBaseUrl()}"
 wire_api = "responses"
 

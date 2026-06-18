@@ -26,14 +26,20 @@ const readConfig = async () => {
   }
 };
 
+// Display name written into Copilot's chatLanguageModels.json. LEGACY_NAMES are
+// older labels we still detect/remove so a rebrand doesn't orphan stale entries.
+const ENTRY_NAME = "FreeSwarm Router";
+const LEGACY_NAMES = ["9Router"];
+const isOurEntry = (entry) => entry?.name === ENTRY_NAME || LEGACY_NAMES.includes(entry?.name);
+
 const has9RouterConfig = (config) => {
   if (!Array.isArray(config)) return false;
-  return config.some((entry) => entry.name === "9Router");
+  return config.some(isOurEntry);
 };
 
 const get9RouterEntry = (config) => {
   if (!Array.isArray(config)) return null;
-  return config.find((entry) => entry.name === "9Router") || null;
+  return config.find(isOurEntry) || null;
 };
 
 // GET - Read current copilot config
@@ -80,7 +86,7 @@ export async function POST(request) {
     const keyToUse = apiKey || "sk_freeswarm";
 
     const newEntry = {
-      name: "9Router",
+      name: ENTRY_NAME,
       vendor: "azure",
       apiKey: keyToUse,
       models: models.map((id) => ({
@@ -94,8 +100,8 @@ export async function POST(request) {
       })),
     };
 
-    // Replace existing 9Router entry or append
-    const idx = config.findIndex((e) => e.name === "9Router");
+    // Replace existing entry (current or legacy name) or append
+    const idx = config.findIndex(isOurEntry);
     if (idx >= 0) {
       config[idx] = newEntry;
     } else {
@@ -132,12 +138,12 @@ export async function DELETE() {
       throw error;
     }
 
-    config = config.filter((e) => e.name !== "9Router");
+    config = config.filter((e) => !isOurEntry(e));
     await fs.writeFile(configPath, JSON.stringify(config, null, 2));
 
     return NextResponse.json({
       success: true,
-      message: "9Router removed from Copilot config",
+      message: "FreeSwarm Router removed from Copilot config",
     });
   } catch (error) {
     console.log("Error resetting copilot settings:", error);

@@ -37,8 +37,25 @@ function compareVersions(a, b) {
 }
 
 export async function GET() {
-  const latestVersion = await fetchLatestVersion();
   const currentVersion = pkg.version;
+
+  // When the router runs bundled inside the FreeSwarm desktop app, it is
+  // updated via the Electron auto-updater, never via npm. The backend sets
+  // FREESWARM_BUNDLED when it spawns us, so suppress the npm "new version"
+  // nag (it would tell users to `npm install -g` a router they can't update
+  // that way, and npm's freeswarm-router version is unrelated to the app's).
+  if (process.env.FREESWARM_BUNDLED) {
+    return Response.json({
+      name: "FreeSwarm Router",
+      currentVersion,
+      latestVersion: currentVersion,
+      hasUpdate: false,
+      upstream: "FreeSwarm Router (fork of 9router)",
+      description: "Enterprise AI subscription routing and fallback management",
+    });
+  }
+
+  const latestVersion = await fetchLatestVersion();
   const hasUpdate = latestVersion ? compareVersions(latestVersion, currentVersion) > 0 : false;
 
   return Response.json({

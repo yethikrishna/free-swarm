@@ -55,9 +55,15 @@ echo "[1/5] Building router standalone..."
 cd "$ROUTER_DIR"
 npm ci
 npm run build
-STANDALONE="$ROUTER_DIR/.next/standalone/router"
-if [[ ! -f "$STANDALONE/server.js" ]]; then
-    echo "ERROR: standalone build missing ($STANDALONE/server.js)" >&2
+# Next.js standalone output is nested under router/ (old monorepo tracing root)
+# or flat at .next/standalone/ (tracing root pinned to router/ in next.config.mjs
+# to avoid the Windows EPERM scandir crash). Detect whichever layout was built.
+if [[ -f "$ROUTER_DIR/.next/standalone/router/server.js" ]]; then
+    STANDALONE="$ROUTER_DIR/.next/standalone/router"
+elif [[ -f "$ROUTER_DIR/.next/standalone/server.js" ]]; then
+    STANDALONE="$ROUTER_DIR/.next/standalone"
+else
+    echo "ERROR: standalone build missing (no server.js in .next/standalone[/router])" >&2
     exit 1
 fi
 echo "Build complete."

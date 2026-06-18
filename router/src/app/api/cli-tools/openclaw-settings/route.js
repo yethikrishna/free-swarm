@@ -48,16 +48,16 @@ const readSettings = async () => {
 // Check if settings has 9Router config
 const has9RouterConfig = (settings) => {
   if (!settings || !settings.models || !settings.models.providers) return false;
-  return !!settings.models.providers["9router"];
+  return !!settings.models.providers["freeswarm"];
 };
 
-// Read per-agent models.json and return current model id (without "9router/" prefix)
+// Read per-agent models.json and return current model id (without "freeswarm/" prefix)
 const readAgentModel = async (agentDir) => {
   try {
     const modelsPath = path.join(agentDir, "models.json");
     const content = await fs.readFile(modelsPath, "utf-8");
     const data = JSON.parse(content);
-    const models = data?.providers?.["9router"]?.models;
+    const models = data?.providers?.["freeswarm"]?.models;
     return models?.[0]?.id || null;
   } catch {
     return null;
@@ -112,7 +112,7 @@ const writeAgentModels = async (agentDir, model, baseUrl, apiKey) => {
   } catch { /* No existing */ }
 
   if (!existing.providers) existing.providers = {};
-  existing.providers["9router"] = {
+  existing.providers["freeswarm"] = {
     baseUrl,
     apiKey: apiKey || "your_api_key",
     api: "openai-completions",
@@ -150,11 +150,11 @@ export async function POST(request) {
     if (!settings.models.providers) settings.models.providers = {};
 
     const normalizedBaseUrl = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
-    const fullModelId = `9router/${model}`;
+    const fullModelId = `freeswarm/${model}`;
 
-    // Remove all old 9router/* entries from agents.defaults.models
+    // Remove all old freeswarm/* entries from agents.defaults.models
     Object.keys(settings.agents.defaults.models)
-      .filter((k) => k.startsWith("9router/"))
+      .filter((k) => k.startsWith("freeswarm/"))
       .forEach((k) => { delete settings.agents.defaults.models[k]; });
 
     // Update default model
@@ -166,13 +166,13 @@ export async function POST(request) {
 
     // Add fresh 9router models to allowlist
     allModelIds.forEach((m) => {
-      settings.agents.defaults.models[`9router/${m}`] = {};
+      settings.agents.defaults.models[`freeswarm/${m}`] = {};
     });
 
     // Remove old 9router model from each agent in agents.list
     if (settings.agents.list) {
       settings.agents.list = settings.agents.list.map((agent) => {
-        if (agent.model?.startsWith("9router/")) {
+        if (agent.model?.startsWith("freeswarm/")) {
           const { model: _, ...rest } = agent;
           return rest;
         }
@@ -181,7 +181,7 @@ export async function POST(request) {
     }
 
     // Update models.providers.9router with all models
-    settings.models.providers["9router"] = {
+    settings.models.providers["freeswarm"] = {
       baseUrl: normalizedBaseUrl,
       apiKey: apiKey || "your_api_key",
       api: "openai-completions",
@@ -192,7 +192,7 @@ export async function POST(request) {
     if (settings.agents.list) {
       settings.agents.list = settings.agents.list.map((agent) => {
         const agentModel = agentModels[agent.id];
-        if (agentModel) return { ...agent, model: `9router/${agentModel}` };
+        if (agentModel) return { ...agent, model: `freeswarm/${agentModel}` };
         return agent;
       });
 
@@ -242,7 +242,7 @@ export async function DELETE() {
 
     // Remove 9Router from models.providers
     if (settings.models && settings.models.providers) {
-      delete settings.models.providers["9router"];
+      delete settings.models.providers["freeswarm"];
       
       // Remove providers object if empty
       if (Object.keys(settings.models.providers).length === 0) {
@@ -252,7 +252,7 @@ export async function DELETE() {
 
     // Remove 9router models from agents.defaults.models allowlist
     if (settings.agents?.defaults?.models) {
-      const keysToRemove = Object.keys(settings.agents.defaults.models).filter((k) => k.startsWith("9router/"));
+      const keysToRemove = Object.keys(settings.agents.defaults.models).filter((k) => k.startsWith("freeswarm/"));
       for (const key of keysToRemove) {
         delete settings.agents.defaults.models[key];
       }
@@ -262,7 +262,7 @@ export async function DELETE() {
     }
 
     // Reset agents.defaults.model.primary if it uses 9router
-    if (settings.agents?.defaults?.model?.primary?.startsWith("9router/")) {
+    if (settings.agents?.defaults?.model?.primary?.startsWith("freeswarm/")) {
       delete settings.agents.defaults.model.primary;
     }
 

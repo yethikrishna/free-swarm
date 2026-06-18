@@ -275,8 +275,13 @@ try {
     & npm run build
     if ($LASTEXITCODE -ne 0) { throw "router build failed" }
 } finally { Pop-Location }
-if (-not (Test-Path (Join-Path $ProjectRoot 'router\.next\standalone\router'))) {
-    throw "Router build failed - .next\standalone\router not found"
+# Standalone server is at .next\standalone\router\server.js (nested, old monorepo
+# tracing root) OR .next\standalone\server.js (flat, tracing root pinned to router\
+# to avoid the Windows EPERM scandir crash). Accept either layout.
+$StandaloneRoot = Join-Path $ProjectRoot 'router\.next\standalone'
+if (-not (Test-Path (Join-Path $StandaloneRoot 'router\server.js')) -and `
+    -not (Test-Path (Join-Path $StandaloneRoot 'server.js'))) {
+    throw "Router build failed - no server.js in .next\standalone[\router]"
 }
 Write-Host "Router fork built."
 Write-Host ""
@@ -305,8 +310,13 @@ $Staging = Join-Path $ProjectRoot 'electron\build-staging'
 if (Test-Path $Staging) { Remove-Item -Recurse -Force $Staging }
 New-Item -ItemType Directory -Force -Path $Staging | Out-Null
 
+# Source the standalone tree from whichever layout the build produced
+# (nested router\ or flat — see the build check above).
 $RouterSrc = Join-Path $ProjectRoot 'router\.next\standalone\router'
-if (-not (Test-Path $RouterSrc)) {
+if (-not (Test-Path (Join-Path $RouterSrc 'server.js'))) {
+    $RouterSrc = Join-Path $ProjectRoot 'router\.next\standalone'
+}
+if (-not (Test-Path (Join-Path $RouterSrc 'server.js'))) {
     throw "Router fork not built. Run step 2 to build router."
 }
 

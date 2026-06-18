@@ -74,7 +74,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
       } else if (action === "start") {
         const keyToUse = selectedApiKey?.trim()
           || (apiKeys?.length > 0 ? apiKeys[0].key : null)
-          || (!cloudEnabled ? "sk_9router" : null);
+          || (!cloudEnabled ? "sk_freeswarm" : null);
         res = await fetch("/api/cli-tools/antigravity-mitm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -190,7 +190,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
                   </select>
                 ) : (
                   <span className="flex-1 px-2 py-1.5 text-xs text-text-muted">
-                    {cloudEnabled ? "No API keys — create one in Keys page" : "sk_9router (default)"}
+                    {cloudEnabled ? "No API keys — create one in Keys page" : "sk_freeswarm (default)"}
                   </span>
                 )}
               </div>

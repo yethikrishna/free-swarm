@@ -277,8 +277,12 @@ cd "$PROJECT_ROOT/router"
 npm ci
 npm run build
 
-if [[ ! -d "$PROJECT_ROOT/router/.next/standalone/router" ]]; then
-    echo "ERROR: Router fork build failed — .next/standalone/router not found"
+# The standalone server lives at .next/standalone/router/server.js (nested,
+# old monorepo tracing root) OR .next/standalone/server.js (flat, tracing root
+# pinned to router/ to avoid the Windows EPERM crash). Accept either.
+if [[ ! -f "$PROJECT_ROOT/router/.next/standalone/router/server.js" \
+   && ! -f "$PROJECT_ROOT/router/.next/standalone/server.js" ]]; then
+    echo "ERROR: Router fork build failed — no server.js in .next/standalone[/router]"
     exit 1
 fi
 echo "Router fork built."

@@ -63,10 +63,10 @@ export default function GetStarted() {
               <div className="p-6 font-mono text-sm leading-relaxed overflow-x-auto">
                 <div 
                   className="flex items-center gap-2 mb-4 group cursor-pointer"
-                  onClick={() => handleCopy("npx 9router")}
+                  onClick={() => handleCopy("npx freeswarm-router")}
                 >
                   <span className="text-green-400">$</span>
-                  <span className="text-white">npx 9router</span>
+                  <span className="text-white">npx freeswarm-router</span>
                   <span className="ml-auto text-gray-500 text-xs opacity-0 group-hover:opacity-100">
                     {copied ? "✓ Copied" : "Copy"}
                   </span>
@@ -85,8 +85,8 @@ export default function GetStarted() {
                 
                 <div className="text-gray-400 text-xs">
                   <span className="text-purple-400">Data Location:</span><br/>
-                  <span className="text-gray-500">  macOS/Linux:</span> ~/.9router/db.json<br/>
-                  <span className="text-gray-500">  Windows:</span> %APPDATA%/9router/db.json
+                  <span className="text-gray-500">  macOS/Linux:</span> ~/.freeswarm/db.json<br/>
+                  <span className="text-gray-500">  Windows:</span> %APPDATA%/freeswarm/db.json
                 </div>
               </div>
             </div>

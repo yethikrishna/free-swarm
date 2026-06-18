@@ -12,7 +12,7 @@ const isCloud = typeof caches !== 'undefined' || typeof caches === 'object';
 
 // Get app name - fixed constant to avoid Windows path issues in standalone build
 function getAppName() {
-  return "9router";
+  return "freeswarm-router";
 }
 
 // Get user data directory based on platform

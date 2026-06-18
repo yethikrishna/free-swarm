@@ -16,12 +16,22 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-ROUTER_FORK="$REPO_ROOT/router/.next/standalone/router"
+STANDALONE="$REPO_ROOT/router/.next/standalone"
 
+# Next.js places the standalone app under a subdirectory matching the app's
+# path relative to outputFileTracingRoot. With the tracing root pinned to
+# router/ (see router/next.config.mjs, required to avoid the Windows EPERM
+# scandir crash) the output is FLAT at .next/standalone/server.js. With the
+# old inferred (monorepo) root it nested under .next/standalone/router/.
+# Detect whichever layout the build produced so staging works either way.
 echo "Staging FreeSwarm Router from fork..."
 
-if [[ ! -d "$ROUTER_FORK" ]]; then
-    echo "ERROR: Router fork not built. Run: cd $REPO_ROOT/router && npm run build" >&2
+if [[ -f "$STANDALONE/router/server.js" ]]; then
+    ROUTER_FORK="$STANDALONE/router"
+elif [[ -f "$STANDALONE/server.js" ]]; then
+    ROUTER_FORK="$STANDALONE"
+else
+    echo "ERROR: Router fork not built (no server.js in $STANDALONE or $STANDALONE/router). Run: cd $REPO_ROOT/router && npm run build" >&2
     exit 1
 fi
 

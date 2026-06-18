@@ -50,8 +50,8 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
     }
     
     // Parse subagent settings from agent.explorer if exists
-    if (status?.config?.agent?.explorer?.model?.startsWith("9router/")) {
-      setSubagentModel(status.config.agent.explorer.model.replace("9router/", ""));
+    if (status?.config?.agent?.explorer?.model?.startsWith("freeswarm/")) {
+      setSubagentModel(status.config.agent.explorer.model.replace("freeswarm/", ""));
     }
   }, [status]);
 
@@ -68,7 +68,7 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
   const getConfigStatus = () => {
     if (!status?.installed) return null;
     if (!status.config) return "not_configured";
-    const url = status.config?.provider?.["9router"]?.options?.baseURL || "";
+    const url = status.config?.provider?.["freeswarm"]?.options?.baseURL || "";
     const isLocal = url.includes("localhost") || url.includes("127.0.0.1");
     return status.has9Router && (isLocal || url.includes(baseUrl)) ? "configured" : status.has9Router ? "other" : "not_configured";
   };
@@ -101,7 +101,7 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
     try {
       const keyToUse = (selectedApiKey && selectedApiKey.trim())
         ? selectedApiKey
-        : (!cloudEnabled ? "sk_9router" : selectedApiKey);
+        : (!cloudEnabled ? "sk_freeswarm" : selectedApiKey);
 
       const res = await fetch("/api/cli-tools/opencode-settings", {
         method: "POST",
@@ -154,7 +154,7 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
   const getManualConfigs = () => {
     const keyToUse = (selectedApiKey && selectedApiKey.trim())
       ? selectedApiKey
-      : (!cloudEnabled ? "sk_9router" : "<API_KEY_FROM_DASHBOARD>");
+      : (!cloudEnabled ? "sk_freeswarm" : "<API_KEY_FROM_DASHBOARD>");
 
     const modelsToShow = selectedModels.length > 0 ? selectedModels : ["provider/model-id"];
     const activeModelToShow = activeModel || selectedModels[0] || modelsToShow[0];
@@ -169,18 +169,18 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
       filename: "~/.config/opencode/opencode.json",
       content: JSON.stringify({
         provider: {
-          "9router": {
+          "freeswarm": {
             npm: "@ai-sdk/openai-compatible",
             options: { baseURL: getEffectiveBaseUrl(), apiKey: keyToUse },
             models: modelsObj,
           },
         },
-        model: `9router/${activeModelToShow}`,
+        model: `freeswarm/${activeModelToShow}`,
         agent: {
           explorer: {
             description: "Fast explorer subagent for codebase exploration",
             mode: "subagent",
-            model: `9router/${effectiveSubagentModel}`
+            model: `freeswarm/${effectiveSubagentModel}`
           }
         }
       }, null, 2),
@@ -248,12 +248,12 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
             <>
               <div className="flex flex-col gap-2">
                 {/* Current base URL */}
-                {status?.config?.provider?.["9router"]?.options?.baseURL && (
+                {status?.config?.provider?.["freeswarm"]?.options?.baseURL && (
                   <div className="flex items-center gap-2">
                     <span className="w-32 shrink-0 text-sm font-semibold text-text-main text-right">Current</span>
                     <span className="material-symbols-outlined text-text-muted text-[14px]">arrow_forward</span>
                     <span className="flex-1 px-2 py-1.5 text-xs text-text-muted truncate">
-                      {status.config.provider["9router"].options.baseURL}
+                      {status.config.provider["freeswarm"].options.baseURL}
                     </span>
                   </div>
                 )}
@@ -286,7 +286,7 @@ export default function OpenCodeToolCard({ tool, isExpanded, onToggle, baseUrl, 
                     </select>
                   ) : (
                     <span className="flex-1 text-xs text-text-muted px-2 py-1.5">
-                      {cloudEnabled ? "No API keys - Create one in Keys page" : "sk_9router (default)"}
+                      {cloudEnabled ? "No API keys - Create one in Keys page" : "sk_freeswarm (default)"}
                     </span>
                   )}
                 </div>

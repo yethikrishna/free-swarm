@@ -72,7 +72,7 @@ app.whenReady().then(() => {
     setTimeout(() => emit('Loading components…'),                       6000);
     setTimeout(() => emit('Almost ready…'),                             9000);
     // Mirror the OS-tailored copy from main.js so the preview shows what
-    // real users would see on this platform.
+    // real users would see on this platform. Preview shows first-launch messages.
     const stillStarting = process.platform === 'win32'
       ? 'Still starting — Windows Defender is scanning files (first launch only)…'
       : process.platform === 'darwin'

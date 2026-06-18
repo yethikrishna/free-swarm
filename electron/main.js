@@ -633,19 +633,41 @@ function emitSplashStatus(payload) {
   }
 }
 
+// Check if this is a first launch by reading install.json state.
+function isFirstLaunch(userDataDir) {
+  try {
+    const installJsonPath = path.join(userDataDir, 'install.json');
+    const content = fs.readFileSync(installJsonPath, 'utf8');
+    const state = JSON.parse(content);
+    // If first_launch_at is absent or null, it's a first launch
+    return !state.first_launch_at;
+  } catch (_) {
+    // install.json doesn't exist or can't be parsed: assume first launch
+    return true;
+  }
+}
+
 // OS-tailored status copy. The "first launch is slow" experience has very
 // different causes per platform (Defender on Windows, Gatekeeper +
 // XProtect notarization scan on macOS), and naming the actual culprit
 // helps users feel like the wait is intentional rather than the app being
 // broken. Used by the long-wait branches in waitForBackend below.
-function osStillStartingText() {
+// Only show "(first launch only)" message on actual first launch; on
+// subsequent launches, omit it since the message is misleading.
+function osStillStartingText(isFirst = true) {
   if (process.platform === 'win32') {
-    return 'Still starting — Windows Defender is scanning files (first launch only)…';
+    return isFirst
+      ? 'Still starting — Windows Defender is scanning files (first launch only)…'
+      : 'Still starting — Windows Defender is scanning files…';
   }
   if (process.platform === 'darwin') {
-    return 'Still starting — macOS is verifying the bundle (first launch only)…';
+    return isFirst
+      ? 'Still starting — macOS is verifying the bundle (first launch only)…'
+      : 'Still starting — macOS is verifying the bundle…';
   }
-  return 'Still starting (first launch is slower than subsequent launches)…';
+  return isFirst
+    ? 'Still starting (first launch is slower than subsequent launches)…'
+    : 'Still starting…';
 }
 function osTakingTooLongText() {
   if (process.platform === 'win32') {
@@ -806,6 +828,8 @@ function getBundledNodePath() {
 // warnings on the splash so the wait feels intentional.
 function waitForBackend(port, opts = {}) {
   const proc = opts.process || null;
+  const userDataDir = opts.userDataDir || app.getPath('userData');
+  const isFirstLaunchNow = opts.isFirstLaunch !== undefined ? opts.isFirstLaunch : isFirstLaunch(userDataDir);
   const start = Date.now();
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -833,7 +857,7 @@ function waitForBackend(port, opts = {}) {
       const elapsed = Date.now() - start;
       if (elapsed > 60_000 && !stillStartingNotified) {
         stillStartingNotified = true;
-        emitSplashStatus({ text: osStillStartingText(), level: 'warning' });
+        emitSplashStatus({ text: osStillStartingText(isFirstLaunchNow), level: 'warning' });
       }
       if (elapsed > 180_000 && !actionsShown) {
         actionsShown = true;

@@ -271,10 +271,23 @@ fi
 echo "Python environment ready."
 echo ""
 
+# Step 2a: Build Router fork
+echo "[2a/5] Building FreeSwarm Router fork..."
+cd "$PROJECT_ROOT/router"
+npm ci
+npm run build
+
+if [[ ! -d "$PROJECT_ROOT/router/.next/standalone/router" ]]; then
+    echo "ERROR: Router fork build failed — .next/standalone/router not found"
+    exit 1
+fi
+echo "Router fork built."
+echo ""
+
 # Step 3: Fetch Router (FreeSwarm fork)
 # The FreeSwarm Router fork (.next/standalone/router/) is built locally
 # and staged here. For details see router/FREESWARM_FORK.md.
-echo "[3/5] Staging FreeSwarm Router fork..."
+echo "[4/6] Staging FreeSwarm Router fork..."
 STAGING_DIR="$PROJECT_ROOT/electron/build-staging"
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
@@ -287,7 +300,7 @@ fi
 echo "Router staged."
 echo ""
 
-# Step 3b: Bundle a real Node.js binary so 9Router and MCP servers don't
+# Step 4b: Bundle a real Node.js binary so 9Router and MCP servers don't
 # fall back to ELECTRON_RUN_AS_NODE on user machines without system node.
 # Two wins:
 #   1. Dock cleanliness — Electron-as-Node fallback is the second probable
@@ -318,14 +331,14 @@ download_node_for_arch() {
     local arch="$1"  # arm64 | x64
     local out_dir="$NODE_STAGE_DIR/$arch"
     if [[ -f "$out_dir/bin/node" ]]; then
-        echo "[3b] Node $NODE_VERSION ($arch) already cached"
+        echo "[4b] Node $NODE_VERSION ($arch) already cached"
         return 0
     fi
     rm -rf "$out_dir"
     mkdir -p "$out_dir/bin"
     local tarball="node-${NODE_VERSION}-darwin-${arch}.tar.gz"
     local url="https://nodejs.org/dist/${NODE_VERSION}/${tarball}"
-    echo "[3b] Downloading $tarball..."
+    echo "[4b] Downloading $tarball..."
     local tmp; tmp=$(mktemp -d)
     curl -fsSL --progress-bar -o "$tmp/node.tar.gz" "$url"
     tar xzf "$tmp/node.tar.gz" -C "$tmp"
@@ -335,7 +348,7 @@ download_node_for_arch() {
     cp "$tmp/node-${NODE_VERSION}-darwin-${arch}/bin/node" "$out_dir/bin/node"
     chmod +x "$out_dir/bin/node"
     rm -rf "$tmp"
-    echo "[3b] Node $NODE_VERSION ($arch) staged ($(du -h "$out_dir/bin/node" | cut -f1))"
+    echo "[4b] Node $NODE_VERSION ($arch) staged ($(du -h "$out_dir/bin/node" | cut -f1))"
 }
 
 # Publish mode builds both DMGs from one invocation, so always stage both.
@@ -355,7 +368,7 @@ else
 fi
 echo ""
 
-# Step 3c: Pre-build the webapp-template node_modules archive so first-app
+# Step 4c: Pre-build the webapp-template node_modules archive so first-app
 # create on a fresh user install decompresses (~3 s) instead of running a
 # live `npm install` (~22 s). The backend's _try_extract_bundled_archive
 # is sha-tagged + falls through cleanly if the archive is missing or
@@ -363,14 +376,14 @@ echo ""
 # template snapshot or npm aren't available.
 if [[ -f "$PROJECT_ROOT/backend/apps/outputs/webapp_template/frontend/package.json" ]] \
    && command -v npm >/dev/null 2>&1; then
-    echo "[3c/5] Pre-building webapp-template node_modules archive..."
+    echo "[4c/6] Pre-building webapp-template node_modules archive..."
     bash "$PROJECT_ROOT/scripts/build-template-archive.sh"
     echo ""
 fi
 
-# Step 4: Snapshot source directories for packaging
+# Step 5: Snapshot source directories for packaging
 # (Router was already staged in step 3; do not touch STAGING_DIR/router/ here.)
-echo "[4/5] Snapshotting source directories..."
+echo "[5/6] Snapshotting source directories..."
 
 rsync -a \
     --exclude='__pycache__' --exclude='**/__pycache__' \
@@ -452,8 +465,8 @@ cat > "$PROJECT_ROOT/electron/build-info.json" <<EOF
 EOF
 echo "Stamped build-info.json: sha=${BUILD_SHA:0:12} channel=$BUILD_CHANNEL"
 
-# Step 5: Package with electron-builder
-echo "[5/5] Packaging with electron-builder..."
+# Step 6: Package with electron-builder
+echo "[6/6] Packaging with electron-builder..."
 cd "$PROJECT_ROOT/electron"
 # npm ci: lockfile-exact, no drift. See frontend note above.
 npm ci

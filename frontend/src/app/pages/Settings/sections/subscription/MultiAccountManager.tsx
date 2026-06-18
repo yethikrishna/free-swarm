@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
@@ -15,7 +15,12 @@ interface MultiAccountManagerProps {
   onAccountsChange: () => void;
 }
 
-const MultiAccountManager: React.FC<MultiAccountManagerProps> = ({ provider, onAccountsChange }) => {
+export interface MultiAccountManagerHandle {
+  refresh: () => void;
+}
+
+const MultiAccountManager = forwardRef<MultiAccountManagerHandle, MultiAccountManagerProps>(
+  ({ provider, onAccountsChange }, ref) => {
   const c = useClaudeTokens();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(false);
@@ -49,6 +54,10 @@ const MultiAccountManager: React.FC<MultiAccountManagerProps> = ({ provider, onA
   useEffect(() => {
     fetchAccounts();
   }, [provider]);
+
+  useImperativeHandle(ref, () => ({
+    refresh: fetchAccounts,
+  }));
 
   const deleteAccount = async (id: string) => {
     setDeletingId(id);
@@ -210,6 +219,9 @@ const MultiAccountManager: React.FC<MultiAccountManagerProps> = ({ provider, onA
       </Menu>
     </Box>
   );
-};
+  }
+);
+
+MultiAccountManager.displayName = 'MultiAccountManager';
 
 export default MultiAccountManager;

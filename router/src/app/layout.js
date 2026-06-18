@@ -15,8 +15,8 @@ const inter = Inter({
 });
 
 export const metadata = {
-  title: "9Router - AI Infrastructure Management",
-  description: "One endpoint for all your AI providers. Manage keys, monitor usage, and scale effortlessly.",
+  title: "FreeSwarm Router - Enterprise AI Subscription Management",
+  description: "Unified endpoint for multi-account AI subscriptions. Route, fallback, and scale across providers.",
   icons: {
     icon: "/favicon.svg",
   },

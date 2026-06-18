@@ -262,57 +262,209 @@ Update all references in:
 
 ## Customization 4: Custom Routing Policies
 
-Beyond provider adapters, you can implement custom routing logic.
+FreeSwarm Router now supports multiple routing strategies for account selection. Built-in strategies are available; custom strategies can be added to extend router behavior.
 
-### Example: Priority-Based Fallback
+### Available Strategies
 
-Override the default fill-first strategy:
+The router now includes these fallback strategies (set via `settings.fallbackStrategy` or per-provider overrides):
 
-In `router/src/services/routing/selector.ts`:
+1. **fill-first** (default)
+   - Uses priority-ordered account list
+   - Fills first account until exhausted, then fallback
 
-```typescript
-export function selectAccount(
-  provider: string,
-  accounts: Account[],
-  strategy: "fill-first" | "round-robin" | "priority"
-): Account {
-  if (strategy === "priority") {
-    // Custom logic: pick account with highest priority score
-    return accounts.reduce((best, acc) => {
-      const score = calculatePriorityScore(acc);
-      return score > calculatePriorityScore(best) ? acc : best;
-    });
-  }
-  
-  // Fall back to built-in strategies
-  return selectAccountFillFirstOrRoundRobin(provider, accounts, strategy);
-}
+2. **round-robin**
+   - Distributes requests across all available accounts
+   - Sticky mode: stays with current account for N consecutive uses
+   - Configurable via `stickyRoundRobinLimit` (default: 3)
 
-function calculatePriorityScore(account: Account): number {
-  // Example: prefer recently-used, non-errored accounts
-  const usageScore = account.lastUsedAt ? 10 : 0;
-  const errorScore = account.hasError ? -100 : 0;
-  return usageScore + errorScore;
-}
+3. **priority** (NEW)
+   - Selects account with highest priority score
+   - Factors: explicit priority, recency, health, usage frequency
+   - Prioritizes recently-used, error-free accounts
+
+4. **cost-aware** (NEW)
+   - Routes to cheapest available account
+   - Uses pricing metadata in `providerSpecificData`
+   - Falls back to first account if no pricing available
+
+5. **health** (NEW)
+   - Selects healthiest account (fewest recent errors)
+   - Factors: error status, error age, error code severity
+   - Avoids recently-failed accounts
+
+6. **load-balance** (NEW)
+   - Distributes fairly across all accounts
+   - Picks least-used account each time
+   - Useful for spreading load evenly
+
+### Using Custom Strategies
+
+Set via the settings API:
+
+```bash
+# Global fallback strategy
+curl -X POST http://localhost:20128/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{ "fallbackStrategy": "priority" }'
+
+# Per-provider override (e.g., Claude provider)
+curl -X POST http://localhost:20128/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "providerStrategies": {
+      "cc": { "fallbackStrategy": "cost-aware" }
+    }
+  }'
 ```
 
-### Example: Cost-Aware Routing
+### Example: Custom Strategy Implementation
 
-Select the cheapest available account for a query:
+To add a new strategy, update `router/src/sse/services/routingStrategies.js`:
 
-```typescript
-export function selectCheapestAccount(
-  provider: string,
-  accounts: Account[],
-  query: any  // e.g., { model: "gpt-4", tokens: 5000 }
-): Account {
-  const scored = accounts.map(acc => ({
-    account: acc,
-    cost: estimateCost(acc, query),
+```javascript
+export function selectByCustomLogic(availableConnections, model) {
+  // Sort by your custom criteria
+  const scored = availableConnections.map(conn => ({
+    conn,
+    score: calculateMyScore(conn, model),
   }));
   
-  return scored.sort((a, b) => a.cost - b.cost)[0].account;
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0]?.conn || null;
 }
+
+// Add to ROUTING_STRATEGIES export
+export const ROUTING_STRATEGIES = {
+  // ... existing strategies
+  'custom': selectByCustomLogic,
+};
+```
+
+Then use it:
+
+```bash
+curl -X POST http://localhost:20128/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{ "fallbackStrategy": "custom" }'
+```
+
+### Strategy Reference Guide
+
+#### fill-first (Default)
+
+Simplest strategy. Uses the priority-ordered account list and exhausts each account before moving to the next.
+
+**When to use:**
+- Simple setups with one primary account
+- Minimize context switching between accounts
+- When one account is definitively more important than others
+
+**Configuration:**
+```bash
+curl -X POST http://localhost:20128/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{ "fallbackStrategy": "fill-first" }'
+```
+
+#### round-robin
+
+Distributes requests evenly across accounts. Stays with current account for N consecutive requests (sticky mode), then moves to least-recently-used account.
+
+**When to use:**
+- Load-balancing across multiple equal-quality accounts
+- Spreading quota usage evenly
+- Avoiding quota exhaustion on any single account
+
+**Configuration:**
+```bash
+curl -X POST http://localhost:20128/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fallbackStrategy": "round-robin",
+    "stickyRoundRobinLimit": 5
+  }'
+```
+
+#### priority
+
+Scores each account and selects highest-scoring one. Scoring considers:
+- Explicit priority value
+- Recent usage (accounts used in last hour: +100pts)
+- Error status (errored accounts: -50pts)
+- Consecutive use count (5+ consecutive: +20pts)
+
+**When to use:**
+- Mix of account quality levels
+- Want to prefer working accounts
+- Age of account matters
+
+**Configuration:**
+```bash
+curl -X POST http://localhost:20128/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{ "fallbackStrategy": "priority" }'
+```
+
+#### cost-aware
+
+Routes to the cheapest account based on pricing metadata. Requires `inputPrice` and `outputPrice` in account's `providerSpecificData`.
+
+**When to use:**
+- Cost optimization across different accounts
+- Different tiers/regions with different pricing
+- Budget-conscious routing
+
+**Configuration:**
+```bash
+curl -X POST http://localhost:20128/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{ "fallbackStrategy": "cost-aware" }'
+```
+
+**Provider metadata setup:**
+```bash
+curl -X PATCH http://localhost:20128/api/providers/cc/connections/[id] \
+  -d '{
+    "providerSpecificData": {
+      "inputPrice": 0.003,
+      "outputPrice": 0.006
+    }
+  }'
+```
+
+#### health
+
+Selects healthiest account (fewest recent errors). Scoring considers:
+- Recent error status (error in last hour: -80pts)
+- Error code severity (5xx: -30pts, 4xx: -15pts)
+- Never-errored accounts with usage: +20pts
+
+**When to use:**
+- Avoiding known-broken accounts
+- Provider reliability is priority
+- Prefer proven, stable accounts
+
+**Configuration:**
+```bash
+curl -X POST http://localhost:20128/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{ "fallbackStrategy": "health" }'
+```
+
+#### load-balance
+
+Distributes fairly across all accounts by picking least-used one each time. Similar to round-robin but simpler (no sticky mode).
+
+**When to use:**
+- Spreading usage as evenly as possible
+- Accounts have identical quotas
+- Maximum utilization across all accounts
+
+**Configuration:**
+```bash
+curl -X POST http://localhost:20128/api/settings \
+  -H "Content-Type: application/json" \
+  -d '{ "fallbackStrategy": "load-balance" }'
 ```
 
 ## Customization 5: Analytics & Monitoring

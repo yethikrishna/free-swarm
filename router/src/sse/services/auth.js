@@ -3,6 +3,7 @@ import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { resolveProviderId, FREE_PROVIDERS } from "@/shared/constants/providers.js";
 import * as log from "../utils/logger.js";
+import { ROUTING_STRATEGIES } from "./routingStrategies.js";
 
 // Mutex to prevent race conditions during account selection
 let selectionMutex = Promise.resolve();
@@ -123,6 +124,16 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
         await updateProviderConnection(connection.id, {
           lastUsedAt: new Date().toISOString(),
           consecutiveUseCount: 1
+        });
+      }
+    } else if (ROUTING_STRATEGIES[strategy]) {
+      // Use custom routing strategy if available
+      connection = ROUTING_STRATEGIES[strategy](availableConnections, model);
+      if (connection) {
+        // Update lastUsedAt for tracking
+        await updateProviderConnection(connection.id, {
+          lastUsedAt: new Date().toISOString(),
+          consecutiveUseCount: (connection.consecutiveUseCount || 0) + 1
         });
       }
     } else {

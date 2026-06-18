@@ -2,8 +2,8 @@ import pkg from "../../../package.json" with { type: "json" };
 
 // App configuration
 export const APP_CONFIG = {
-  name: "Endpoint Proxy",
-  description: "AI Infrastructure Management",
+  name: "FreeSwarm Router",
+  description: "Enterprise AI Subscription Management",
   version: pkg.version,
 };
 

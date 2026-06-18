@@ -41,5 +41,12 @@ export async function GET() {
   const currentVersion = pkg.version;
   const hasUpdate = latestVersion ? compareVersions(latestVersion, currentVersion) > 0 : false;
 
-  return Response.json({ currentVersion, latestVersion, hasUpdate });
+  return Response.json({
+    name: "FreeSwarm Router",
+    currentVersion,
+    latestVersion,
+    hasUpdate,
+    upstream: "9router v0.3.90",
+    description: "Enterprise AI subscription routing and fallback management",
+  });
 }

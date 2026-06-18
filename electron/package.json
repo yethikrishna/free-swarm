@@ -1,6 +1,6 @@
 {
   "name": "freeswarm",
-  "version": "1.2.84",
+  "version": "1.2.85",
   "description": "FreeSwarm — AI Agent Orchestrator",
   "author": "yethikrishna",
   "main": "main.js",
@@ -169,7 +169,7 @@
     "publish": {
       "provider": "github",
       "owner": "yethikrishna",
-      "repo": "freeswarm"
+      "repo": "free-swarm"
     },
     "afterSign": "scripts/notarize.js"
   }

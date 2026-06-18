@@ -88,9 +88,6 @@ jobs:
           python-version: '3.13'
 
       - name: Build app
-        # Skip (green) when Apple signing secrets aren't in CI: Mac ships via local
-        # publish.sh, so a secret-less CI run should no-op, not fail red.
-        if: ${{ env.APPLE_ID != '' }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -112,12 +109,23 @@ jobs:
             echo "Version $version is STABLE"
           fi
 
-          if $should_publish; then
-            echo "Build mode: PUBLISH"
-            bash scripts/build-app.sh --publish
+          if [[ -n "${APPLE_ID:-}" ]]; then
+            # Signed + notarized path (the proper production build).
+            if $should_publish; then
+              echo "Build mode: PUBLISH (signed + notarized)"
+              bash scripts/build-app.sh --publish
+            else
+              echo "Build mode: SIGN (signed + notarized, artifact only)"
+              bash scripts/build-app.sh --sign
+            fi
           else
-            echo "Build mode: SIGN (artifact only)"
-            bash scripts/build-app.sh --sign
+            # Unsigned fallback: no Apple credentials in CI. Builds an arm64-only DMG
+            # that Gatekeeper will warn on (right-click > Open to bypass) and that
+            # cannot auto-update (electron-updater requires a valid signature on mac).
+            # The DMG is uploaded below for manual download; latest-mac.yml is
+            # deliberately NOT produced since an unsigned update feed strands users.
+            echo "Build mode: UNSIGNED (no Apple secrets; arm64-only, manual download)"
+            bash scripts/build-app.sh
           fi
 
       # Gatekeeper gate: after build-app.sh signs + notarizes, prove the shipped
@@ -138,9 +146,28 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: openswarm-macos
+          name: freeswarm-macos
+          # latest-mac.yml only exists on signed publish builds; don't require it so
+          # the unsigned validation run (no Apple secrets) still uploads the DMG.
           path: |
             electron/dist/*.dmg
             electron/dist/latest-mac.yml
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
+
+      # Unsigned fallback publish: upload the arm64 DMG to the release for manual
+      # download. No latest-mac.yml (auto-update needs a signature on mac), so this
+      # is download-only until Apple credentials are configured.
+      - name: Upload unsigned DMG to the GitHub release
+        if: ${{ env.APPLE_ID == '' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true')) }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./electron/package.json').version")"
+          tag="v$version"
+          dmg="$(ls electron/dist/*.dmg | head -1)"
+          echo "Uploading $dmg to release $tag"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --draft --title "$version" --notes "FreeSwarm $version"
+          gh release upload "$tag" "$dmg" --clobber

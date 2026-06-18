@@ -100,6 +100,8 @@ jobs:
       # Windows 10 SDK, preinstalled on windows-latest runners — we just need
       # the dlib for Azure Trusted Signing, pulled via NuGet.
       - name: Install Microsoft.Trusted.Signing.Client (dlib for signtool)
+        # Only needed when signing. Unsigned fallback (no Azure secrets) skips this.
+        if: ${{ env.AZURE_CLIENT_ID != '' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -115,6 +117,7 @@ jobs:
           Write-Host "AZURE_SIGNING_DLIB=$dlib"
 
       - name: Locate signtool.exe on the runner
+        if: ${{ env.AZURE_CLIENT_ID != '' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -140,14 +143,23 @@ jobs:
           } else {
             Write-Host "Version $version is STABLE"
           }
-          # Always build SIGNED with -Squirrel (--publish never). We deliberately do
-          # NOT let electron-builder publish: its squirrel publisher RENAMES the
-          # installer to openswarm-Setup-<version>.exe on upload (even though the
-          # local file is correctly named OpenSwarm-Setup-x64.exe), which breaks the
-          # landing page + latest.yml. We publish via gh below, which preserves the
-          # local name. EP_PRE_RELEASE is intentionally never set (the GH pre-release
+          # Build with -Squirrel (--publish never). We deliberately do NOT let
+          # electron-builder publish: its squirrel publisher RENAMES the installer
+          # to freeswarm-Setup-<version>.exe on upload (even though the local file
+          # is correctly named FreeSwarm-Setup-x64.exe), which breaks the landing
+          # page + latest.yml. We publish via gh below, which preserves the local
+          # name. EP_PRE_RELEASE is intentionally never set (the GH pre-release
           # checkbox hides a release from the atom feed electron-updater reads).
-          pwsh -NoProfile -File scripts\build-app-win.ps1 -Sign -Squirrel
+          #
+          # Sign when Azure Trusted Signing secrets are present; otherwise build
+          # UNSIGNED (SmartScreen will warn users until signing is configured).
+          if ($env:AZURE_CLIENT_ID) {
+            Write-Host "Azure signing secrets present: building SIGNED."
+            pwsh -NoProfile -File scripts\build-app-win.ps1 -Sign -Squirrel
+          } else {
+            Write-Host "No Azure signing secrets: building UNSIGNED (SmartScreen will warn)."
+            pwsh -NoProfile -File scripts\build-app-win.ps1 -Squirrel
+          }
           if ($LASTEXITCODE -ne 0) { throw "build-app-win.ps1 failed ($LASTEXITCODE)" }
 
       # SmartScreen gate: after electron-builder + the Azure sign hook run, prove
@@ -156,13 +168,15 @@ jobs:
       # silently didn't sign (missing secrets, hook skip) must fail here, not ship.
       # verify-signature.js --require-signed exits non-zero unless Status == Valid.
       - name: Verify the shipped artifact is signed
+        # Only meaningful for signed builds; skip on the unsigned fallback.
+        if: ${{ env.AZURE_CLIENT_ID != '' }}
         shell: pwsh
         run: |
-          node scripts/ci/verify-signature.js --require-signed --target electron/dist/win-unpacked/OpenSwarm.exe
-          if ($LASTEXITCODE -ne 0) { throw "inner OpenSwarm.exe is not validly signed" }
+          node scripts/ci/verify-signature.js --require-signed --target electron/dist/win-unpacked/freeswarm.exe
+          if ($LASTEXITCODE -ne 0) { throw "inner freeswarm.exe is not validly signed" }
           # Squirrel writes Setup.exe into dist\squirrel-windows\, not dist\ root.
-          node scripts/ci/verify-signature.js --require-signed --target electron/dist/squirrel-windows/OpenSwarm-Setup-x64.exe
-          if ($LASTEXITCODE -ne 0) { throw "OpenSwarm-Setup-x64.exe (installer) is not validly signed" }
+          node scripts/ci/verify-signature.js --require-signed --target electron/dist/squirrel-windows/FreeSwarm-Setup-x64.exe
+          if ($LASTEXITCODE -ne 0) { throw "FreeSwarm-Setup-x64.exe (installer) is not validly signed" }
 
       # The squirrel target emits RELEASES + nupkg + Setup.exe but NO latest.yml.
       # Existing NSIS clients poll latest.yml; without it they never see the
@@ -174,7 +188,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $version = (Get-Content electron/package.json | ConvertFrom-Json).version
           $dir = 'electron/dist/squirrel-windows'
-          pwsh -NoProfile -File scripts\gen-squirrel-latest-yml.ps1 -SetupPath "$dir/OpenSwarm-Setup-x64.exe" -Version $version -OutPath "$dir/latest.yml"
+          pwsh -NoProfile -File scripts\gen-squirrel-latest-yml.ps1 -SetupPath "$dir/FreeSwarm-Setup-x64.exe" -Version $version -OutPath "$dir/latest.yml"
           # Experimental builds: electron-updater (allowPrerelease) fetches a channel
           # yml named after the first semver-suffix id (1.2.75-rc.1 -> rc.yml). Same
           # content as latest.yml; copy it so the experimental channel resolves.
@@ -185,9 +199,9 @@ jobs:
           Get-Content "$dir/latest.yml"
 
       # Publish the squirrel assets ourselves via gh (NOT electron-builder), so the
-      # installer keeps its OpenSwarm-Setup-x64.exe name. Find-or-create a DRAFT so
-      # the mac publish.sh run can converge into the same release; Eric flips it live.
-      - name: Publish squirrel assets to the GitHub release (draft, publish runs)
+      # installer keeps its FreeSwarm-Setup-x64.exe name. Find-or-create the release
+      # for this tag (reuses the existing one if already published).
+      - name: Publish squirrel assets to the GitHub release
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true')
         shell: pwsh
         env:
@@ -197,11 +211,11 @@ jobs:
           $version = (Get-Content electron/package.json | ConvertFrom-Json).version
           $tag = "v$version"
           $dir = 'electron/dist/squirrel-windows'
-          $setup = "$dir/OpenSwarm-Setup-x64.exe"
+          $setup = "$dir/FreeSwarm-Setup-x64.exe"
           $nupkg = (Get-ChildItem $dir -Filter '*-full.nupkg' | Select-Object -First 1).FullName
           gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --draft --title "$version" --notes "OpenSwarm $version"
+            gh release create $tag --draft --title "$version" --notes "FreeSwarm $version"
             if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
           }
           gh release upload $tag $setup "$dir/RELEASES" "$dir/latest.yml" $nupkg --clobber

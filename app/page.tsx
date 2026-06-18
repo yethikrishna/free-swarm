@@ -320,9 +320,9 @@ export default function Home() {
               <p className="font-bold text-white mb-6">Resources</p>
               <ul className="space-y-3 text-sm">
                 <li><a href="https://github.com/yethikrishna/free-swarm" className="text-gray-400 hover:text-white transition">Source Code</a></li>
-                <li><a href="https://github.com/yethikrishna/free-swarm/blob/main/GETTING_STARTED.md" className="text-gray-400 hover:text-white transition">Getting Started</a></li>
+                <li><a href="https://github.com/yethikrishna/free-swarm/blob/HEAD/GETTING_STARTED.md" className="text-gray-400 hover:text-white transition">Getting Started</a></li>
                 <li><a href="https://github.com/yethikrishna/free-swarm/issues" className="text-gray-400 hover:text-white transition">Issues</a></li>
-                <li><a href="https://github.com/yethikrishna/free-swarm/blob/main/LICENSE" className="text-gray-400 hover:text-white transition">MIT License</a></li>
+                <li><a href="https://github.com/yethikrishna/free-swarm/blob/HEAD/LICENSE" className="text-gray-400 hover:text-white transition">MIT License</a></li>
               </ul>
             </div>
 

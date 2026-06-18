@@ -102,7 +102,7 @@ function WelcomeInner() {
               Back to home
             </a>
             <a
-              href="https://github.com/yethikrishna/free-swarm/blob/main/GETTING_STARTED.md"
+              href="https://github.com/yethikrishna/free-swarm/blob/HEAD/GETTING_STARTED.md"
               className="inline-flex items-center justify-center gap-2 border border-gray-300 text-gray-900 px-8 py-4 rounded-lg hover:bg-gray-50 transition text-lg font-semibold"
             >
               Getting started

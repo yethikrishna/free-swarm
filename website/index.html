@@ -558,10 +558,15 @@
                     }
 
                     const fileName = downloadMap[platform];
-                    const downloadUrl = `${release.html_url}/download/${fileName}`;
+                    const asset = release.assets.find(a => a.name === fileName);
+
+                    if (!asset) {
+                        statusDiv.innerHTML = `❌ ${fileName} not found in release. <a href="https://github.com/yethikrishna/free-swarm/releases">View all releases</a>`;
+                        return;
+                    }
 
                     statusDiv.innerHTML = `✅ Downloading ${fileName}...`;
-                    window.location = downloadUrl;
+                    window.location = asset.browser_download_url;
                 })
                 .catch(err => {
                     statusDiv.innerHTML = `❌ Error fetching release: ${err.message}. <a href="https://github.com/yethikrishna/free-swarm/releases">Download from GitHub</a>`;

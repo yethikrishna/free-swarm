@@ -47,6 +47,9 @@ NINE_ROUTER_V1 = f"{NINE_ROUTER_URL}/v1"
 # Lifecycle: backend/apps/nine_router/ spawns as subprocess, syncs OAuth/keys.
 NINE_ROUTER_FORK_VERSION = "0.3.90"
 
+# Backwards-compat alias (still used in public API exports)
+NINE_ROUTER_NPM_VERSION = NINE_ROUTER_FORK_VERSION
+
 _process: subprocess.Popen | None = None
 
 # Short TTL cache for positive is_running() results. The probe is a sync

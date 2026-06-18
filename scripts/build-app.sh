@@ -271,11 +271,10 @@ fi
 echo "Python environment ready."
 echo ""
 
-# Step 3: Fetch Router from npm
-# The 9router Next.js server is published as an npm package with a pre-built
-# standalone output. We install it into a scratch dir and stage it directly
-# rather than vendoring the source + rebuilding here.
-echo "[3/5] Fetching Router from npm..."
+# Step 3: Fetch Router (FreeSwarm fork)
+# The FreeSwarm Router fork (.next/standalone/router/) is built locally
+# and staged here. For details see router/FREESWARM_FORK.md.
+echo "[3/5] Staging FreeSwarm Router fork..."
 STAGING_DIR="$PROJECT_ROOT/electron/build-staging"
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"

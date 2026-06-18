@@ -59,7 +59,9 @@ PUBLIC.md
 Thanks.md
 PUBLIC.en.md
 PR/*
-package-lock.json
+# package-lock.json is intentionally COMMITTED (tracked): the build runs
+# `npm ci`, which needs the lockfile in-repo. Matches frontend/ + electron/.
+# (Upstream 9router ignored it; we don't.)
 
 
 #Ignore vscode AI rules

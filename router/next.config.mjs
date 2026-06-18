@@ -1,7 +1,12 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
-  outputFileTracingRoot: import.meta.dirname,
+  outputFileTracingRoot: __dirname,
   serverExternalPackages: ["better-sqlite3"],
   images: {
     unoptimized: true

@@ -145,11 +145,14 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           
-          # Inject local node_modules bin folders to Windows PATH dynamically
-          $env:PATH = "$(Get-Location)\node_modules\.bin;$env:PATH"
-          Write-Host "Injected local binary resolution paths."
+          # Force global system fallback registration for webpack inside the workspace
+          # This works around the -NoProfile flag stripping standard path overrides
+          npm install -g webpack webpack-cli --loglevel error
+          Write-Host "Configured global runner fallback modules."
+
           $version = (Get-Content electron/package.json | ConvertFrom-Json).version
           Write-Host "Compiling Version: $version"
+
           if ($env:AZURE_CLIENT_ID) {
             Write-Host "Azure signing secrets present: building SIGNED."
             pwsh -NoProfile -File scripts\build-app-win.ps1 -Sign -Squirrel
@@ -157,6 +160,7 @@ jobs:
             Write-Host "No Azure signing secrets: building UNSIGNED."
             pwsh -NoProfile -File scripts\build-app-win.ps1 -Squirrel
           }
+
           if ($LASTEXITCODE -ne 0) { 
             Write-Error "build-app-win.ps1 failed with native exit code: $LASTEXITCODE"
             exit $LASTEXITCODE

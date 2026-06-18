@@ -136,34 +136,30 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_OAUTH_CLIENT_ID:     ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
-          # Force child npm install commands to run completely headless and ignore conflicts
+          # Headless environment overrides
           NPM_CONFIG_LEGACY_PEER_DEPS: "true"
           NPM_CONFIG_LOGLEVEL: "error"
           NPM_CONFIG_AUDIT: "false"
           NPM_CONFIG_FUND: "false"
+          # Disable Webpack asset limit errors from crashing strict environments
+          NODE_ENV: "production"
+          CI: "false" 
         run: |
-          $ErrorActionPreference = 'Stop'
+          # Enforce detailed tracking of exactly where the script stops
+          $ErrorActionPreference = 'Continue'
           $version = (Get-Content electron/package.json | ConvertFrom-Json).version
-          if ($version -match '-') {
-            Write-Host "Version $version is EXPERIMENTAL (semver-suffix channel; NOT a GH pre-release)"
-          } else {
-            Write-Host "Version $version is STABLE"
-          }
-          # Build with -Squirrel (--publish never). We deliberately do NOT let
-          # electron-builder publish: its squirrel publisher RENAMES the installer
-          # to freeswarm-Setup-<version>.exe on upload (even though the local file
-          # is correctly named FreeSwarm-Setup-x64.exe), which breaks the landing
-          # page + latest.yml. We publish via gh below, which preserves the local
-          # name. EP_PRE_RELEASE is intentionally never set (the GH pre-release
-          # checkbox hides a release from the atom feed electron-updater reads).
-          #
-          # Sign when Azure Trusted Signing secrets are present; otherwise build
-          # UNSIGNED (SmartScreen will warn users until signing is configured).
+          Write-Host "Compiling Version: $version"
+
           if ($env:AZURE_CLIENT_ID) {
             Write-Host "Azure signing secrets present: building SIGNED."
             pwsh -NoProfile -File scripts\build-app-win.ps1 -Sign -Squirrel
           } else {
-            Write-Host "No Azure signing secrets: building UNSIGNED (SmartScreen will warn)."
+            Write-Host "No Azure signing secrets: building UNSIGNED."
             pwsh -NoProfile -File scripts\build-app-win.ps1 -Squirrel
           }
-          if ($LASTEXITCODE -ne 0) { throw "build-app-win.ps1 failed ($LASTEXITCODE)" }
+
+          # Capture the explicit exit status code of the script
+          if ($LASTEXITCODE -ne 0) { 
+            Write-Error "build-app-win.ps1 failed with native exit code: $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }

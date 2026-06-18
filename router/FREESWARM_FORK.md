@@ -20,31 +20,49 @@ work. It was vendored from upstream tag `v0.3.90` (package version `0.3.89`),
 trimmed of docs-only weight (`gitbook/`, `images/`, `tests/`, translated
 READMEs) to keep the tree reviewable.
 
-## Relationship to the running app (read before "switching to the fork")
+## Status: Fork is now the runtime
 
-The backend supervises the router as a subprocess and pins a specific build:
+The FreeSwarm Router fork is now the **primary runtime default** (as of commit 75e6538a). The backend supervises the router as a subprocess:
 
-- `scripts/fetch-router.sh` fetches `9router@0.3.60` (the **npm build**) at
-  package time.
+- `scripts/fetch-router.sh` now copies the **fork build** (from `.next/standalone/router/`) at package time.
 - `backend/apps/nine_router/` starts it on `:20128` and syncs keys/OAuth into it.
-- `backend/apps/agents/providers/registry.py` encodes **version-specific**
-  behaviour (e.g. "GPT-5.5's `cx/` entry 404s on 0.3.60", "re-add the gc/
-  gemini-3.5-flash entry once 9Router is bumped past 0.3.60"). Model routing
-  is genuinely sensitive to the exact router version.
+- `backend/apps/agents/providers/registry.py` documents version-specific behavior for fork v0.3.90 (which fixes several 0.3.60 regressions):
+  - GPT-5.5 now available via `cx/` Codex subscription route (was 404 on 0.3.60)
+  - Gemini 3.5 Flash now available via `gc/` Gemini CLI subscription route (was 404 on 0.3.60)
+  - Fable-5 now available via `cc/` Claude subscription route
 
-Because of that, **the runtime still uses the pinned npm build (`0.3.60`).**
-This fork (source `0.3.89`) is intentionally decoupled until a fork build is
-produced and validated against `registry.py`'s known regressions (notably the
-WebSearch-translation behaviour and the per-model 404s noted there).
+### Build and deployment
 
-### Path to make the fork the runtime
+**For dev mode:**
+1. `cd router && npm install && npm run build` to produce `.next/standalone/router/`
+2. Backend detects and starts the fork automatically
+3. Fallback: if fork not built, dev mode falls back to npm 0.3.60 package (for convenience)
 
-1. `cd router && npm install && npm run build` to produce the Next.js build.
-2. Stage that build where `scripts/fetch-router.sh` currently drops the npm
-   `app/` payload (adjust the script to copy from `router/` instead of npm).
-3. Re-validate every row in `registry.py` against the fork build (provider
-   OAuth connect, each `cc/ cx/ gc/ ag/ openrouter/` route, custom providers,
-   WebSearch translation) in the **packaged** desktop build, not just `run.sh`.
-4. Only then bump `NINE_ROUTER_NPM_VERSION` / the fetch source to the fork.
+**For packaged builds:**
+1. Build runs `scripts/fetch-router.sh <dest_dir>` which copies fork build
+2. Packaged app includes the fork at its designated location
+3. Backend starts it on port `:20128` as subprocess
 
-Until step 4 is done deliberately, do not point the runtime at this tree.
+### Known constraints (inherited from v0.3.90)
+
+The fork is based on upstream 9router v0.3.90 (package v0.3.89). It still carries these constraints from that release:
+
+- WebSearch regression: cross-provider delegation may report unavailability or hallucinate
+- `max_tokens` → `max_completion_tokens` translation needed for GPT-5 models
+  - Handled by `backend/apps/agents/9router_gpt5_patch.js` loaded via `node --require`
+  - Does NOT affect fork directly; patch still needed for v0.3.90
+
+To eliminate these constraints, the fork would need to be upgraded past v0.3.90 but this requires:
+- Porting 9Router's v0.4.x API auth to `backend/apps/nine_router/{oauth,sync}.py`
+- Re-validating WebSearch translation behavior
+- Testing provider OAuth flows (cc/ Claude, cx/ Codex, gc/ Gemini CLI, ag/ Antigravity)
+
+### Customization roadmap
+
+Now that the fork is the runtime, future customizations become viable:
+
+- **Provider adapters**: Add/modify subscription providers without upstream release cycle
+- **Model discovery**: Customize model registry per FreeSwarm's routing needs
+- **Branding**: Rebrand UI/API as FreeSwarm-owned product (logo, name, docs)
+- **Auth flows**: Custom OAuth handlers for enterprise integrations
+- **Analytics**: Track usage patterns specific to FreeSwarm's multi-account model

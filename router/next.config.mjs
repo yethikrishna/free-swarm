@@ -7,6 +7,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   output: "standalone",
   outputFileTracingRoot: __dirname,
+  outputFileTracingIgnores: [
+    '**/Application Data/**',
+    '**/.cache/**',
+    '**/.npm/**',
+    '**/node_modules/.bin/**',
+    '**/node_modules/.cache/**',
+  ],
   serverExternalPackages: ["better-sqlite3"],
   images: {
     unoptimized: true

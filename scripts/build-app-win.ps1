@@ -271,30 +271,42 @@ Write-Host ""
 
 # --- Step 2: Build Router fork ---
 Write-Host "[2/5] Building FreeSwarm Router fork..."
-# Windows junction points (e.g., C:\Users\*\Application Data) cause @vercel/nft
-# to throw EPERM when glob tries to enumerate them. Build in a directory outside
-# the user profile to avoid the problematic parent-dir traversal.
-$BuildDrive = Split-Path -Qualifier $ProjectRoot  # e.g., 'C:'
-$TempBuild = Join-Path "$BuildDrive\" "temp-freeswarm-$([guid]::NewGuid())"
-New-Item -ItemType Directory -Path $TempBuild -ErrorAction SilentlyContinue | Out-Null
+Push-Location (Join-Path $ProjectRoot 'router')
 try {
-    Write-Host "Building router in isolated path: $TempBuild (avoids user profile junctions)"
-    Copy-Item -Recurse -Force (Join-Path $ProjectRoot 'router') (Join-Path $TempBuild 'router')
-    Push-Location (Join-Path $TempBuild 'router')
+    & npm ci --include=dev
+    if ($LASTEXITCODE -ne 0) { throw "npm ci (router) failed" }
+
+    # Windows EPERM fix (the real root cause). The Next.js build globs the
+    # *home directory* (os.homedir() === %USERPROFILE%), not the build tree:
+    #   glob error EPERM scandir 'C:\Users\runneradmin\Application Data'
+    #   glob error EPERM scandir 'C:\Users\runneradmin\AppData\Local\Application Data'
+    # Those 'Application Data' entries are legacy Windows compatibility junctions
+    # that deny scandir by design, so the glob throws and the build aborts. The
+    # build tree itself is on D:\, so it's the home dir, not a parent walk, that
+    # gets scanned - which is why isolating the build path did nothing.
+    #
+    # Fix: point HOME/USERPROFILE at a fresh, junction-free directory for the
+    # duration of the build. os.homedir() then resolves to a clean empty dir
+    # with no 'Application Data' junctions, so the glob scans nothing and the
+    # build proceeds. npm ci already ran against the real profile above, so the
+    # redirect only affects `next build` (telemetry/cache write harmlessly into
+    # the temp home). Restored in finally so nothing downstream is affected.
+    $CleanHome = Join-Path $env:RUNNER_TEMP "fs-build-home-$([guid]::NewGuid())"
+    if (-not $env:RUNNER_TEMP) { $CleanHome = Join-Path ([System.IO.Path]::GetTempPath()) "fs-build-home-$([guid]::NewGuid())" }
+    New-Item -ItemType Directory -Force -Path $CleanHome | Out-Null
+    $PrevUserProfile = $env:USERPROFILE
+    $PrevHome        = $env:HOME
+    $env:USERPROFILE = $CleanHome
+    $env:HOME        = $CleanHome
     try {
-        & npm ci --include=dev
-        if ($LASTEXITCODE -ne 0) { throw "npm ci (router) failed" }
         & npm run build
         if ($LASTEXITCODE -ne 0) { throw "router build failed" }
-    } finally { Pop-Location }
-    # Copy .next output back to project
-    $Src = Join-Path $TempBuild 'router\.next'
-    $Dst = Join-Path $ProjectRoot 'router\.next'
-    if (Test-Path $Dst) { Remove-Item -Recurse -Force $Dst }
-    Copy-Item -Recurse -Force $Src $Dst
-} finally {
-    Remove-Item -Recurse -Force $TempBuild -ErrorAction SilentlyContinue
-}
+    } finally {
+        $env:USERPROFILE = $PrevUserProfile
+        $env:HOME        = $PrevHome
+        Remove-Item -Recurse -Force $CleanHome -ErrorAction SilentlyContinue
+    }
+} finally { Pop-Location }
 # Standalone server is at .next\standalone\router\server.js (nested, old monorepo
 # tracing root) OR .next\standalone\server.js (flat, tracing root pinned to router\
 # to avoid the Windows EPERM scandir crash). Accept either layout.

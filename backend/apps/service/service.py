@@ -191,11 +191,23 @@ async def service_lifespan():
     except Exception as e:
         logger.debug(f"Service startup event failed (non-critical): {e}")
 
-    try:
-        from backend.apps.nine_router import ensure_running as ensure_9router
-        await ensure_9router()
-    except Exception as e:
-        logger.debug(f"9Router auto-start skipped: {e}")
+    # Fire-and-forget: ensure_running() spawns 9Router and then BLOCKS up to
+    # 20s polling for readiness, and the router's own cold-start can stall far
+    # longer on a machine with slow/broken DNS (each startup network probe
+    # waits out its timeout). Awaiting it here froze the FastAPI lifespan, which
+    # delays the HTTP bind, so /api/health/check stayed unanswered for minutes
+    # and the Electron splash gave up ("closed before main window appeared").
+    # 9Router is only needed once the user picks a non-Anthropic model, so boot
+    # it in the background and let the app window come up immediately. settings.py
+    # already follows this rule (see its _boot_router_then_sync create_task).
+    async def _boot_9router_bg():
+        try:
+            from backend.apps.nine_router import ensure_running as ensure_9router
+            await ensure_9router()
+        except Exception as e:
+            logger.debug(f"9Router auto-start skipped: {e}")
+
+    asyncio.create_task(_boot_9router_bg())
 
     _pulse_task = asyncio.create_task(_pulse_loop())
     _drain_task = asyncio.create_task(_drain_loop())

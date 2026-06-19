@@ -38,6 +38,25 @@ const nextConfig = {
         path: false,
       };
     }
+    // better-sqlite3 is a native module the cursor auto-import route loads via a
+    // best-effort runtime require() (with sqlite3-CLI + manual-paste fallbacks if
+    // the bindings are absent — see oauth/cursor/auto-import/route.js). Mark it as
+    // a server external so webpack emits `require("better-sqlite3")` verbatim and
+    // never tries to resolve/bundle the native .node binary at build time, which
+    // otherwise hard-fails with "Module not found: Can't resolve 'better-sqlite3'".
+    // It's required from the standalone node_modules at runtime instead; the
+    // serverExternalPackages entry above ensures it gets copied there. Applies on
+    // every platform uniformly (the require is runtime-only everywhere).
+    if (isServer) {
+      const ext = { "better-sqlite3": "commonjs better-sqlite3" };
+      if (Array.isArray(config.externals)) {
+        config.externals.push(ext);
+      } else if (config.externals) {
+        config.externals = [config.externals, ext];
+      } else {
+        config.externals = [ext];
+      }
+    }
     // Windows EPERM fix: enhanced-resolve and Next.js's internal glob calls
     // walk parent directories looking for node_modules and hit Windows junction
     // points (e.g. 'Application Data' -> AppData\Roaming) which throw EPERM.

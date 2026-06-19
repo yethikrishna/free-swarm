@@ -275,8 +275,14 @@ Push-Location (Join-Path $ProjectRoot 'router')
 try {
     & npm ci --include=dev
     if ($LASTEXITCODE -ne 0) { throw "npm ci (router) failed" }
+    # Prevent Node.js from following symlinks during build, which causes EPERM
+    # when hitting Windows junctions in user directories. Applies to both the
+    # build process and the file tracer (@vercel/nft).
+    $env:NODE_PRESERVE_SYMLINKS = "1"
+    $env:NODE_PRESERVE_SYMLINKS_MAIN = "1"
     & npm run build
     if ($LASTEXITCODE -ne 0) { throw "router build failed" }
+    Remove-Item Env:NODE_PRESERVE_SYMLINKS, Env:NODE_PRESERVE_SYMLINKS_MAIN -ErrorAction SilentlyContinue
 } finally { Pop-Location }
 # Standalone server is at .next\standalone\router\server.js (nested, old monorepo
 # tracing root) OR .next\standalone\server.js (flat, tracing root pinned to router\

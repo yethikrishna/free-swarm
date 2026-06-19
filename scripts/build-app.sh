@@ -277,7 +277,10 @@ echo ""
 echo "[2a/5] Building FreeSwarm Router fork..."
 cd "$PROJECT_ROOT/router"
 npm ci --include=dev
-npm run build
+# Prevent Node.js from following symlinks during build, which can cause
+# permission errors when hitting directory junctions on Windows and symlink
+# cycles on any OS. Applies to the build process and file tracer (@vercel/nft).
+NODE_PRESERVE_SYMLINKS=1 NODE_PRESERVE_SYMLINKS_MAIN=1 npm run build
 
 # The standalone server lives at .next/standalone/router/server.js (nested,
 # old monorepo tracing root) OR .next/standalone/server.js (flat, tracing root

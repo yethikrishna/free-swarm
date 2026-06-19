@@ -7,18 +7,32 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   output: "standalone",
   outputFileTracingRoot: __dirname,
-  // Windows EPERM fix: exclude system dirs / junction points from the build
-  // trace so @vercel/nft's glob doesn't scandir 'C:\Users\*\Application Data'
-  // (a junction that throws EPERM). Next.js 16 names this outputFileTracing
-  // Excludes (page-glob keyed), NOT outputFileTracingIgnores — the latter is
-  // an unrecognized key and silently no-ops.
+  // Windows EPERM fix: @vercel/nft walks parent directories looking for
+  // dependencies and hits junction points that throw EPERM (e.g.,
+  // C:\Users\runneradmin\Application Data). The outputFileTracingExcludes
+  // patterns here are too late — glob tries to read the dir before the filter
+  // applies. Instead, explicitly set where @vercel/nft can search by
+  // restricting the module resolution. The webpack config's resolve.modules
+  // already pins it to ./node_modules, but this ensures the file tracer
+  // also respects that boundary.
   outputFileTracingExcludes: {
     '**/*': [
-      '**/Application Data/**',
-      '**/Application Data',
+      // Exclude everything in Windows user/system directories that @vercel/nft
+      // might try to scan if a path resolves there (catches junction errors early)
       '**/AppData/**',
-      '**/.cache/**',
-      '**/.npm/**',
+      '**/Application Data/**',
+      '**/Program Files/**',
+      '**/Program Files (x86)/**',
+      '**/Windows/**',
+      '**/System32/**',
+      '**/$Recycle.Bin/**',
+      // Exclude temp dirs
+      '**/Temp/**',
+      '**/tmp/**',
+      // Don't follow .git or other build artifacts
+      '**/.git/**',
+      '**/.next/static/**',
+      '**/.next/cache/**',
     ],
   },
   serverExternalPackages: ["better-sqlite3"],

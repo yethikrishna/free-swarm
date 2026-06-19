@@ -271,28 +271,29 @@ Write-Host ""
 
 # --- Step 2: Build Router fork ---
 Write-Host "[2/5] Building FreeSwarm Router fork..."
-# Copy router to temp directory to isolate it from Windows junction points
-# in user profile directories (e.g., C:\Users\*\Application Data). @vercel/nft
-# walks the filesystem and throws EPERM when it encounters junction points.
-# Building in temp avoids this directory traversal issue entirely.
-$TempBuildDir = Join-Path $env:TEMP "freeswarm-router-$([guid]::NewGuid())"
-New-Item -ItemType Directory -Path $TempBuildDir | Out-Null
+# Windows junction points (e.g., C:\Users\*\Application Data) cause @vercel/nft
+# to throw EPERM when glob tries to enumerate them. Build in a directory outside
+# the user profile to avoid the problematic parent-dir traversal.
+$BuildDrive = Split-Path -Qualifier $ProjectRoot  # e.g., 'C:'
+$TempBuild = Join-Path "$BuildDrive\" "temp-freeswarm-$([guid]::NewGuid())"
+New-Item -ItemType Directory -Path $TempBuild -ErrorAction SilentlyContinue | Out-Null
 try {
-    Copy-Item -Recurse -Force (Join-Path $ProjectRoot 'router') (Join-Path $TempBuildDir 'router')
-    Push-Location (Join-Path $TempBuildDir 'router')
+    Write-Host "Building router in isolated path: $TempBuild (avoids user profile junctions)"
+    Copy-Item -Recurse -Force (Join-Path $ProjectRoot 'router') (Join-Path $TempBuild 'router')
+    Push-Location (Join-Path $TempBuild 'router')
     try {
         & npm ci --include=dev
         if ($LASTEXITCODE -ne 0) { throw "npm ci (router) failed" }
         & npm run build
         if ($LASTEXITCODE -ne 0) { throw "router build failed" }
     } finally { Pop-Location }
-    # Copy .next back to project root
-    $SrcNext = Join-Path $TempBuildDir 'router\.next'
-    $DstNext = Join-Path $ProjectRoot 'router\.next'
-    if (Test-Path $DstNext) { Remove-Item -Recurse -Force $DstNext }
-    Copy-Item -Recurse -Force $SrcNext $DstNext
+    # Copy .next output back to project
+    $Src = Join-Path $TempBuild 'router\.next'
+    $Dst = Join-Path $ProjectRoot 'router\.next'
+    if (Test-Path $Dst) { Remove-Item -Recurse -Force $Dst }
+    Copy-Item -Recurse -Force $Src $Dst
 } finally {
-    Remove-Item -Recurse -Force $TempBuildDir -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force $TempBuild -ErrorAction SilentlyContinue
 }
 # Standalone server is at .next\standalone\router\server.js (nested, old monorepo
 # tracing root) OR .next\standalone\server.js (flat, tracing root pinned to router\

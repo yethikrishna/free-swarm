@@ -158,28 +158,25 @@ jobs:
           Write-Host "Compiling Version: $version"
 
           # Publish to GitHub Releases on a v* tag push, or on a manual dispatch
-          # with publish=true. Otherwise build only (the installer is still
-          # captured as a CI artifact by the next step). -Publish implies -Sign
-          # in build-app-win.ps1 and requires Azure signing secrets + GH_TOKEN,
-          # so only take that path when the signing secrets are present; without
-          # them we can't produce a signed release, so fall back to an unsigned
-          # artifact-only build even when a publish was requested.
+          # with publish=true. Otherwise build only (the installer is still kept
+          # as a CI artifact by the next step). build-app-win.ps1 decides signed
+          # vs unsigned for itself: -Publish signs when the Azure secrets are
+          # present and publishes UNSIGNED when they are not, so we just pass
+          # -Publish here and let the script pick the mode.
           $shouldPublish = ($env:GITHUB_REF_TYPE -eq 'tag') -or ($env:PUBLISH_INPUT -eq 'true')
 
-          if ($env:AZURE_CLIENT_ID) {
-            if ($shouldPublish) {
-              Write-Host "Azure secrets present + publish requested: building SIGNED and PUBLISHING to Releases."
-              pwsh -NoProfile -File scripts\build-app-win.ps1 -Publish -Squirrel
+          if ($shouldPublish) {
+            if ($env:AZURE_CLIENT_ID) {
+              Write-Host "Publish requested + Azure secrets present: SIGNED release to GitHub Releases."
             } else {
-              Write-Host "Azure secrets present: building SIGNED (no publish)."
-              pwsh -NoProfile -File scripts\build-app-win.ps1 -Sign -Squirrel
+              Write-Host "Publish requested, no Azure secrets: UNSIGNED release to GitHub Releases."
             }
+            pwsh -NoProfile -File scripts\build-app-win.ps1 -Publish -Squirrel
+          } elseif ($env:AZURE_CLIENT_ID) {
+            Write-Host "Azure secrets present: building SIGNED (no publish)."
+            pwsh -NoProfile -File scripts\build-app-win.ps1 -Sign -Squirrel
           } else {
-            if ($shouldPublish) {
-              Write-Host "WARNING: publish requested but no Azure signing secrets present; building UNSIGNED (artifact only, cannot publish a signed release)." -ForegroundColor Yellow
-            } else {
-              Write-Host "No Azure signing secrets: building UNSIGNED."
-            }
+            Write-Host "No Azure signing secrets: building UNSIGNED (no publish)."
             pwsh -NoProfile -File scripts\build-app-win.ps1 -Squirrel
           }
 

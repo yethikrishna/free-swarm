@@ -3,7 +3,7 @@
 # Usage:
 #   pwsh scripts\build-app-win.ps1                Local dev build (unsigned)
 #   pwsh scripts\build-app-win.ps1 -Sign          Signed build (no publish)
-#   pwsh scripts\build-app-win.ps1 -Publish       Production build (sign + publish to GitHub Releases)
+#   pwsh scripts\build-app-win.ps1 -Publish       Publish to GitHub Releases (signed if Azure secrets present, else unsigned)
 #
 # Reads .env.windows (gitignored) for Azure Trusted Signing + GH_TOKEN if -Sign or -Publish.
 
@@ -23,7 +23,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if ($Publish) { $Sign = $true }
+# Signing is decided after .env.windows is loaded (see below): -Publish signs
+# when Azure Trusted Signing secrets are present and publishes UNSIGNED when they
+# are not, so we can ship unsigned releases without configuring signing.
 # Override only the win target; everything else (signing hook, extraResources,
 # publish config) merges from electron/package.json's build block unchanged.
 $TargetOverride = if ($Squirrel) { @('--config.win.target=squirrel', '--config.squirrelWindows.iconUrl=https://raw.githubusercontent.com/yethikrishna/free-swarm/main/electron/build/icon.ico') } else { @() }
@@ -48,28 +50,38 @@ if (Test-Path $EnvFile) {
     }
 }
 
+# Auto-enable signing on publish only when the Azure Trusted Signing secrets are
+# present (loaded above from the CI env or .env.windows). Without them we publish
+# an unsigned release. An explicit -Sign still forces signing and fails loudly in
+# the validation below if the secrets are missing.
+if ($Publish -and $env:AZURE_CLIENT_ID) { $Sign = $true }
+
 Write-Host "========================================"
 Write-Host "  FreeSwarm Desktop App Builder (Windows)"
-if     ($Publish) { Write-Host "  Mode: PRODUCTION (sign + publish to GitHub Releases)" }
-elseif ($Sign)    { Write-Host "  Mode: SIGNED (sign, no publish)" }
-else              { Write-Host "  Mode: LOCAL (unsigned)" }
+if     ($Publish -and $Sign) { Write-Host "  Mode: PRODUCTION (signed + publish to GitHub Releases)" }
+elseif ($Publish)            { Write-Host "  Mode: PRODUCTION (UNSIGNED + publish to GitHub Releases)" }
+elseif ($Sign)               { Write-Host "  Mode: SIGNED (sign, no publish)" }
+else                         { Write-Host "  Mode: LOCAL (unsigned)" }
 Write-Host "========================================"
 Write-Host ""
 
 # --- Required env validation ---
+$required = @()
 if ($Sign) {
-    $required = @(
+    $required += @(
         'AZURE_TENANT_ID','AZURE_CLIENT_ID','AZURE_CLIENT_SECRET',
         'AZURE_SIGNING_ENDPOINT','AZURE_SIGNING_ACCOUNT','AZURE_SIGNING_CERT_PROFILE'
     )
-    if ($Publish) { $required += 'GH_TOKEN' }
-    $missing = $required | Where-Object { -not [Environment]::GetEnvironmentVariable($_) }
-    if ($missing.Count -gt 0) {
-        Write-Host "ERROR: Missing required environment variables:" -ForegroundColor Red
-        $missing | ForEach-Object { Write-Host "  - $_" }
-        Write-Host "Copy .env.windows.example to .env.windows and fill in values."
-        exit 1
-    }
+}
+# Publishing (signed or unsigned) needs a token for electron-builder --publish
+# and the gh release upload of the stable-named alias.
+if ($Publish) { $required += 'GH_TOKEN' }
+$missing = $required | Where-Object { -not [Environment]::GetEnvironmentVariable($_) }
+if ($missing.Count -gt 0) {
+    Write-Host "ERROR: Missing required environment variables:" -ForegroundColor Red
+    $missing | ForEach-Object { Write-Host "  - $_" }
+    Write-Host "Copy .env.windows.example to .env.windows and fill in values."
+    exit 1
 }
 
 # --- Step 0: Bundled uv + uvx for Windows ---

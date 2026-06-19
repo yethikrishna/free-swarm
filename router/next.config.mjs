@@ -7,18 +7,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   output: "standalone",
   outputFileTracingRoot: __dirname,
-  // Windows EPERM fix: @vercel/nft walks parent directories looking for
-  // dependencies and hits junction points that throw EPERM (e.g.,
-  // C:\Users\runneradmin\Application Data). The outputFileTracingExcludes
-  // patterns here are too late — glob tries to read the dir before the filter
-  // applies. Instead, explicitly set where @vercel/nft can search by
-  // restricting the module resolution. The webpack config's resolve.modules
-  // already pins it to ./node_modules, but this ensures the file tracer
-  // also respects that boundary.
+  // Windows EPERM defense (secondary to NODE_PRESERVE_SYMLINKS in the Windows
+  // build script): tell @vercel/nft's tracer to skip Windows user/system
+  // directories that contain junction points which throw EPERM on scandir
+  // (e.g. C:\Users\*\Application Data). Every pattern here is a Windows-only
+  // path, so on macOS/Linux it matches nothing and is a pure no-op — keeping
+  // the green non-Windows builds byte-for-byte unaffected.
   outputFileTracingExcludes: {
     '**/*': [
-      // Exclude everything in Windows user/system directories that @vercel/nft
-      // might try to scan if a path resolves there (catches junction errors early)
       '**/AppData/**',
       '**/Application Data/**',
       '**/Program Files/**',
@@ -26,13 +22,6 @@ const nextConfig = {
       '**/Windows/**',
       '**/System32/**',
       '**/$Recycle.Bin/**',
-      // Exclude temp dirs
-      '**/Temp/**',
-      '**/tmp/**',
-      // Don't follow .git or other build artifacts
-      '**/.git/**',
-      '**/.next/static/**',
-      '**/.next/cache/**',
     ],
   },
   serverExternalPackages: ["better-sqlite3"],

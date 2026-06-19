@@ -271,19 +271,29 @@ Write-Host ""
 
 # --- Step 2: Build Router fork ---
 Write-Host "[2/5] Building FreeSwarm Router fork..."
-Push-Location (Join-Path $ProjectRoot 'router')
+# Copy router to temp directory to isolate it from Windows junction points
+# in user profile directories (e.g., C:\Users\*\Application Data). @vercel/nft
+# walks the filesystem and throws EPERM when it encounters junction points.
+# Building in temp avoids this directory traversal issue entirely.
+$TempBuildDir = Join-Path $env:TEMP "freeswarm-router-$([guid]::NewGuid())"
+New-Item -ItemType Directory -Path $TempBuildDir | Out-Null
 try {
-    & npm ci --include=dev
-    if ($LASTEXITCODE -ne 0) { throw "npm ci (router) failed" }
-    # Prevent Node.js from following symlinks during build, which causes EPERM
-    # when hitting Windows junctions in user directories. Applies to both the
-    # build process and the file tracer (@vercel/nft).
-    $env:NODE_PRESERVE_SYMLINKS = "1"
-    $env:NODE_PRESERVE_SYMLINKS_MAIN = "1"
-    & npm run build
-    if ($LASTEXITCODE -ne 0) { throw "router build failed" }
-    Remove-Item Env:NODE_PRESERVE_SYMLINKS, Env:NODE_PRESERVE_SYMLINKS_MAIN -ErrorAction SilentlyContinue
-} finally { Pop-Location }
+    Copy-Item -Recurse -Force (Join-Path $ProjectRoot 'router') (Join-Path $TempBuildDir 'router')
+    Push-Location (Join-Path $TempBuildDir 'router')
+    try {
+        & npm ci --include=dev
+        if ($LASTEXITCODE -ne 0) { throw "npm ci (router) failed" }
+        & npm run build
+        if ($LASTEXITCODE -ne 0) { throw "router build failed" }
+    } finally { Pop-Location }
+    # Copy .next back to project root
+    $SrcNext = Join-Path $TempBuildDir 'router\.next'
+    $DstNext = Join-Path $ProjectRoot 'router\.next'
+    if (Test-Path $DstNext) { Remove-Item -Recurse -Force $DstNext }
+    Copy-Item -Recurse -Force $SrcNext $DstNext
+} finally {
+    Remove-Item -Recurse -Force $TempBuildDir -ErrorAction SilentlyContinue
+}
 # Standalone server is at .next\standalone\router\server.js (nested, old monorepo
 # tracing root) OR .next\standalone\server.js (flat, tracing root pinned to router\
 # to avoid the Windows EPERM scandir crash). Accept either layout.

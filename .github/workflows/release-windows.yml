@@ -5,10 +5,14 @@ name: Release (Windows)
 # publish.sh flow — this workflow is Windows-only on purpose.
 #
 # Triggers:
-#   - Push a tag `v*` (e.g. v1.0.25) → full signed release build, uploaded to
-#     the release of that tag (creates it in draft if absent).
-#   - Manual dispatch (workflow_dispatch) with `publish: false` → signed build
-#     as an artifact, no release upload. Useful for smoke-tests.
+#   - Push a tag `v*` (e.g. v1.0.25) → full signed release build, published to
+#     the release of that tag (electron-builder creates it in draft if absent).
+#   - Manual dispatch (workflow_dispatch) with `publish: true` → same signed
+#     publish path, for re-runs/hotfixes off a branch.
+#   - Manual dispatch with `publish: false` (default) → build only, no release
+#     upload. Useful for smoke-tests.
+# In every case the built installer is also kept as a downloadable CI artifact
+# (`freeswarm-windows-installer`) on the run itself.
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):
 #   AZURE_TENANT_ID
@@ -153,15 +157,49 @@ jobs:
           $version = (Get-Content electron/package.json | ConvertFrom-Json).version
           Write-Host "Compiling Version: $version"
 
+          # Publish to GitHub Releases on a v* tag push, or on a manual dispatch
+          # with publish=true. Otherwise build only (the installer is still
+          # captured as a CI artifact by the next step). -Publish implies -Sign
+          # in build-app-win.ps1 and requires Azure signing secrets + GH_TOKEN,
+          # so only take that path when the signing secrets are present; without
+          # them we can't produce a signed release, so fall back to an unsigned
+          # artifact-only build even when a publish was requested.
+          $shouldPublish = ($env:GITHUB_REF_TYPE -eq 'tag') -or ($env:PUBLISH_INPUT -eq 'true')
+
           if ($env:AZURE_CLIENT_ID) {
-            Write-Host "Azure signing secrets present: building SIGNED."
-            pwsh -NoProfile -File scripts\build-app-win.ps1 -Sign -Squirrel
+            if ($shouldPublish) {
+              Write-Host "Azure secrets present + publish requested: building SIGNED and PUBLISHING to Releases."
+              pwsh -NoProfile -File scripts\build-app-win.ps1 -Publish -Squirrel
+            } else {
+              Write-Host "Azure secrets present: building SIGNED (no publish)."
+              pwsh -NoProfile -File scripts\build-app-win.ps1 -Sign -Squirrel
+            }
           } else {
-            Write-Host "No Azure signing secrets: building UNSIGNED."
+            if ($shouldPublish) {
+              Write-Host "WARNING: publish requested but no Azure signing secrets present; building UNSIGNED (artifact only, cannot publish a signed release)." -ForegroundColor Yellow
+            } else {
+              Write-Host "No Azure signing secrets: building UNSIGNED."
+            }
             pwsh -NoProfile -File scripts\build-app-win.ps1 -Squirrel
           }
 
-          if ($LASTEXITCODE -ne 0) { 
+          if ($LASTEXITCODE -ne 0) {
             Write-Error "build-app-win.ps1 failed with native exit code: $LASTEXITCODE"
             exit $LASTEXITCODE
           }
+
+      # Always retain the installer(s) as a downloadable CI artifact, even for
+      # branch/dispatch builds that don't publish to a Release (and even if a
+      # later step fails). Squirrel drops the Setup .exe under dist\squirrel-windows\,
+      # so glob recursively; if-no-files-found: warn keeps a failed build from
+      # erroring here on top of its own failure.
+      - name: Upload installer as CI artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: freeswarm-windows-installer
+          path: |
+            electron/dist/*.exe
+            electron/dist/**/*.exe
+          if-no-files-found: warn
+          retention-days: 14

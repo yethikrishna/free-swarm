@@ -7,13 +7,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   output: "standalone",
   outputFileTracingRoot: __dirname,
-  outputFileTracingIgnores: [
-    '**/{Application Data,AppData,TEMP,Temp,Downloads}/**',
-    '**/{Application Data,AppData,TEMP,Temp,Downloads}',
-    '**/.cache',
-    '**/.npm',
-    '**/{node_modules,\.next,\.git}',
-  ],
+  // Windows EPERM fix: exclude system dirs / junction points from the build
+  // trace so @vercel/nft's glob doesn't scandir 'C:\Users\*\Application Data'
+  // (a junction that throws EPERM). Next.js 16 names this outputFileTracing
+  // Excludes (page-glob keyed), NOT outputFileTracingIgnores — the latter is
+  // an unrecognized key and silently no-ops.
+  outputFileTracingExcludes: {
+    '**/*': [
+      '**/Application Data/**',
+      '**/Application Data',
+      '**/AppData/**',
+      '**/.cache/**',
+      '**/.npm/**',
+    ],
+  },
   serverExternalPackages: ["better-sqlite3"],
   images: {
     unoptimized: true
@@ -34,10 +41,9 @@ const nextConfig = {
     // The EPERM leaves FlightClientEntryPlugin's module map incomplete, causing
     // createActionAssets to crash with 'Cannot read properties of undefined'.
     //
-    // Three-pronged fix:
+    // Two-pronged fix:
     // 1. symlinks:false — stop enhanced-resolve from following junction targets
     // 2. absolute modules path — stop the upward directory walk beyond router/
-    // 3. aliasFields=[] — prevent resolving package.json exports that redirect
     config.resolve.symlinks = false;
     config.resolve.modules = [
       path.resolve(__dirname, 'node_modules'),

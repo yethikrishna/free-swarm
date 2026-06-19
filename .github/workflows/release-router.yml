@@ -63,12 +63,25 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          # The release for this tag already exists (created when the tag was
-          # published). --clobber so re-runs replace stale assets cleanly.
-          gh release upload "${{ steps.ver.outputs.tag }}" \
+          tag="${{ steps.ver.outputs.tag }}"
+          repo="${{ github.repository }}"
+          # A pushed tag does NOT automatically create a GitHub Release, and
+          # workflow_dispatch runs have no release at all — so `gh release upload`
+          # would fail with "release not found". Create the release first if it's
+          # missing (also creates the git tag at this commit when absent), then
+          # upload with --clobber so re-runs replace stale assets cleanly.
+          if ! gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
+            echo "No release for $tag yet; creating it."
+            gh release create "$tag" \
+              --repo "$repo" \
+              --title "FreeSwarm Router $tag" \
+              --notes "Standalone FreeSwarm Router bundles for $tag." \
+              --target "$GITHUB_SHA"
+          fi
+          gh release upload "$tag" \
             router/dist-release/bundles/*.tar.gz \
             router/dist-release/bundles/*.zip \
-            --repo "${{ github.repository }}" --clobber
+            --repo "$repo" --clobber
 
       - name: Publish to npm
         if: ${{ env.NPM_TOKEN != '' }}

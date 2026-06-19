@@ -1,6 +1,6 @@
 {
   "name": "freeswarm",
-  "version": "1.2.86",
+  "version": "1.2.87",
   "description": "FreeSwarm — AI Agent Orchestrator",
   "author": "yethikrishna",
   "main": "main.js",

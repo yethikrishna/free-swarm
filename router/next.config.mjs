@@ -8,11 +8,11 @@ const nextConfig = {
   output: "standalone",
   outputFileTracingRoot: __dirname,
   outputFileTracingIgnores: [
-    '**/Application Data/**',
-    '**/.cache/**',
-    '**/.npm/**',
-    '**/node_modules/.bin/**',
-    '**/node_modules/.cache/**',
+    '**/{Application Data,AppData,TEMP,Temp,Downloads}/**',
+    '**/{Application Data,AppData,TEMP,Temp,Downloads}',
+    '**/.cache',
+    '**/.npm',
+    '**/{node_modules,\.next,\.git}',
   ],
   serverExternalPackages: ["better-sqlite3"],
   images: {
@@ -34,9 +34,10 @@ const nextConfig = {
     // The EPERM leaves FlightClientEntryPlugin's module map incomplete, causing
     // createActionAssets to crash with 'Cannot read properties of undefined'.
     //
-    // Two-pronged fix:
+    // Three-pronged fix:
     // 1. symlinks:false — stop enhanced-resolve from following junction targets
     // 2. absolute modules path — stop the upward directory walk beyond router/
+    // 3. aliasFields=[] — prevent resolving package.json exports that redirect
     config.resolve.symlinks = false;
     config.resolve.modules = [
       path.resolve(__dirname, 'node_modules'),

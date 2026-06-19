@@ -1,0 +1,11 @@
+Application Data
+AppData
+TEMP
+Temp
+Downloads
+.cache
+.npm
+.vscode
+.git
+node_modules/.bin
+node_modules/.cache

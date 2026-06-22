@@ -391,6 +391,57 @@ const CrashRecoveryChip: React.FC = () => {
   );
 };
 
+/** Listens for backend process recovery (from the runtime watchdog) and re-establishes
+ *  connections. Shows a brief "reconnecting" state, then re-fetches settings + models
+ *  to warm up the API connection. */
+const BackendRecoveryListener: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const dispatch = useAppDispatch();
+  const [show, setShow] = React.useState(false);
+
+  React.useEffect(() => {
+    const api = (window as any).freeswarm as FreeSwarmAPI | undefined;
+    if (!api?.onBackendRecovered) return;
+
+    const unsubscribe = api.onBackendRecovered?.(() => {
+      setShow(true);
+      dispatch(fetchSettings());
+      dispatch(fetchModels());
+      setTimeout(() => setShow(false), 3000);
+    });
+    return unsubscribe;
+  }, [dispatch]);
+
+  return (
+    <>
+      {children}
+      <Fade in={show} timeout={{ enter: 200, exit: 220 }} unmountOnExit>
+        <Box sx={{
+          position: 'fixed', bottom: 16, right: 16, zIndex: 1500,
+          display: 'flex', alignItems: 'center', gap: 1,
+          bgcolor: 'background.paper',
+          border: '1px solid', borderColor: 'divider',
+          boxShadow: 3, borderRadius: '10px',
+          px: 1.75, py: 1, fontSize: '0.85rem',
+          maxWidth: 360,
+        }}>
+          <Box component="span" sx={{
+            width: 8, height: 8, borderRadius: '50%',
+            bgcolor: 'info.main',
+            animation: 'pulse 1.5s ease-in-out infinite',
+            '@keyframes pulse': {
+              '0%, 100%': { opacity: 1 },
+              '50%': { opacity: 0.5 },
+            },
+          }} />
+          <Box component="span">
+            Backend reconnecting...
+          </Box>
+        </Box>
+      </Fade>
+    </>
+  );
+};
+
 const UpdateListener: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const dispatch = useAppDispatch();
 
@@ -466,6 +517,7 @@ const ThemedApp: React.FC = () => {
         <RouteTrackerMount />
         <SettingsLoader>
             <DefaultModelGuard>
+            <BackendRecoveryListener>
             <UpdateListener>
               <CrashRecoveryChip />
               <DeepLinkListener>
@@ -494,6 +546,7 @@ const ThemedApp: React.FC = () => {
                 </OnboardingErrorGuard>
               </DeepLinkListener>
             </UpdateListener>
+            </BackendRecoveryListener>
             </DefaultModelGuard>
           </SettingsLoader>
       </HashRouter>

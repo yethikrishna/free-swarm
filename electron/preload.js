@@ -139,4 +139,13 @@ contextBridge.exposeInMainWorld('freeswarm', {
     ipcRenderer.on('freeswarm:oauth-callback', listener);
     return () => ipcRenderer.removeListener('freeswarm:oauth-callback', listener);
   },
+
+  // Backend recovery callback: fires when the backend watchdog relaunches
+  // the backend process on the same port after a crash. Renderer should
+  // re-establish API and WebSocket connections.
+  onBackendRecovered: (cb) => {
+    const listener = (_event, payload) => cb(payload);
+    ipcRenderer.on('backend-recovered', listener);
+    return () => ipcRenderer.removeListener('backend-recovered', listener);
+  },
 });

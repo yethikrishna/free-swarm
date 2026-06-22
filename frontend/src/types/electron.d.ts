@@ -47,6 +47,7 @@ declare global {
     onUpdateDownloaded: (cb: (info: FreeSwarmUpdateInfo) => void) => () => void;
     onUpdateError: (cb: (message: string) => void) => () => void;
     onWebviewNewWindow: (cb: (url: string, webContentsId: number) => void) => () => void;
+    onBackendRecovered?: (cb: (payload: { port: number }) => void) => () => void;
     openExternal: (url: string) => Promise<void>;
     onAuthUrl?: (cb: (url: string) => void) => () => void;
     onOauthClaim?: (cb: (url: string) => void) => () => void;

@@ -44,7 +44,10 @@ logger = logging.getLogger(__name__)
 async def tools_lib_lifespan():
     os.makedirs(DATA_DIR, exist_ok=True)
     _ensure_default_permissions()
-    _reclassify_existing_tools()
+    # Tool reclassification is a one-time migration that scans JSON files and
+    # potentially rewrites them. Fire it in the background so it doesn't delay
+    # the HTTP bind, consistent with session restore and router boot.
+    asyncio.create_task(asyncio.to_thread(_reclassify_existing_tools))
     yield
 
 

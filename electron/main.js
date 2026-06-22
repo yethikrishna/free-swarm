@@ -466,12 +466,13 @@ async function startFrontendServer() {
   // port every launch, which wiped onboarding state on every restart and re-triggered the
   // tour. Try a preferred port; if held, fall back to OS-assigned.
   const PREFERRED_PORT = 4173;
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     server.once('error', () => {
       // Preferred port held; fall back. localStorage may rotate this run but stabilizes once 4173 frees up.
       const fallback = http.createServer(server.listeners('request')[0]);
       fallback.on('error', (err) => {
         console.error('[frontend-server] fallback also failed:', err && err.message);
+        reject(new Error(`Frontend server failed: preferred port held, fallback bind also failed: ${err && err.message || err}`));
       });
       fallback.listen(0, '127.0.0.1', () => {
         const addr = fallback.address();
@@ -831,6 +832,7 @@ function waitForBackend(port, opts = {}) {
   const userDataDir = opts.userDataDir || app.getPath('userData');
   const isFirstLaunchNow = opts.isFirstLaunch !== undefined ? opts.isFirstLaunch : isFirstLaunch(userDataDir);
   const start = Date.now();
+  const HARD_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes wall-clock
   return new Promise((resolve, reject) => {
     let settled = false;
     let stillStartingNotified = false;
@@ -855,6 +857,10 @@ function waitForBackend(port, opts = {}) {
     function check() {
       if (settled) return;
       const elapsed = Date.now() - start;
+      if (elapsed > HARD_TIMEOUT_MS) {
+        finish(reject, new Error('Backend startup timed out after 10 minutes'));
+        return;
+      }
       if (elapsed > 60_000 && !stillStartingNotified) {
         stillStartingNotified = true;
         emitSplashStatus({ text: osStillStartingText(isFirstLaunchNow), level: 'warning' });

@@ -4236,7 +4236,12 @@ class AgentManager:
 
     async def reconcile_on_startup(self) -> None:
         """Mark any stale running sessions as stopped."""
-        for sid, data in _load_all_session_data():
+        # Reading every session file is synchronous disk I/O that scales with
+        # history size; do it off the event loop so the HTTP health check stays
+        # responsive during boot on a heavy install.
+        all_data = await asyncio.to_thread(_load_all_session_data)
+        for sid, data in all_data:
+            await asyncio.sleep(0)
             dirty = False
             if data.get("status") in ("running", "waiting_approval"):
                 data["status"] = "stopped"
@@ -4277,7 +4282,11 @@ class AgentManager:
         shutdown).  Sessions with closed_at were explicitly closed by the user
         and stay on disk so the history endpoint can still serve them.
         """
-        for sid, data in _load_all_session_data():
+        # Off the event loop: see reconcile_on_startup. Parsing each session
+        # into a pydantic model is also non-trivial, so yield between sessions.
+        all_data = await asyncio.to_thread(_load_all_session_data)
+        for sid, data in all_data:
+            await asyncio.sleep(0)
             try:
                 session = AgentSession(**data)
             except Exception as e:

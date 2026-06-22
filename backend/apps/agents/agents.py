@@ -15,13 +15,39 @@ logger = logging.getLogger(__name__)
 # Dedup concurrent generate-group-meta calls; collapses the 429 thundering herd by sharing one upstream Future per (session, group).
 _group_meta_inflight: dict[tuple[str, str], asyncio.Future] = {}
 
+_restore_task: asyncio.Task | None = None
+
 @asynccontextmanager
 async def agents_lifespan():
+    global _restore_task
     logger.info("Agents sub-app starting")
-    await agent_manager.reconcile_on_startup()
-    await agent_manager.restore_all_sessions()
+    # Restoring sessions is disk I/O whose cost scales with saved-history size.
+    # SubApp lifespans run sequentially before uvicorn binds the socket, so
+    # awaiting it here would delay /api/health/check and make the Electron splash
+    # give up ("closed before main window appeared"). Restore in the background;
+    # the session list simply fills in a moment after the window opens. reconcile
+    # must finish before restore (restore deletes the files reconcile rewrites),
+    # so keep them ordered inside the one task.
+    async def _restore_bg():
+        try:
+            await agent_manager.reconcile_on_startup()
+            await agent_manager.restore_all_sessions()
+        except Exception as e:
+            logger.warning(f"Session restore on startup failed: {e}")
+
+    _restore_task = asyncio.create_task(_restore_bg())
     yield
     logger.info("Agents sub-app shutting down")
+    # If we're shutting down mid-restore, stop it before persisting so the two
+    # don't race over the same session files. Cancellation is safe: restore adds
+    # a session to memory before deleting its file, so anything in flight is
+    # still captured by persist_all_sessions below.
+    if _restore_task and not _restore_task.done():
+        _restore_task.cancel()
+        try:
+            await _restore_task
+        except asyncio.CancelledError:
+            pass
     for session_id in list(agent_manager.tasks.keys()):
         await agent_manager.stop_agent(session_id)
     await agent_manager.persist_all_sessions()

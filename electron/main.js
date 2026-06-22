@@ -391,6 +391,14 @@ app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
 let mainWindow = null;
 let backendProcess = null;
 let backendPort = null;
+// Runtime backend-crash watchdog state. backendBooted gates the watchdog off
+// until the initial boot succeeds (the boot retry loop owns pre-boot exits).
+// backendIntentionalKill suppresses a restart when WE killed the process.
+// backendRestartTimes caps the restart rate so a crash loop can't thrash.
+let backendBooted = false;
+let backendIntentionalKill = false;
+let backendRestartTimes = [];
+let respawnBackend = null;  // set by startBackend; re-spawns on the same port
 let cachedUpdateStatus = { status: 'idle', info: null, error: null };
 let isInstallingUpdate = false;
 
@@ -1084,13 +1092,13 @@ async function startBackend() {
 
     backendProcess.on('exit', (code) => {
       console.log(`Backend exited with code ${code}`);
-      if (code !== 0 && code !== null && mainWindow) {
-        mainWindow.webContents.executeJavaScript(
-          `document.title = "FreeSwarm (backend crashed)";`
-        );
-      }
+      handleBackendExit(code);
     });
   };
+
+  // Expose the spawn so the runtime watchdog can re-launch on the same port
+  // after a crash, reusing this closure's pythonPath/env/projectRoot.
+  respawnBackend = spawnBackend;
 
   // Retry transient boot crashes (AV scan, slow disk, import race) before
   // surfacing the failure UI. A single bad spawn shouldn't kill the launch.
@@ -1138,6 +1146,9 @@ const backendReadyPromise = new Promise((resolve) => { _backendReadyResolve = re
 function markBackendReady() {
   if (backendReady) return;
   backendReady = true;
+  // Arm the runtime crash watchdog now that the initial boot has fully
+  // succeeded. Before this, exits are handled by the boot retry loop.
+  backendBooted = true;
   _backendReadyResolve();
 }
 
@@ -1713,6 +1724,9 @@ function setupAutoUpdater() {
 }
 
 function killBackend() {
+  // Mark this as a deliberate kill so the crash watchdog doesn't try to revive
+  // a backend we intentionally tore down (quit, splash-quit, boot failure).
+  backendIntentionalKill = true;
   if (backendProcess) {
     console.log('Killing backend process...');
     if (process.platform === 'win32') {
@@ -1741,6 +1755,46 @@ function killBackend() {
   if (backendLogStream) {
     try { backendLogStream.end(`[electron] backend killed ${new Date().toISOString()}\n`); } catch (_) {}
     backendLogStream = null;
+  }
+}
+
+// Runtime backend-crash watchdog. If the backend dies unexpectedly AFTER a
+// successful boot, revive it on the same port instead of leaving the app a
+// dead shell (every API/WS call failing until a manual restart). Mirrors the
+// guard discipline of the macOS process crash-watchdog: only act post-boot,
+// never during a quit or update swap, never on a deliberate kill, and cap the
+// restart rate so a backend that crash-loops can't thrash forever.
+function handleBackendExit(code) {
+  // Pre-boot exits belong to the boot retry loop, not here.
+  if (!backendBooted) return;
+  // Clean exit (0) or one we triggered (null on signal / our own kill).
+  if (code === 0 || code === null || backendIntentionalKill) return;
+  // A quit or update install is allowed to take the backend down.
+  if (quitInitiated || isInstallingUpdate) return;
+
+  const now = Date.now();
+  backendRestartTimes = backendRestartTimes.filter((t) => now - t < 5 * 60_000);
+  if (backendRestartTimes.length >= 3) {
+    console.error('[backend-watchdog] restart cap hit (3 in 5min); leaving backend down');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript(`document.title = "FreeSwarm (backend crashed)";`).catch(() => {});
+    }
+    return;
+  }
+  backendRestartTimes.push(now);
+  console.warn(`[backend-watchdog] backend exited code=${code}; restarting (#${backendRestartTimes.length}/3)`);
+  if (typeof respawnBackend !== 'function') return;
+  try {
+    respawnBackend();
+    // Confirm recovery, then nudge the renderer to re-establish its connections.
+    waitForBackend(backendPort, { process: backendProcess })
+      .then(() => {
+        console.log('[backend-watchdog] backend recovered on port', backendPort);
+        sendToRenderer('backend-recovered', { port: backendPort });
+      })
+      .catch((e) => console.error('[backend-watchdog] restarted backend never became healthy:', e && e.message));
+  } catch (e) {
+    console.error('[backend-watchdog] respawn threw:', e && e.message);
   }
 }
 

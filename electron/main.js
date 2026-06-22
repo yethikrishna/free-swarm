@@ -176,6 +176,17 @@ function maybeCommitPreflightCache() {
   catch (e) { console.log(`[preflight2] cache write failed: ${e && e.message}`); }
 }
 
+// Human-readable summary of any non-ok system checks, for the boot-failure UI.
+// Turns a generic "backend timed out" into "...; also: dns failed, disk low",
+// which names the real environmental cause (broken DNS, full disk) the user
+// can actually fix. Returns '' when preflight is clean or hasn't run.
+function preflightFailureSummary() {
+  if (!_preflightVerdict || !Array.isArray(_preflightVerdict.results)) return '';
+  const bad = _preflightVerdict.results.filter((r) => r && r.status && r.status !== 'ok');
+  if (!bad.length) return '';
+  return bad.map((r) => `${r.name}: ${r.reason || r.status}`).join('; ');
+}
+
 function logPreflight(backendPort) {
   const info = {};
   const probe = (label, fn) => { try { info[label] = fn(); } catch (_) { info[label] = 'ERR'; } };
@@ -1025,62 +1036,81 @@ async function startBackend() {
   console.log(`Starting backend: ${pythonPath} (exists=${pythonExists}) on port ${backendPort}`);
   console.log(`Project root: ${projectRoot}`);
 
-  backendProcess = spawn(
-    pythonPath,
-    ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(backendPort)],
-    {
-      cwd: projectRoot,
-      env,
-      stdio: ['pipe', 'pipe', 'pipe'],
+  const spawnBackend = () => {
+    backendProcess = spawn(
+      pythonPath,
+      ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(backendPort)],
+      {
+        cwd: projectRoot,
+        env,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }
+    );
+
+    backendProcess.stdout.on('data', (data) => {
+      const text = data.toString();
+      process.stdout.write(`[backend] ${text}`);
+      // uvicorn prints this exact phrase once the ASGI app is live and
+      // routes are mounted — perfect milestone for the splash to flip
+      // from "starting backend" to "loading components".
+      if (text.indexOf('Application startup complete') !== -1) {
+        emitSplashStatus('Loading components…');
+      }
+    });
+
+    backendProcess.stderr.on('data', (data) => {
+      const text = data.toString();
+      process.stderr.write(`[backend] ${text}`);
+      // Buffer the most recent stderr lines for the splash error UI so
+      // when boot fails we can show actionable context inline instead of
+      // making the user dig through a log file.
+      recentBackendStderr.push(text);
+      while (recentBackendStderr.length > 60) recentBackendStderr.shift();
+    });
+
+    // spawn() fires 'error' (not 'exit', not stdout/stderr) when the binary is
+    // missing, AV-quarantined, blocked, or the wrong arch (ENOEXEC). This is the
+    // most common silent cross-machine failure; without this handler it produced
+    // an unhandled emitter error and an empty log. Surface it in both the log and
+    // the splash error buffer so "View logs" actually explains the crash.
+    backendProcess.on('error', (err) => {
+      const msg = `\n[electron] backend spawn FAILED: ${err && err.code ? err.code + ' ' : ''}${err && err.message || err}\n` +
+        `  python path: ${pythonPath} (exists=${pythonExists})\n` +
+        `  arch: ${process.arch}, platform: ${process.platform}\n`;
+      console.error(msg);
+      recentBackendStderr.push(msg);
+      while (recentBackendStderr.length > 60) recentBackendStderr.shift();
+    });
+
+    backendProcess.on('exit', (code) => {
+      console.log(`Backend exited with code ${code}`);
+      if (code !== 0 && code !== null && mainWindow) {
+        mainWindow.webContents.executeJavaScript(
+          `document.title = "FreeSwarm (backend crashed)";`
+        );
+      }
+    });
+  };
+
+  // Retry transient boot crashes (AV scan, slow disk, import race) before
+  // surfacing the failure UI. A single bad spawn shouldn't kill the launch.
+  // The hard health-poll timeout is NOT retried: it means the process is alive
+  // but unresponsive (a deeper hang), so restarting just multiplies the wait.
+  const MAX_BOOT_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_BOOT_ATTEMPTS; attempt++) {
+    spawnBackend();
+    emitSplashStatus(attempt === 1 ? 'Starting backend…' : `Restarting backend (attempt ${attempt})…`);
+    try {
+      await waitForBackend(backendPort, { process: backendProcess });
+      break;
+    } catch (err) {
+      const isTimeout = !!(err && /timed out/i.test(err.message || ''));
+      console.error(`[boot] backend attempt ${attempt}/${MAX_BOOT_ATTEMPTS} failed: ${err && err.message}`);
+      try { if (backendProcess && !backendProcess.killed) backendProcess.kill(); } catch (_) {}
+      if (attempt >= MAX_BOOT_ATTEMPTS || isTimeout) throw err;
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
     }
-  );
-
-  backendProcess.stdout.on('data', (data) => {
-    const text = data.toString();
-    process.stdout.write(`[backend] ${text}`);
-    // uvicorn prints this exact phrase once the ASGI app is live and
-    // routes are mounted — perfect milestone for the splash to flip
-    // from "starting backend" to "loading components".
-    if (text.indexOf('Application startup complete') !== -1) {
-      emitSplashStatus('Loading components…');
-    }
-  });
-
-  backendProcess.stderr.on('data', (data) => {
-    const text = data.toString();
-    process.stderr.write(`[backend] ${text}`);
-    // Buffer the most recent stderr lines for the splash error UI so
-    // when boot fails we can show actionable context inline instead of
-    // making the user dig through a log file.
-    recentBackendStderr.push(text);
-    while (recentBackendStderr.length > 60) recentBackendStderr.shift();
-  });
-
-  // spawn() fires 'error' (not 'exit', not stdout/stderr) when the binary is
-  // missing, AV-quarantined, blocked, or the wrong arch (ENOEXEC). This is the
-  // most common silent cross-machine failure; without this handler it produced
-  // an unhandled emitter error and an empty log. Surface it in both the log and
-  // the splash error buffer so "View logs" actually explains the crash.
-  backendProcess.on('error', (err) => {
-    const msg = `\n[electron] backend spawn FAILED: ${err && err.code ? err.code + ' ' : ''}${err && err.message || err}\n` +
-      `  python path: ${pythonPath} (exists=${pythonExists})\n` +
-      `  arch: ${process.arch}, platform: ${process.platform}\n`;
-    console.error(msg);
-    recentBackendStderr.push(msg);
-    while (recentBackendStderr.length > 60) recentBackendStderr.shift();
-  });
-
-  backendProcess.on('exit', (code) => {
-    console.log(`Backend exited with code ${code}`);
-    if (code !== 0 && code !== null && mainWindow) {
-      mainWindow.webContents.executeJavaScript(
-        `document.title = "FreeSwarm (backend crashed)";`
-      );
-    }
-  });
-
-  emitSplashStatus('Starting backend…');
-  await waitForBackend(backendPort, { process: backendProcess });
+  }
   perfMark('backend-http-ready');
   console.log(`Backend ready on port ${backendPort}`);
   maybeCommitPreflightCache();
@@ -1954,8 +1984,10 @@ app.whenReady().then(async () => {
     // Surface the failure on the splash instead of silently quitting.
     // The user picks: view logs, restart, or quit. This eliminates the
     // class of "I clicked FreeSwarm and nothing happened" reports.
+    const pfSummary = preflightFailureSummary();
+    const baseMsg = "FreeSwarm couldn't start: " + (err && err.message ? err.message : String(err));
     emitSplashStatus({
-      text: "FreeSwarm couldn't start: " + (err && err.message ? err.message : String(err)),
+      text: pfSummary ? `${baseMsg}\nSystem checks: ${pfSummary}` : baseMsg,
       level: 'error',
       showActions: true,
       logs: recentBackendStderr.slice(-30).join(''),

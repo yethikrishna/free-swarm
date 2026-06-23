@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
@@ -7,6 +7,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import { AppSettings } from '@/shared/state/settingsSlice';
 import { useProviderStatus } from '@/shared/hooks/useProviderStatus';
+import { keychainAvailable, fetchSecretsPresent } from '@/shared/keychain';
 import FreeSwarmProCard from '../subscription/FreeSwarmProCard';
 import SubscriptionCards from '../subscription/SubscriptionCards';
 import ApiKeyCard, { API_KEY_CARDS } from './ApiKeyCard';
@@ -25,6 +26,16 @@ const ModelsTab: React.FC<{
   const c = useClaudeTokens();
   const { descSx } = styles;
   const { byId: providerStatus, routerOffline, loading: statusLoading, refresh } = useProviderStatus();
+
+  // When the OS keychain is available, provider keys are managed there (not in the
+  // settings form / settings.json). `present` says which keys the backend currently
+  // holds so the cards can show a "stored securely" state instead of an empty field.
+  const useKeychain = keychainAvailable();
+  const [present, setPresent] = useState<Record<string, boolean>>({});
+  const refreshPresent = useCallback(() => {
+    if (useKeychain) fetchSecretsPresent().then(setPresent);
+  }, [useKeychain]);
+  useEffect(() => { refreshPresent(); }, [refreshPresent]);
 
   const allModels = useMemo(() => {
     const models: Array<{ value: string; label: string }> = [];
@@ -84,7 +95,9 @@ const ModelsTab: React.FC<{
         </Box>
 
         <Typography sx={{ ...descSx, mb: -1 }}>
-          Pay per use. Each key is stored locally on your device.
+          {useKeychain
+            ? 'Pay per use. Each key is stored securely in your operating system keychain.'
+            : 'Pay per use. Each key is stored locally on your device.'}
         </Typography>
 
         {API_KEY_CARDS.map((config) => (
@@ -98,6 +111,9 @@ const ModelsTab: React.FC<{
             styles={styles}
             status={providerStatus[config.providerId]}
             routerOffline={routerOffline}
+            useKeychain={useKeychain}
+            stored={!!present[config.field]}
+            onKeychainChange={refreshPresent}
           />
         ))}
 

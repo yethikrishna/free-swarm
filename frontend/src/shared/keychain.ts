@@ -103,3 +103,14 @@ export async function saveKeychainSecret(field: KeychainSecretField, value: stri
   await storeKeychainSecret(field, value);
   await pushToBackend({ [field]: value });
 }
+
+// Which keychain-backed secrets the backend currently holds (for the UI presence UX).
+export async function fetchSecretsPresent(): Promise<Record<string, boolean>> {
+  try {
+    const r = await fetch(`${API_BASE}/settings/secrets/present`);
+    if (r.ok) return (await r.json()).present ?? {};
+  } catch {
+    /* backend cold or web build: caller shows the legacy field */
+  }
+  return {};
+}

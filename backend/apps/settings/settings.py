@@ -153,6 +153,14 @@ async def update_settings(body: AppSettings):
     for k in SERVER_OWNED_FIELDS:
         setattr(body, k, getattr(old, k, None))
 
+    # Keychain-managed keys never persist to disk. Any provider key already held in
+    # the in-memory keychain store is forced blank here so a stale full-form PUT
+    # (which still carries the old on-disk value, or a sentinel) can't re-add it.
+    from backend.apps.settings.secret_store import has as _secret_has, SECRET_FIELDS as _SECRET_FIELDS
+    for k in _SECRET_FIELDS:
+        if _secret_has(k):
+            setattr(body, k, None)
+
     # If the user connects their own model while the free trial is armed, hand
     # the wheel back to their provider. Without this, connection_mode (server-
     # owned, so the loop above just restored it to "free-trial") would keep them
@@ -286,9 +294,26 @@ async def push_secrets_endpoint(body: SecretsPushPayload):
     they're rebuilt from the keychain each launch so plaintext keys don't need
     to persist in settings.json. Additive: until this is called, credential
     resolution falls back to settings.json exactly as before.
+
+    Any field that lands in the keychain store is also blanked on disk here, so a
+    key the user has secured in the OS keychain never lingers in plaintext
+    settings.json (covers both the boot migration and a freshly entered key).
     """
-    from backend.apps.settings.secret_store import push_secrets, present_map
+    from backend.apps.settings.secret_store import push_secrets, present_map, SECRET_FIELDS
     push_secrets(body.secrets)
+
+    # Blank any now-keychained field on disk (non-empty pushes only; a falsy push
+    # is a delete, which the regular settings flow already clears).
+    keyed_on_disk = [f for f in SECRET_FIELDS if body.secrets.get(f)]
+    if keyed_on_disk:
+        current = load_settings()
+        changed = False
+        for f in keyed_on_disk:
+            if getattr(current, f, None):
+                setattr(current, f, None)
+                changed = True
+        if changed:
+            await save_settings_async(current)
     # Mirror keychain-backed provider keys into 9Router so its lanes stay in sync.
     try:
         from backend.apps.settings.secret_store import get_secret

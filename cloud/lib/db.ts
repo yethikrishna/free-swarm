@@ -131,3 +131,58 @@ export async function insertUsageLog(row: {
     on conflict (install_id, submission_id) do nothing
   `;
 }
+
+// Phase 0 revocation: mark a JTI as revoked (kills that token across all surfaces).
+export async function revokeJti(jti: string, userId: string): Promise<void> {
+  await db()`
+    insert into revoked_jtis (jti, user_id, revoked_at)
+    values (${jti}, ${userId}, now())
+    on conflict (jti) do nothing
+  `;
+}
+
+// Check if a JTI has been revoked.
+export async function isJtiRevoked(jti: string): Promise<boolean> {
+  const rows = await db()`select 1 from revoked_jtis where jti = ${jti}`;
+  return rows.length > 0;
+}
+
+// Revoke all JTIs for a user (sign-out; kills all sessions cross-surface).
+export async function revokeAllForUser(userId: string): Promise<void> {
+  await db()`
+    insert into revoked_jtis (jti, user_id, revoked_at)
+    select jti, user_id, now() from refresh_tokens
+    where user_id = ${userId} and revoked_at is null
+    on conflict (jti) do update set revoked_at = now()
+  `;
+  await db()`
+    update refresh_tokens
+    set revoked_at = now()
+    where user_id = ${userId} and revoked_at is null
+  `;
+}
+
+// Store a refresh token hash in the DB (for revocation checks). Hash is sha256(token).
+export async function storeRefreshToken(
+  jti: string,
+  userId: string,
+  tokenHash: string,
+  aud: 'desktop' | 'web' | 'cloud',
+  expiresAtUnix: number,
+): Promise<void> {
+  const expiresAt = new Date(expiresAtUnix * 1000);
+  await db()`
+    insert into refresh_tokens (jti, user_id, token_hash, aud, expires_at)
+    values (${jti}, ${userId}, ${tokenHash}, ${aud}, ${expiresAt})
+    on conflict (jti) do nothing
+  `;
+}
+
+// Check if a refresh token is still valid (not revoked, not expired).
+export async function isRefreshTokenValid(jti: string): Promise<boolean> {
+  const rows = await db()`
+    select 1 from refresh_tokens
+    where jti = ${jti} and revoked_at is null and expires_at > now()
+  `;
+  return rows.length > 0;
+}

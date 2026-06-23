@@ -50,5 +50,28 @@ create table if not exists fusion_configs (
   created_at  timestamptz not null default now()
 );
 
+-- Phase 0: Token revocation. JTIs (unique token IDs) can be blacklisted to invalidate
+-- tokens immediately (sign-out, compromised token, etc.). One row per revoked JTI.
+create table if not exists revoked_jtis (
+  jti        text primary key,
+  user_id    text not null references users(id) on delete cascade,
+  revoked_at timestamptz not null default now()
+);
+
+-- Phase 0: Refresh tokens stored server-side (hashed) so they can be revoked without
+-- invalidating all access tokens. Desktop and web may hold multiple refresh tokens.
+-- Token version 1: aud='desktop'|'web'|'cloud' to prevent cross-surface reuse.
+create table if not exists refresh_tokens (
+  jti        text primary key,
+  user_id    text not null references users(id) on delete cascade,
+  token_hash text not null,
+  aud        text not null,
+  expires_at timestamptz not null,
+  revoked_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists usage_logs_user_idx on usage_logs (user_id, created_at desc);
 create index if not exists fusion_configs_user_idx on fusion_configs (user_id);
+create index if not exists revoked_jtis_user_idx on revoked_jtis (user_id, revoked_at desc);
+create index if not exists refresh_tokens_user_idx on refresh_tokens (user_id, revoked_at);

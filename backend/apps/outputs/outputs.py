@@ -74,9 +74,14 @@ outputs = SubApp("outputs", outputs_lifespan)
 @outputs.router.get("/workspace/{workspace_id}/serve/{filepath:path}")
 async def serve_workspace_file(workspace_id: str, filepath: str, _d: str = ""):
     """Serve a file from a workspace folder. For index.html, inject OUTPUT data."""
-    folder = os.path.join(WORKSPACE_DIR, workspace_id)
+    # Confine BOTH the workspace_id and the filepath to WORKSPACE_DIR. The
+    # trailing os.sep is load-bearing: a bare startswith lets a sibling whose
+    # name shares the prefix (workspace "abc" -> "abc-secrets") slip through.
+    base = os.path.normpath(WORKSPACE_DIR)
+    folder = os.path.normpath(os.path.join(base, workspace_id))
     full_path = os.path.normpath(os.path.join(folder, filepath))
-    if not full_path.startswith(os.path.normpath(folder)):
+    if (folder != base and not folder.startswith(base + os.sep)) or \
+       (full_path != folder and not full_path.startswith(folder + os.sep)):
         raise HTTPException(status_code=403, detail="Path traversal not allowed")
     if not os.path.isfile(full_path):
         raise HTTPException(status_code=404, detail="File not found")

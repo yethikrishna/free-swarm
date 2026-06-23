@@ -264,7 +264,9 @@ def _load_all_sessions() -> list[dict]:
 async def usage_summary():
     from backend.apps.agents.agent_manager import agent_manager
 
-    sessions = _load_all_sessions()
+    # Reading every session JSON off the event loop: the directory grows with
+    # history, so a synchronous scan here would stall all concurrent requests/WS.
+    sessions = await asyncio.to_thread(_load_all_sessions)
     for s in agent_manager.get_all_sessions():
         sessions.append(s.model_dump(mode="json"))
 

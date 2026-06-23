@@ -148,4 +148,15 @@ contextBridge.exposeInMainWorld('freeswarm', {
     ipcRenderer.on('backend-recovered', listener);
     return () => ipcRenderer.removeListener('backend-recovered', listener);
   },
+
+  // Phase 2 keychain: OS-secure storage for secrets (API keys, tokens).
+  // IPC-only; never stored in plaintext in settings.json or window globals.
+  setSecret: (key, plaintext) => ipcRenderer.invoke('secret:set', key, plaintext),
+  getSecret: (key) => ipcRenderer.invoke('secret:get', key),
+  deleteSecret: (key) => ipcRenderer.invoke('secret:delete', key),
+  listSecrets: () => ipcRenderer.invoke('secret:list'),
+
+  // Phase 2 auth: mint a one-time nonce for sign-in (proves this install initiated the flow).
+  beginSignin: () => ipcRenderer.invoke('auth:begin-signin');
+  },
 });

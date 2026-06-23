@@ -2528,6 +2528,98 @@ ipcMain.handle('get-webview-preload-path', () => {
   return `file://${path.join(__dirname, 'webview-preload.js')}`;
 });
 
+// Phase 2 keychain: OS-secure storage for secrets (API keys, tokens).
+// Uses Electron's safeStorage (Keychain/DPAPI/libsecret) for encryption.
+// On Linux headless (no Secret Service), falls back to plaintext-on-disk with warning flag.
+const { safeStorage } = require('electron');
+const _secretStoragePath = path.join(app.getPath('userData'), 'secrets');
+
+ipcMain.handle('secret:set', async (_event, key, plaintext) => {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) {
+      // Linux headless or other platform without encryption support.
+      // Fall back to plaintext (bad!) but write a warning flag.
+      if (!fs.existsSync(_secretStoragePath)) fs.mkdirSync(_secretStoragePath, { recursive: true });
+      const warningPath = path.join(_secretStoragePath, '.plaintext-fallback-warning');
+      fs.writeFileSync(warningPath, `NO OS KEYCHAIN AVAILABLE. Secrets stored plaintext. Date: ${new Date().toISOString()}`, 'utf-8');
+      const filePath = path.join(_secretStoragePath, `${key}.plaintext`);
+      fs.writeFileSync(filePath, plaintext, 'utf-8');
+      return { ok: true, encrypted: false, warning: 'plaintext fallback' };
+    }
+    if (!fs.existsSync(_secretStoragePath)) fs.mkdirSync(_secretStoragePath, { recursive: true });
+    const encrypted = safeStorage.encryptString(plaintext);
+    const filePath = path.join(_secretStoragePath, `${key}.bin`);
+    fs.writeFileSync(filePath, encrypted);
+    return { ok: true, encrypted: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('secret:get', async (_event, key) => {
+  try {
+    let filePath = path.join(_secretStoragePath, `${key}.bin`);
+    if (!fs.existsSync(filePath)) {
+      // Try plaintext fallback (dev/headless).
+      filePath = path.join(_secretStoragePath, `${key}.plaintext`);
+      if (!fs.existsSync(filePath)) return { ok: false, value: null };
+      return { ok: true, value: fs.readFileSync(filePath, 'utf-8') };
+    }
+    const encrypted = fs.readFileSync(filePath);
+    const plaintext = safeStorage.decryptString(encrypted);
+    return { ok: true, value: plaintext };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('secret:delete', async (_event, key) => {
+  try {
+    let filePath = path.join(_secretStoragePath, `${key}.bin`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return { ok: true };
+    }
+    filePath = path.join(_secretStoragePath, `${key}.plaintext`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return { ok: true };
+    }
+    return { ok: true }; // Already gone is fine.
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('secret:list', async (_event) => {
+  try {
+    if (!fs.existsSync(_secretStoragePath)) return { ok: true, keys: [] };
+    const files = fs.readdirSync(_secretStoragePath);
+    const keys = files
+      .filter(f => f.endsWith('.bin') || f.endsWith('.plaintext'))
+      .map(f => f.replace(/\.(bin|plaintext)$/, ''));
+    return { ok: true, keys };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// Phase 2 auth: generate a one-time sign-in nonce (proves this install initiated the flow).
+const _signInNonces = new Map(); // nonce -> { generated_at_ms }
+ipcMain.handle('auth:begin-signin', async (_event) => {
+  const { randomUUID } = require('crypto');
+  const nonce = randomUUID();
+  _signInNonces.set(nonce, { generated_at_ms: Date.now() });
+  // Clean up expired nonces (older than 5 min) every time.
+  const now = Date.now();
+  for (const [n, data] of _signInNonces.entries()) {
+    if (now - data.generated_at_ms > 5 * 60 * 1000) {
+      _signInNonces.delete(n);
+    }
+  }
+  return { ok: true, nonce };
+});
+
 ipcMain.handle('get-update-status', () => cachedUpdateStatus);
 
 // One-shot recovery info: if the crash-watchdog relaunched us, returns the

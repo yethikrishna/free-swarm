@@ -1,6 +1,6 @@
 import React from 'react';
 import TextField from '@mui/material/TextField';
-import type { SchemaNode } from '@/shared/inputSchemaDefaults';
+import { validateNode, type SchemaNode } from '@/shared/inputSchemaDefaults';
 
 interface FieldProps {
   schema: SchemaNode;
@@ -34,14 +34,13 @@ export const NumberField: React.FC<FieldProps> = ({ schema, value, onChange, lab
     if (!focusedRef.current) setText(value === undefined || value === null ? '' : String(value));
   }, [value]);
 
+  // Validate the live text buffer (so "abc" flags while typing), reusing the
+  // shared range/integer rules. Pristine-empty stays calm (no red) per design.
   const rangeError = (() => {
-    if (text.trim() === '') return required ? 'Required' : '';
+    if (text.trim() === '') return '';
     const n = Number(text);
     if (Number.isNaN(n)) return 'Enter a number';
-    if (isInt && !Number.isInteger(n)) return 'Whole number only';
-    if (typeof min === 'number' && n < min) return `Min ${min}`;
-    if (typeof max === 'number' && n > max) return `Max ${max}`;
-    return '';
+    return validateNode(schema, n);
   })();
 
   const commit = (raw: string) => {
@@ -93,8 +92,6 @@ const FORMAT_INPUT: Record<string, { type: string; shrink?: boolean }> = {
   time: { type: 'time', shrink: true },
 };
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 /** String input. Multiline is decided ONCE from the schema (format=textarea or a
  *  large maxLength), never from the live value length, which previously toggled
  *  the control mid-typing and stole focus. Honors minLength/maxLength/pattern and
@@ -105,15 +102,7 @@ export const StringField: React.FC<FieldProps> = ({ schema, value, onChange, lab
   const multiline = fmt === 'textarea' || fmt === 'multiline' || (typeof schema.maxLength === 'number' && schema.maxLength > 120);
   const str = typeof value === 'string' ? value : value == null ? '' : String(value);
 
-  const error = (() => {
-    if (str === '') return required ? 'Required' : '';
-    if (typeof schema.minLength === 'number' && str.length < schema.minLength) return `Min ${schema.minLength} characters`;
-    if (fmt === 'email' && !EMAIL_RE.test(str)) return 'Enter a valid email';
-    if (schema.pattern) {
-      try { if (!new RegExp(schema.pattern).test(str)) return 'Invalid format'; } catch { /* bad pattern in schema: skip */ }
-    }
-    return '';
-  })();
+  const error = validateNode(schema, str);
 
   const counter = typeof schema.maxLength === 'number'
     ? `${str.length}/${schema.maxLength}`

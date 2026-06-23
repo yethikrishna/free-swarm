@@ -29,9 +29,8 @@ const InputSchemaForm: React.FC<Props> = ({ schema, value, onChange, label, requ
   const c = useClaudeTokens();
 
   if (schema.enum && schema.enum.length > 0) {
-    const empty = value === undefined || value === null || value === '';
     return (
-      <FormControl fullWidth size="small" required={required} error={required && empty} sx={{ mb: 1.5 }}>
+      <FormControl fullWidth size="small" required={required} sx={{ mb: 1.5 }}>
         {label && <InputLabel>{label}</InputLabel>}
         <Select
           value={value ?? ''}
@@ -47,11 +46,9 @@ const InputSchemaForm: React.FC<Props> = ({ schema, value, onChange, label, requ
             <MenuItem key={opt} value={opt}>{opt}</MenuItem>
           ))}
         </Select>
-        {(required && empty) ? (
-          <FormHelperText>Required</FormHelperText>
-        ) : schema.description ? (
+        {schema.description && (
           <FormHelperText sx={{ color: c.text.tertiary }}>{schema.description}</FormHelperText>
-        ) : null}
+        )}
       </FormControl>
     );
   }

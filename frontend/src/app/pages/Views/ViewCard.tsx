@@ -3,9 +3,10 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
-import EditIcon from '@mui/icons-material/Edit';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 import Icon from '@mui/material/Icon';
 import { Output } from '@/shared/state/outputsSlice';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
@@ -19,6 +20,9 @@ interface Props {
 
 const ViewCard: React.FC<Props> = ({ output, onClick, onDelete, onRun }) => {
   const c = useClaudeTokens();
+  // Delete is permanent and orphans the app's workspace, so require a second
+  // click. Inline confirm (no modal) keeps it in the hover-actions strip.
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   return (
     <Box
@@ -82,44 +86,75 @@ const ViewCard: React.FC<Props> = ({ output, onClick, onDelete, onRun }) => {
         )}
         <Box
           className="card-actions"
+          onClick={(e) => e.stopPropagation()}
           sx={{
             position: 'absolute',
             top: 8,
             right: 8,
             display: 'flex',
             gap: 0.5,
-            opacity: 0,
+            // Keep the confirm row visible even when the pointer leaves the card.
+            opacity: confirmDelete ? 1 : 0,
             transition: 'opacity 0.15s',
           }}
         >
-          <Tooltip title="Run">
-            <IconButton
-              size="small"
-              onClick={(e) => { e.stopPropagation(); onRun(); }}
-              sx={{
-                bgcolor: c.bg.surface,
-                color: c.accent.primary,
-                boxShadow: c.shadow.sm,
-                '&:hover': { bgcolor: c.bg.elevated },
-              }}
-            >
-              <PlayArrowIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Delete">
-            <IconButton
-              size="small"
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              sx={{
-                bgcolor: c.bg.surface,
-                color: c.status.error,
-                boxShadow: c.shadow.sm,
-                '&:hover': { bgcolor: c.bg.elevated },
-              }}
-            >
-              <DeleteOutlineIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
+          {confirmDelete ? (
+            <>
+              <Tooltip title="Confirm delete">
+                <IconButton
+                  size="small"
+                  aria-label="Confirm delete"
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); onDelete(); }}
+                  sx={{ bgcolor: c.bg.surface, color: c.status.error, boxShadow: c.shadow.sm, '&:hover': { bgcolor: c.bg.elevated } }}
+                >
+                  <CheckIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Cancel">
+                <IconButton
+                  size="small"
+                  aria-label="Cancel delete"
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
+                  sx={{ bgcolor: c.bg.surface, color: c.text.muted, boxShadow: c.shadow.sm, '&:hover': { bgcolor: c.bg.elevated } }}
+                >
+                  <CloseIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            </>
+          ) : (
+            <>
+              <Tooltip title="Run">
+                <IconButton
+                  size="small"
+                  aria-label="Run app"
+                  onClick={(e) => { e.stopPropagation(); onRun(); }}
+                  sx={{
+                    bgcolor: c.bg.surface,
+                    color: c.accent.primary,
+                    boxShadow: c.shadow.sm,
+                    '&:hover': { bgcolor: c.bg.elevated },
+                  }}
+                >
+                  <PlayArrowIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Delete">
+                <IconButton
+                  size="small"
+                  aria-label="Delete app"
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+                  sx={{
+                    bgcolor: c.bg.surface,
+                    color: c.status.error,
+                    boxShadow: c.shadow.sm,
+                    '&:hover': { bgcolor: c.bg.elevated },
+                  }}
+                >
+                  <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
         </Box>
       </Box>
 

@@ -187,21 +187,33 @@ export async function isRefreshTokenValid(jti: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-// Phase 1 OAuth: store a nonce + PKCE verifier for a sign-in request (one-time use, 10-min TTL).
-export async function storeOAuthNonce(nonce: string, codeVerifier: string, installId: string): Promise<void> {
+export interface OAuthNonceData {
+  code_verifier: string;
+  install_id: string;
+  local_port: string;
+  redirect_to: string;
+  client: string;
+  signin_nonce: string;
+}
+
+// Phase 1 OAuth: store a CSRF nonce + PKCE verifier + handoff metadata for a sign-in
+// request (one-time use, 10-min TTL). The callback recovers everything from here, so
+// the OAuth `state` param only needs to carry the opaque nonce.
+export async function storeOAuthNonce(nonce: string, data: OAuthNonceData): Promise<void> {
   await db()`
-    insert into oauth_nonces (nonce, code_verifier, install_id)
-    values (${nonce}, ${codeVerifier}, ${installId})
+    insert into oauth_nonces (nonce, code_verifier, install_id, local_port, redirect_to, client, signin_nonce)
+    values (${nonce}, ${data.code_verifier}, ${data.install_id}, ${data.local_port},
+            ${data.redirect_to}, ${data.client}, ${data.signin_nonce})
     on conflict (nonce) do nothing
   `;
 }
 
 // Look up and consume an OAuth nonce (delete on read; single-use).
-export async function consumeOAuthNonce(nonce: string): Promise<{ code_verifier: string; install_id: string } | null> {
+export async function consumeOAuthNonce(nonce: string): Promise<OAuthNonceData | null> {
   const rows = await db()`
     delete from oauth_nonces
     where nonce = ${nonce} and created_at > now() - interval '10 minutes'
-    returning code_verifier, install_id
+    returning code_verifier, install_id, local_port, redirect_to, client, signin_nonce
   `;
-  return (rows[0] as { code_verifier: string; install_id: string }) ?? null;
+  return (rows[0] as OAuthNonceData) ?? null;
 }

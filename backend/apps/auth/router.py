@@ -18,6 +18,8 @@ POST /api/auth/signout
 from __future__ import annotations
 
 import logging
+import secrets
+import time
 from contextlib import asynccontextmanager
 from typing import Optional, Literal
 
@@ -31,6 +33,33 @@ from backend.apps.settings.settings import load_settings, save_settings_async
 
 logger = logging.getLogger(__name__)
 
+# In-memory sign-in nonces. The renderer calls /begin-signin to mint one before
+# opening the OAuth browser; the cloud handoff page echoes it back in the
+# signin-activate POST. Validating it proves THIS install started the flow, so a
+# stray POST from any other source can't re-identify the install (closes Gap A).
+# {nonce: minted_at_epoch}; entries expire after _NONCE_TTL_SEC.
+_signin_nonces: dict[str, float] = {}
+_NONCE_TTL_SEC = 300.0
+
+
+def _mint_signin_nonce() -> str:
+    now = time.time()
+    # Opportunistic cleanup so the dict can't grow without bound.
+    for n, ts in list(_signin_nonces.items()):
+        if now - ts > _NONCE_TTL_SEC:
+            _signin_nonces.pop(n, None)
+    nonce = secrets.token_urlsafe(24)
+    _signin_nonces[nonce] = now
+    return nonce
+
+
+def _consume_signin_nonce(nonce: str) -> bool:
+    """True if the nonce was valid + unexpired; consumes it either way (single-use)."""
+    ts = _signin_nonces.pop(nonce, None)
+    if ts is None:
+        return False
+    return (time.time() - ts) <= _NONCE_TTL_SEC
+
 
 @asynccontextmanager
 async def auth_lifespan():
@@ -38,6 +67,18 @@ async def auth_lifespan():
 
 
 auth = SubApp("auth", auth_lifespan)
+
+
+@auth.router.post("/begin-signin")
+async def begin_signin():
+    """Mint a single-use nonce for a desktop sign-in attempt.
+
+    The renderer calls this immediately before opening the OAuth browser and
+    passes the nonce to the cloud /start endpoint. The cloud carries it through
+    the flow and echoes it back in the signin-activate POST, where we validate
+    it. This binds the eventual token handoff to the install that initiated it.
+    """
+    return {"nonce": _mint_signin_nonce()}
 
 
 def _proxy_url() -> str:
@@ -84,22 +125,33 @@ def _sync_identity_to_service(settings_obj) -> None:
 
 class SigninActivateRequest(BaseModel):
     token: str
-    signin_method: Literal["google", "email"]
+    signin_method: Literal["google", "github", "email"]
     email: Optional[str] = None
+    # Phase 1: refresh token (30d) issued alongside the 15m access token.
+    refresh_token: Optional[str] = None
+    # Phase 1: nonce minted by /begin-signin; proves this install started the flow.
+    nonce: Optional[str] = None
 
 
 @auth.router.post("/signin-activate")
 async def signin_activate(body: SigninActivateRequest):
     """Validate a freshly-minted sign-in bearer and persist it locally.
 
-    The bearer-handoff page (cloud lib/authMint.ts → bearerHandoffPage())
-    POSTs to this endpoint after a Google OAuth or magic-link flow. We
-    re-validate the bearer with the cloud; never just trust whatever
-    arrives at the localhost endpoint; then write user_id + email +
-    signin_method to settings so the renderer flips to signed-in.
+    The bearer-handoff page POSTs to this endpoint after a Google/GitHub OAuth
+    flow. We validate the install nonce (proving this install started the flow),
+    re-validate the bearer with the cloud (never trusting whatever arrives at the
+    localhost endpoint), then write user_id + email + signin_method to settings
+    so the renderer flips to signed-in.
     """
     if not body.token or len(body.token) < 16:
         raise HTTPException(status_code=400, detail="Invalid token")
+
+    # Validate the install nonce when present. A handoff that carries a nonce must
+    # carry a VALID one (rejects replayed/forged POSTs). Absence is tolerated only
+    # for the migration window where an older cloud build sends no nonce; once the
+    # cloud always sends one, flip this to a hard requirement.
+    if body.nonce is not None and not _consume_signin_nonce(body.nonce):
+        raise HTTPException(status_code=401, detail="Sign-in request expired or invalid")
 
     proxy = _proxy_url()
     try:
@@ -144,6 +196,7 @@ async def signin_activate(body: SigninActivateRequest):
     if isinstance(plan, str) and plan != "free":
         settings_obj.connection_mode = "freeswarm-pro"
         settings_obj.freeswarm_bearer_token = body.token
+        settings_obj.freeswarm_refresh_token = body.refresh_token
         settings_obj.freeswarm_proxy_url = proxy
         settings_obj.freeswarm_subscription_plan = plan
         if isinstance(expires, str):
@@ -154,6 +207,7 @@ async def signin_activate(body: SigninActivateRequest):
         # connection_mode; that's reserved for paid plans only so chat
         # routing keeps using own_key/BYO.
         settings_obj.freeswarm_bearer_token = body.token
+        settings_obj.freeswarm_refresh_token = body.refresh_token
         settings_obj.freeswarm_proxy_url = proxy
 
     await save_settings_async(settings_obj)
@@ -240,6 +294,7 @@ async def signout():
     settings_obj.user_email = None
     settings_obj.signin_method = None
     settings_obj.freeswarm_bearer_token = None
+    settings_obj.freeswarm_refresh_token = None
     settings_obj.connection_mode = "own_key"
     settings_obj.freeswarm_subscription_plan = None
     settings_obj.freeswarm_subscription_expires = None

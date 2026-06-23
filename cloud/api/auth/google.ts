@@ -21,31 +21,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const code = typeof req.query.code === 'string' ? req.query.code : null;
   if (!code) {
-    const localPort = typeof req.query.local_port === 'string' ? req.query.local_port : '8324';
-    const redirectTo = req.query.redirect_to === '/app' ? '/app' : '/account';
-    const client = req.query.client === 'web' ? 'web' : 'desktop';
-    const state = Buffer.from(JSON.stringify({ local_port: localPort, redirect_to: redirectTo, client })).toString('base64url');
-    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    url.searchParams.set('client_id', clientId);
-    url.searchParams.set('redirect_uri', redirectUri);
-    url.searchParams.set('response_type', 'code');
-    url.searchParams.set('scope', 'openid email');
-    url.searchParams.set('state', state);
-    res.redirect(302, url.toString());
+    // No code: this is the start of the flow. Forward to /start, which generates
+    // the PKCE verifier + CSRF nonce and redirects to Google's consent screen.
+    // (Single code path; direct hits to /api/auth/google still work.)
+    const qs = new URLSearchParams();
+    if (typeof req.query.local_port === 'string') qs.set('local_port', req.query.local_port);
+    if (typeof req.query.redirect_to === 'string') qs.set('redirect_to', req.query.redirect_to);
+    if (typeof req.query.client === 'string') qs.set('client', req.query.client);
+    if (typeof req.query.install_id === 'string') qs.set('install_id', req.query.install_id);
+    if (typeof req.query.signin_nonce === 'string') qs.set('signin_nonce', req.query.signin_nonce);
+    res.redirect(302, `/api/auth/google/start?${qs.toString()}`);
     return;
   }
 
-  // Phase 1: Validate nonce + PKCE (if present).
-  let codeVerifier: string | null = null;
-  let installId: string | null = null;
-  if (typeof req.query.state === 'string') {
-    const nonceData = await consumeOAuthNonce(req.query.state);
-    if (!nonceData) {
-      return json(res, 400, { error: 'Invalid or expired nonce' });
-    }
-    codeVerifier = nonceData.code_verifier;
-    installId = nonceData.install_id;
+  // Phase 1: Validate CSRF nonce + recover PKCE verifier + handoff metadata.
+  // The nonce is single-use (deleted on read); a missing/expired/replayed nonce is rejected.
+  const stateNonce = typeof req.query.state === 'string' ? req.query.state : '';
+  const nonceData = await consumeOAuthNonce(stateNonce);
+  if (!nonceData) {
+    return json(res, 400, { error: 'Invalid or expired sign-in request. Please try again.' });
   }
+  const codeVerifier = nonceData.code_verifier;
+  const installId = nonceData.install_id;
+  const signinNonce = nonceData.signin_nonce;
+  const isWebClient = nonceData.client === 'web';
+  const localPort = /^\d+$/.test(nonceData.local_port) ? nonceData.local_port : '8324';
+  const redirectTo = nonceData.redirect_to === '/app' ? '/app' : '/account';
 
   // Exchange the authorization code for an id_token, then read the verified email.
   // PKCE: include code_verifier if available (Phase 1).
@@ -76,31 +77,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const user = await upsertUser(email, 'google');
 
-  // Phase 1: Determine audience based on client type (desktop vs web).
-  // Default to 'web' if not set by Phase 0 nonce path.
-  let aud: 'desktop' | 'web' | 'cloud' = 'web';
-  let localPort = '8324';
-  let redirectTo = '/account';
-  let clientWeb = false;
-
-  // If we have install_id from nonce, this is a desktop sign-in (aud=desktop).
-  if (installId) {
-    aud = 'desktop';
-  } else {
-    // Fall back to old state-based detection (Phase 1 compatibility).
-    try {
-      const stateRaw = typeof req.query.state === 'string' ? req.query.state : '';
-      const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString());
-      if (typeof state.local_port === 'string' && /^\d+$/.test(state.local_port)) localPort = state.local_port;
-      if (state.redirect_to === '/app') redirectTo = '/app';
-      if (state.client === 'web') {
-        clientWeb = true;
-        aud = 'web';
-      } else {
-        aud = 'desktop';
-      }
-    } catch {}
-  }
+  // Audience follows the client that started the flow: web tab -> web-aud,
+  // desktop -> desktop-aud. This prevents a web token from being replayed against
+  // the desktop's localhost endpoint and vice versa (Gap G).
+  const aud: 'desktop' | 'web' | 'cloud' = isWebClient ? 'web' : 'desktop';
+  const clientWeb = isWebClient;
+  void installId; // bound into the flow via the nonce; not needed past this point.
 
   // Mint access token + refresh token (15m + 30d, audience-scoped).
   const accessToken = await mintAccessToken({ sub: user.id, email: user.email }, aud);
@@ -123,6 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const emailJson = JSON.stringify(email);
   const localPortJson = JSON.stringify(localPort);
   const clientWebJson = JSON.stringify(clientWeb);
+  const signinNonceJson = JSON.stringify(signinNonce);
   const webAppUrl = JSON.stringify((process.env.WEB_APP_ORIGIN || 'https://freeswarm.myndlabs.tech') + redirectTo);
 
   const html = `
@@ -189,6 +172,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const email = ${emailJson};
     const localPort = ${localPortJson};
     const clientWeb = ${clientWebJson};
+    const signinNonce = ${signinNonceJson};
     const webAppUrl = ${webAppUrl};
 
     async function handoff() {
@@ -206,6 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 refresh_token: refreshToken,
                 signin_method: 'google',
                 email,
+                nonce: signinNonce,
               }),
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
@@ -216,7 +201,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return;
           }
         } catch (err) {
-          // No desktop (timeout or fetch failed); fall through to web path.
+          // No desktop (timeout or fetch failed); fall through to deep-link, then web path.
+        }
+
+        // Desktop handoff via localhost failed; try the freeswarm:// deep link as a
+        // fallback so a running app still picks up the sign-in even if its localhost
+        // port shifted. (Closes Gap H: this is the emitter for the signin=true branch.)
+        try {
+          const deepLink = new URL('freeswarm://auth');
+          deepLink.searchParams.set('signin', 'true');
+          deepLink.searchParams.set('signin_method', 'google');
+          deepLink.searchParams.set('token', accessToken);
+          deepLink.searchParams.set('refresh_token', refreshToken);
+          deepLink.searchParams.set('email', email);
+          if (signinNonce) deepLink.searchParams.set('nonce', signinNonce);
+          window.location.href = deepLink.toString();
+          // Give the OS a moment to hand off to the app before falling through.
+          await new Promise((r) => setTimeout(r, 1200));
+          return;
+        } catch (err) {
+          // Deep-link unavailable; fall through to the web path.
         }
       }
 

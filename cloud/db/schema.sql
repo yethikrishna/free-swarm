@@ -71,12 +71,18 @@ create table if not exists refresh_tokens (
   created_at timestamptz not null default now()
 );
 
--- Phase 1 OAuth: temporary nonce + PKCE verifier pairs for sign-in (one-time use, 10-min TTL).
--- Consumed once on callback (deleted on read). Prevents CSRF and enables PKCE.
+-- Phase 1 OAuth: temporary CSRF nonce + PKCE verifier + handoff metadata for sign-in
+-- (one-time use, 10-min TTL). Consumed once on callback (deleted on read). Prevents
+-- CSRF, enables PKCE, and carries the desktop's signin_nonce so the callback can bind
+-- the handoff to the install that started it.
 create table if not exists oauth_nonces (
   nonce         text primary key,
   code_verifier text not null,
-  install_id    text not null,
+  install_id    text not null default '',
+  local_port    text not null default '8324',
+  redirect_to   text not null default '/account',
+  client        text not null default 'desktop',
+  signin_nonce  text not null default '',
   created_at    timestamptz not null default now()
 );
 

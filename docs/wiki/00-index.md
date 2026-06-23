@@ -12,16 +12,13 @@ hard-won invariants.
 | 01 | [Backend agent orchestration](01-backend-orchestration.md) | Complete |
 | 02 | [Backend apps & services](02-backend-apps-services.md) (outputs/apps, service, subscription, tools_lib, modes, dashboards, skills) | Complete |
 | 03 | [Backend core & security](03-backend-core-security.md) (main.py, auth, ssrf, lifespans, attack surface) | Complete |
-| 04 | Frontend architecture (Main.tsx, AppShell, Redux, hooks, config) | Pending* |
-| 05 | Frontend pages & canvas (Dashboard canvas, AgentChat, Views, overlays) | Pending* |
+| 04 | [Frontend architecture](04-frontend-architecture.md) (Main.tsx, AppShell, Redux, hooks, config) | Complete |
+| 05 | [Frontend pages & canvas](05-frontend-pages-canvas.md) (Dashboard canvas, AgentChat, Views, overlays) | Complete |
 | 06 | [Electron shell](06-electron-shell.md) (boot, backend spawn + watchdog, IPC, updater, deep links) | Complete |
-| 07 | Cloud & router (cloud service, 9router standalone vs packaged) | Pending* |
-| 08 | Auth flows & intermixing gaps (app vs web vs cloud, device logins, callbacks) | Pending* |
+| 07 | [Cloud & router](07-cloud-9router.md) (cloud service, 9router standalone vs packaged) | Complete |
+| 08 | [Auth flows & intermixing gaps](08-auth-flows.md) (app vs web vs cloud, device logins, callbacks) | Complete |
 
-\* Sections 04, 05, 07, 08 were cut off mid-build by an account-level agent
-session limit (resets 14:00 UTC). They will be written in the next pass. Section
-08 (auth) is the prerequisite for the device-login refactor and must land before
-that work begins.
+All sections complete. The wiki is a comprehensive map of FreeSwarm's architecture grounded in file:line references.
 
 ## How this wiki was built
 

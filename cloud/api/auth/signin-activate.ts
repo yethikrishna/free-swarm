@@ -12,12 +12,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handlePreflight(req, res)) return;
   if (req.method !== 'POST') return methodNotAllowed(res, 'POST');
 
-  const body = (req.body ?? {}) as { token?: string; signin_method?: string };
+  const body = (req.body ?? {}) as { token?: string; signin_method?: string; nonce?: string };
   const token = body.token;
   if (!token || token.length < 16) return json(res, 400, { error: 'Invalid token' });
 
-  const claims = await verifyToken(token);
-  if (!claims) return json(res, 401, { error: 'Token rejected' });
+  // Phase 1/3: verify token with aud=desktop (prevent cross-surface replay).
+  // If the token carries web-aud, reject it (closes Gap G).
+  const claims = await verifyToken(token, 'desktop');
+  if (!claims) return json(res, 401, { error: 'Token rejected or invalid audience' });
 
   const user = await getUserById(claims.sub);
   if (!user) return json(res, 401, { error: 'Unknown user' });

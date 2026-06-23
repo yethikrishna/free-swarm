@@ -260,7 +260,12 @@ validation → frontend). Status of each gap below; details follow.
 - **OS-keychain API keys (military-grade).** Provider keys live in the OS keychain (Electron `safeStorage`: Keychain/DPAPI/libsecret) and are pushed into a RAM-only backend store (`secret_store.py`) on boot. `credentials.py` resolves keychain-first, settings.json fallback. Endpoints: `/api/settings/secrets/{push,clear,present}`. Fully additive; covered by `tests/test_secret_store.py`.
 
 ### Remaining follow-ups
-- **Remove keys from disk by default.** The keychain store is wired and preferred, but `update_settings` still persists keys to settings.json. Completing this needs the Settings API tab to show a "stored securely" presence state (via `/secrets/present`) and omit unchanged keys from the PUT. Until then keys live in *both* places on keychain-capable installs.
+- ~~Remove keys from disk by default.~~ **Done.** On keychain-capable installs the
+  ApiKeyCard writes keys straight to the OS keychain (never the settings form),
+  `/secrets/push` blanks any keychained field on disk, `update_settings` force-blanks
+  fields already in the store, and boot migrates any legacy on-disk keys into the
+  keychain. Keys now live only in the OS keychain + RAM. Dev/headless without a
+  keychain falls back to settings.json as before. Covered by `tests/test_keychain_secrets.py`.
 - **Gap F consumer fix** in `subscription/router.py:154`.
 - **Device-code flow for FreeSwarm account** (RFC 8628) is designed but not yet built (Phase 5); distinct from the 9Router third-party provider device flows.
 

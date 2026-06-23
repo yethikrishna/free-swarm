@@ -224,6 +224,51 @@ async def signin_activate(body: SigninActivateRequest):
 
 
 # ---------------------------------------------------------------------------
+# POST /api/auth/refresh
+# ---------------------------------------------------------------------------
+
+@auth.router.post("/refresh")
+async def refresh_token():
+    """Silently re-mint the access bearer from the stored 30d refresh token.
+
+    Called when an access token has expired (the cloud returned 401). Avoids
+    forcing the user to sign in again. Returns {ok, refreshed} so the renderer
+    can decide whether to retry or fall back to sign-out. Routing mirrors back
+    into 9Router so any pro lane picks up the fresh bearer.
+    """
+    settings_obj = load_settings()
+    refresh = getattr(settings_obj, "freeswarm_refresh_token", None)
+    if not refresh:
+        raise HTTPException(status_code=401, detail="No refresh token; sign in again")
+
+    proxy = _proxy_url()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(
+                f"{proxy}/api/auth/refresh",
+                json={"refresh_token": refresh, "aud": "desktop"},
+            )
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Could not reach sign-in service: {e}")
+
+    if r.status_code == 401:
+        # Refresh token itself is dead; the renderer should sign the user out.
+        raise HTTPException(status_code=401, detail="Session expired; sign in again")
+    if r.status_code >= 400:
+        raise HTTPException(status_code=r.status_code, detail=r.text[:200] or "Refresh failed")
+
+    data = r.json()
+    access_token = data.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=502, detail="No access token returned")
+
+    settings_obj.freeswarm_bearer_token = access_token
+    await save_settings_async(settings_obj)
+    await _sync_pro_routing(settings_obj)
+    return {"ok": True, "refreshed": True}
+
+
+# ---------------------------------------------------------------------------
 # POST /api/auth/signout
 # ---------------------------------------------------------------------------
 

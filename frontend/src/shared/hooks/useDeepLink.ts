@@ -32,13 +32,16 @@ export function useDeepLink(): void {
         const email = url.searchParams.get('email');
         const plan = url.searchParams.get('plan');
         const expires = url.searchParams.get('expires');
+        const refreshToken = url.searchParams.get('refresh_token');
+        const nonce = url.searchParams.get('nonce');
 
         if (isSignin) {
-          // 1.0.29 only ships Google sign-in; read for forward compat.
-          void signinMethodRaw;
-          report('signin', 'deep_link_received', { method: 'google' });
+          // The cloud handoff emits this deep link as a fallback when its localhost
+          // POST can't reach us; it carries the method, refresh token, and install nonce.
+          const method = signinMethodRaw === 'github' ? 'github' : 'google';
+          report('signin', 'deep_link_received', { method });
 
-          dispatch(activateSignin({ token, signin_method: 'google', email }))
+          dispatch(activateSignin({ token, signin_method: method, email, refresh_token: refreshToken, nonce }))
             .unwrap()
             .then((res) => {
               report('signin', 'activated', { method: res.signin_method, plan: res.plan });

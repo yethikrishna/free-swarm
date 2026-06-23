@@ -13,7 +13,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { useAppDispatch, useAppSelector } from '@/shared/hooks';
 import { fetchSettings } from '@/shared/state/settingsSlice';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
-import { FREESWARM_DEFAULT_PROXY_URL } from '@/shared/config';
+import { API_BASE, FREESWARM_DEFAULT_PROXY_URL } from '@/shared/config';
 import { report } from '@/shared/serviceClient';
 
 const GitHubIcon: React.FC = () => (
@@ -38,7 +38,20 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
 
   const cloudBase = proxyUrl.replace(/\/$/, '');
 
-  const openOAuth = (path: string, eventName: string) => {
+  // Mint a single-use install nonce before opening the browser. The cloud carries
+  // it through OAuth and echoes it back to the local backend's signin-activate,
+  // which validates it so a stray POST can't re-identify this install (Gap A).
+  const beginNonce = async (): Promise<string> => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/begin-signin`, { method: 'POST' });
+      if (res.ok) return (await res.json()).nonce ?? '';
+    } catch {
+      /* nonce is best-effort; the backend tolerates its absence during migration */
+    }
+    return '';
+  };
+
+  const openOAuth = async (path: string, eventName: string) => {
     report('signin', eventName);
     const api = (window as any).freeswarm;
     const url = `${cloudBase}${path}`;
@@ -46,16 +59,20 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
     else window.open(url, '_blank');
   };
 
-  const onGoogle = () => {
+  const onGoogle = async () => {
     const localPort = (window as any).__FREESWARM_PORT__ || 8324;
+    const nonce = await beginNonce();
     const params = new URLSearchParams({ install_id: installId, local_port: String(localPort), redirect_to: '/app' });
-    openOAuth(`/api/auth/google/start?${params.toString()}`, 'google_clicked');
+    if (nonce) params.set('signin_nonce', nonce);
+    void openOAuth(`/api/auth/google/start?${params.toString()}`, 'google_clicked');
   };
 
-  const onGitHub = () => {
+  const onGitHub = async () => {
     const localPort = (window as any).__FREESWARM_PORT__ || 8324;
+    const nonce = await beginNonce();
     const params = new URLSearchParams({ install_id: installId, local_port: String(localPort), redirect_to: '/app' });
-    openOAuth(`/api/auth/github?${params.toString()}`, 'github_clicked');
+    if (nonce) params.set('signin_nonce', nonce);
+    void openOAuth(`/api/auth/github?${params.toString()}`, 'github_clicked');
   };
 
   return (

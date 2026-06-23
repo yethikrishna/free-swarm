@@ -29,8 +29,12 @@ async function bootstrap() {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get('token');
     if (urlToken) {
-      const { setCloudToken } = await import('./shared/cloud');
+      const { setCloudToken, setCloudRefreshToken } = await import('./shared/cloud');
       setCloudToken(urlToken);
+      // The handoff also passes a 30d refresh token so the 15m access token can
+      // be silently re-minted instead of bouncing the user to sign-in.
+      const urlRefresh = params.get('refresh_token');
+      if (urlRefresh) setCloudRefreshToken(urlRefresh);
       window.history.replaceState({}, '', window.location.pathname);
     }
   }

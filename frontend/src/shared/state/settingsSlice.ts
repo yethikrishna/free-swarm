@@ -107,8 +107,10 @@ export interface ActivateSubscriptionPayload {
 
 export interface ActivateSigninPayload {
   token: string;
-  signin_method: 'google' | 'email';
+  signin_method: 'google' | 'github' | 'email';
   email?: string | null;
+  refresh_token?: string | null;
+  nonce?: string | null;
 }
 
 export interface BrowseResult {
@@ -232,7 +234,7 @@ export const activateSignin = createAsyncThunk(
       user_id: string;
       email: string;
       plan: string;
-      signin_method: 'google' | 'email';
+      signin_method: 'google' | 'github' | 'email';
     };
   },
 );

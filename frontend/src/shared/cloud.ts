@@ -5,6 +5,7 @@
 import { FREESWARM_DEFAULT_PROXY_URL } from './config';
 
 const TOKEN_KEY = 'fs_web_token';
+const REFRESH_KEY = 'fs_web_refresh_token';
 
 export function getCloudToken(): string {
   try {
@@ -22,12 +23,48 @@ export function setCloudToken(token: string): void {
   }
 }
 
-export function clearCloudToken(): void {
+export function getCloudRefreshToken(): string {
   try {
-    localStorage.removeItem(TOKEN_KEY);
+    return localStorage.getItem(REFRESH_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function setCloudRefreshToken(token: string): void {
+  try {
+    localStorage.setItem(REFRESH_KEY, token);
   } catch {
     /* ignore */
   }
+}
+
+export function clearCloudToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+// Exchange the stored refresh token for a fresh 15m access token. Returns the new
+// token on success (and persists it), or '' if no/expired refresh token.
+export async function refreshCloudToken(): Promise<string> {
+  const refresh = getCloudRefreshToken();
+  if (!refresh) return '';
+  try {
+    const r = await post('/api/auth/refresh', { refresh_token: refresh, aud: 'web' });
+    if (!r.ok) return '';
+    const data = (await r.json()) as { access_token?: string };
+    if (data.access_token) {
+      setCloudToken(data.access_token);
+      return data.access_token;
+    }
+  } catch {
+    /* network failure: caller falls back to sign-out */
+  }
+  return '';
 }
 
 export interface CloudMe {
@@ -61,12 +98,22 @@ export async function devLogin(email: string): Promise<string> {
 }
 
 // Resolve the bearer to a profile + plan. null means the token is dead (401)
-// and the caller should sign out.
+// and the caller should sign out. On a 401 we first try to silently re-mint the
+// access token from the refresh token; only a failed refresh signs the user out.
 export async function fetchMe(token: string): Promise<CloudMe | null> {
   const r = await fetch(`${FREESWARM_DEFAULT_PROXY_URL}/api/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (r.status === 401) return null;
+  if (r.status === 401) {
+    const fresh = await refreshCloudToken();
+    if (!fresh) return null;
+    const r2 = await fetch(`${FREESWARM_DEFAULT_PROXY_URL}/api/me`, {
+      headers: { Authorization: `Bearer ${fresh}` },
+    });
+    if (r2.status === 401) return null;
+    if (!r2.ok) throw new Error('Could not load your account right now.');
+    return (await r2.json()) as CloudMe;
+  }
   if (!r.ok) throw new Error('Could not load your account right now.');
   return (await r.json()) as CloudMe;
 }

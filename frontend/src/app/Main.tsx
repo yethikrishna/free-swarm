@@ -249,6 +249,23 @@ const SettingsLoader: React.FC<{ children: React.ReactNode }> = ({ children }) =
     if (loaded) setThemeMode(theme as 'light' | 'dark');
   }, [loaded, theme, setThemeMode]);
 
+  // Load OS-keychain-backed API keys into the backend's in-memory secret store on
+  // boot (desktop only; no-op on web). One-shot per launch. Best-effort: the
+  // settings.json fallback covers the case where the keychain is empty/unavailable.
+  useEffect(() => {
+    if (!loaded) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { loadKeychainSecretsToBackend } = await import('@/shared/keychain');
+        if (!cancelled) await loadKeychainSecretsToBackend();
+      } catch {
+        /* keychain bridge absent (web) or backend cold: settings.json still works */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [loaded]);
+
   useEffect(() => {
     if (!loaded) return;
     (window as any).freeswarm?.setAllowPrerelease?.(allowExperimentalUpdates);

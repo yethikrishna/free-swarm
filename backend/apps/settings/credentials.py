@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from backend.apps.settings.secret_store import resolve as _resolve_secret
+
 if TYPE_CHECKING:
     import anthropic
     from backend.apps.settings.models import AppSettings
@@ -59,24 +61,24 @@ def validate_credentials(settings: AppSettings, provider: str = "anthropic") -> 
             if not token:
                 raise ValueError("Free Swarm account not connected. Sign in via Settings -> API.")
             return
-        if settings.anthropic_api_key:
+        if _resolve_secret(settings, "anthropic_api_key"):
             return
         raise ValueError("Anthropic API key not configured. Set it in Settings, or connect a subscription.")
     elif p == "openai":
-        if settings.openai_api_key:
+        if _resolve_secret(settings, "openai_api_key"):
             return
         raise ValueError("OpenAI API key not configured. Set it in Settings, or connect a subscription.")
     elif p in ("gemini", "google"):
-        if getattr(settings, "google_api_key", None):
+        if _resolve_secret(settings, "google_api_key"):
             return
         raise ValueError("Google API key not configured. Set it in Settings, or connect a subscription.")
     elif p == "openrouter":
-        if getattr(settings, "openrouter_api_key", None):
+        if _resolve_secret(settings, "openrouter_api_key"):
             return
         raise ValueError("OpenRouter API key not configured. Set it in Settings.")
     elif p in ("xai", "meta", "deepseek", "mistral", "qwen", "cohere"):
         # These providers route through OpenRouter, so its key is required.
-        if getattr(settings, "openrouter_api_key", None):
+        if _resolve_secret(settings, "openrouter_api_key"):
             return
         raise ValueError(f"{provider} requires an OpenRouter API key, or connect a subscription via 9Router.")
     else:
@@ -99,16 +101,16 @@ def get_provider_credentials(settings: AppSettings, provider: str) -> dict[str, 
                 "auth_token": token or "",
                 "base_url": base or FREESWARM_DEFAULT_PROXY_URL,
             }
-        return {"api_key": settings.anthropic_api_key or ""}
+        return {"api_key": _resolve_secret(settings, "anthropic_api_key") or ""}
 
     if p in ("openai", "codex"):
-        return {"api_key": settings.openai_api_key or ""}
+        return {"api_key": _resolve_secret(settings, "openai_api_key") or ""}
 
     if p in ("gemini", "google", "gemini-cli"):
-        return {"api_key": getattr(settings, "google_api_key", "") or ""}
+        return {"api_key": _resolve_secret(settings, "google_api_key") or ""}
 
     if p == "openrouter":
-        return {"api_key": getattr(settings, "openrouter_api_key", "") or ""}
+        return {"api_key": _resolve_secret(settings, "openrouter_api_key") or ""}
 
     for cp in getattr(settings, "custom_providers", []):
         if cp.name.lower() == p:
@@ -130,9 +132,10 @@ def get_anthropic_client(settings: AppSettings) -> anthropic.AsyncAnthropic:
             base_url=base or FREESWARM_DEFAULT_PROXY_URL,
         )
 
-    # Prefer the user's own API key when present.
-    if settings.anthropic_api_key:
-        return anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    # Prefer the user's own API key when present (keychain-backed first).
+    anthropic_key = _resolve_secret(settings, "anthropic_api_key")
+    if anthropic_key:
+        return anthropic.AsyncAnthropic(api_key=anthropic_key)
 
     # Fall back to 9Router (free for users with Claude/ChatGPT/Gemini subscriptions).
     if _check_9router():

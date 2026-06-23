@@ -273,6 +273,67 @@ async def update_settings(body: AppSettings):
     return {"ok": True, "settings": body.model_dump()}
 
 
+class SecretsPushPayload(BaseModel):
+    # Provider key fields sourced from the OS keychain; only SECRET_FIELDS are honored.
+    secrets: dict[str, Optional[str]]
+
+
+@settings.router.post("/secrets/push")
+async def push_secrets_endpoint(body: SecretsPushPayload):
+    """Load API keys from the renderer's OS keychain into the in-memory store.
+
+    Called on boot and whenever the user changes a key. Keys live in RAM only;
+    they're rebuilt from the keychain each launch so plaintext keys don't need
+    to persist in settings.json. Additive: until this is called, credential
+    resolution falls back to settings.json exactly as before.
+    """
+    from backend.apps.settings.secret_store import push_secrets, present_map
+    push_secrets(body.secrets)
+    # Mirror keychain-backed provider keys into 9Router so its lanes stay in sync.
+    try:
+        from backend.apps.settings.secret_store import get_secret
+        from backend.apps.nine_router import (
+            ensure_running as _9r_ensure,
+            is_running as _9r_running,
+            sync_gemini_api_key,
+            sync_openai_api_key,
+            sync_openrouter_api_key,
+        )
+
+        async def _sync_router_keys():
+            try:
+                if not _9r_running():
+                    await _9r_ensure()
+                if get_secret("google_api_key"):
+                    await sync_gemini_api_key(get_secret("google_api_key"))
+                if get_secret("openai_api_key"):
+                    await sync_openai_api_key(get_secret("openai_api_key"))
+                if get_secret("openrouter_api_key"):
+                    await sync_openrouter_api_key(get_secret("openrouter_api_key"))
+            except Exception as e:
+                logger.warning(f"Secret-store 9router sync failed: {e}")
+
+        asyncio.create_task(_sync_router_keys())
+    except Exception:
+        pass
+    return {"ok": True, "present": present_map()}
+
+
+@settings.router.post("/secrets/clear")
+async def clear_secrets_endpoint():
+    """Drop all in-memory secrets (sign-out / lock)."""
+    from backend.apps.settings.secret_store import clear_secrets
+    clear_secrets()
+    return {"ok": True}
+
+
+@settings.router.get("/secrets/present")
+async def secrets_present_endpoint():
+    """Report which keychain-backed secrets are currently loaded (UI presence UX)."""
+    from backend.apps.settings.secret_store import present_map
+    return {"present": present_map()}
+
+
 class AppThemeOverridePayload(BaseModel):
     mode: Optional[Literal["light", "dark"]] = None
 

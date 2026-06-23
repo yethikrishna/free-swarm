@@ -51,6 +51,13 @@ declare global {
     openExternal: (url: string) => Promise<void>;
     onAuthUrl?: (cb: (url: string) => void) => () => void;
     onOauthClaim?: (cb: (url: string) => void) => () => void;
+    // OS-keychain secret storage (Electron safeStorage). IPC-only; never window globals.
+    setSecret?: (key: string, plaintext: string) => Promise<{ ok: boolean; encrypted?: boolean; warning?: string; error?: string }>;
+    getSecret?: (key: string) => Promise<{ ok: boolean; value?: string | null; error?: string }>;
+    deleteSecret?: (key: string) => Promise<{ ok: boolean; error?: string }>;
+    listSecrets?: () => Promise<{ ok: boolean; keys?: string[]; error?: string }>;
+    // One-time sign-in nonce: proves this install initiated an OAuth flow.
+    beginSignin?: () => Promise<{ ok: boolean; nonce: string }>;
   }
 
   interface Window {

@@ -53,6 +53,12 @@ class ErrorBoundary extends React.Component<Props, State> {
     try { window.location.reload(); } catch {}
   };
 
+  handleCopyDetails = () => {
+    const { error } = this.state;
+    const details = String(error?.stack || error?.message || error || '');
+    try { navigator.clipboard?.writeText(details); } catch {}
+  };
+
   handleResetState = () => {
     try {
       const keys = Object.keys(localStorage);
@@ -109,34 +115,18 @@ class ErrorBoundary extends React.Component<Props, State> {
       border: '1px solid rgba(255,255,255,0.15)',
       color: '#dad8d2',
     };
-    const stack: React.CSSProperties = {
-      marginTop: 16,
-      fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-      fontSize: 11,
-      lineHeight: 1.5,
-      background: '#0a0b0d',
-      padding: 12,
-      borderRadius: 6,
-      maxHeight: 200,
-      overflow: 'auto',
-      whiteSpace: 'pre-wrap',
-      wordBreak: 'break-all',
-      color: '#9c9a92',
-    };
-
     return (
       <div style={wrap} role="alert" aria-live="assertive">
         <div style={card}>
           <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 600 }}>{title}</h2>
           <p style={{ margin: '0 0 16px', color: '#9c9a92', fontSize: 14, lineHeight: 1.5 }}>
-            We caught it before it crashed everything. The error is below; copy it
-            if you want to share. Reload usually fixes it.
+            We caught it before it crashed everything. Reloading usually fixes it.
           </p>
           <div>
             <button type="button" style={btn} onClick={this.handleReload}>Reload</button>
             <button type="button" style={btnSecondary} onClick={this.handleResetState}>Reset & reload</button>
+            <button type="button" style={btnSecondary} onClick={this.handleCopyDetails}>Copy details</button>
           </div>
-          <pre style={stack}>{String(error?.stack || error?.message || error)}</pre>
         </div>
       </div>
     );

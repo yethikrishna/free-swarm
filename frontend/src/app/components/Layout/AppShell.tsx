@@ -512,8 +512,8 @@ const AppShell: React.FC = () => {
             gap: 1.5,
             px: 2,
             py: 0.6,
-            bgcolor: 'rgba(239, 68, 68, 0.08)',
-            borderBottom: '1px solid rgba(239, 68, 68, 0.18)',
+            bgcolor: c.status.errorBg,
+            borderBottom: `1px solid ${c.status.error}2E`,
             flexShrink: 0,
             animation: showWarningBanner ? 'warning-fade-in 0.4s ease-out' : undefined,
             '@keyframes warning-fade-in': {
@@ -523,7 +523,7 @@ const AppShell: React.FC = () => {
           }}
         >
           <ErrorSlime size={22} />
-          <Typography sx={{ fontSize: '0.86rem', color: '#ef4444', flex: 1, fontWeight: 500, letterSpacing: '0.01em' }}>
+          <Typography sx={{ fontSize: '0.86rem', color: c.status.error, flex: 1, fontWeight: 500, letterSpacing: '0.01em' }}>
             {!isOnline
               ? 'No internet connection; agents cannot reach AI models or external services'
               : (

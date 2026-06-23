@@ -10,6 +10,7 @@ import {
   BuiltinTool,
 } from '@/shared/state/toolsSlice';
 import { McpServer } from '@/shared/state/mcpRegistrySlice';
+import { friendlyError } from '@/shared/friendlyError';
 import { ToolForm, emptyForm } from '../toolsHelpers';
 import { Integration } from '../integrations';
 import { useToolConnections } from './useToolConnections';
@@ -63,8 +64,8 @@ export function useToolsActions({ items, allTools, regServersRaw, closeMenu }: T
           if (discoverTools.fulfilled.match(discoverResult)) {
             setSnackbar({ open: true, message: `${integration.name} ready, actions discovered` });
           } else {
-            const detail = (discoverResult as any).error?.message || 'discovery failed';
-            setSnackbar({ open: true, message: `${integration.name}: ${detail}`, severity: 'error' });
+            const msg = friendlyError((discoverResult as any).error?.message, `Couldn't reach ${integration.name}. Make sure it's installed and running.`);
+            setSnackbar({ open: true, message: msg, severity: 'error' });
           }
         }
       } else {
@@ -87,9 +88,8 @@ export function useToolsActions({ items, allTools, regServersRaw, closeMenu }: T
             if (discoverTools.fulfilled.match(discoverResult)) {
               setSnackbar({ open: true, message: `${integration.name} ready, actions discovered` });
             } else {
-              const detail = (discoverResult as any).error?.message
-                || `discovery failed; is ${integration.mcp_config.command || 'the server'} installed?`;
-              setSnackbar({ open: true, message: `${integration.name}: ${detail}`, severity: 'error' });
+              const msg = friendlyError((discoverResult as any).error?.message, `Enabled ${integration.name}, but couldn't discover its actions. Make sure it's installed and running.`);
+              setSnackbar({ open: true, message: msg, severity: 'error' });
             }
           }
         }
@@ -106,8 +106,8 @@ export function useToolsActions({ items, allTools, regServersRaw, closeMenu }: T
       if (discoverTools.fulfilled.match(result)) {
         setSnackbar({ open: true, message: 'Actions discovered successfully' });
       } else {
-        const detail = (result as any).error?.message || 'Discovery failed; is the MCP server running?';
-        setSnackbar({ open: true, message: detail, severity: 'error' });
+        const msg = friendlyError((result as any).error?.message, "Couldn't discover actions. Make sure the server is installed and running.");
+        setSnackbar({ open: true, message: msg, severity: 'error' });
       }
     } finally {
       setDiscovering(false);

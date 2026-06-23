@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Box from '@mui/material/Box';
+import Fade from '@mui/material/Fade';
 import InputBase from '@mui/material/InputBase';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -198,8 +199,6 @@ const GlobalSearchPalette: React.FC<Props> = ({ open, onClose }) => {
     }
   }, [results, selectedIndex, handleSelect, onClose]);
 
-  if (!open) return null;
-
   const actionSection = results.filter((r): r is ActionResult => r.kind === 'action');
   const dashSection = results.filter((r): r is DashboardResult => r.kind === 'dashboard');
   const sessSection = results.filter((r): r is SessionResult => r.kind === 'session');
@@ -208,7 +207,8 @@ const GlobalSearchPalette: React.FC<Props> = ({ open, onClose }) => {
   const isStillSearching = !!query.trim() && searchLoading && searchQuery !== query.trim();
 
   return (
-    <>
+    <Fade in={open} timeout={{ enter: 200, exit: 220 }} unmountOnExit>
+      <Box>
       {/* Backdrop */}
       <Box
         onClick={onClose}
@@ -341,7 +341,8 @@ const GlobalSearchPalette: React.FC<Props> = ({ open, onClose }) => {
           <span>esc close</span>
         </Box>
       </Box>
-    </>
+      </Box>
+    </Fade>
   );
 };
 

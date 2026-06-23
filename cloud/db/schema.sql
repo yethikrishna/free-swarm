@@ -71,6 +71,15 @@ create table if not exists refresh_tokens (
   created_at timestamptz not null default now()
 );
 
+-- Phase 1 OAuth: temporary nonce + PKCE verifier pairs for sign-in (one-time use, 10-min TTL).
+-- Consumed once on callback (deleted on read). Prevents CSRF and enables PKCE.
+create table if not exists oauth_nonces (
+  nonce         text primary key,
+  code_verifier text not null,
+  install_id    text not null,
+  created_at    timestamptz not null default now()
+);
+
 create index if not exists usage_logs_user_idx on usage_logs (user_id, created_at desc);
 create index if not exists fusion_configs_user_idx on fusion_configs (user_id);
 create index if not exists revoked_jtis_user_idx on revoked_jtis (user_id, revoked_at desc);

@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handlePreflight, json } from '../../lib/http';
-import { mintToken } from '../../lib/auth';
-import { upsertUser } from '../../lib/db';
+import { mintAccessToken, mintRefreshToken, verifyToken } from '../../lib/auth';
+import { upsertUser, consumeOAuthNonce, storeRefreshToken } from '../../lib/db';
+import { createHash } from 'crypto';
 
 // GET /api/auth/google
 //   (no code)        -> 302 redirect to Google's consent screen
@@ -34,17 +35,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Phase 1: Validate nonce + PKCE (if present).
+  let codeVerifier: string | null = null;
+  let installId: string | null = null;
+  if (typeof req.query.state === 'string') {
+    const nonceData = await consumeOAuthNonce(req.query.state);
+    if (!nonceData) {
+      return json(res, 400, { error: 'Invalid or expired nonce' });
+    }
+    codeVerifier = nonceData.code_verifier;
+    installId = nonceData.install_id;
+  }
+
   // Exchange the authorization code for an id_token, then read the verified email.
+  // PKCE: include code_verifier if available (Phase 1).
+  const params = {
+    code,
+    client_id: clientId,
+    client_secret: clientSecret,
+    redirect_uri: redirectUri,
+    grant_type: 'authorization_code',
+  } as Record<string, string>;
+  if (codeVerifier) {
+    params.code_verifier = codeVerifier;
+  }
+
   const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uri: redirectUri,
-      grant_type: 'authorization_code',
-    }),
+    body: new URLSearchParams(params),
   });
   if (!tokenResp.ok) return json(res, 502, { error: 'Token exchange failed' });
   const tokenData = (await tokenResp.json()) as { id_token?: string };
@@ -56,23 +75,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!email) return json(res, 502, { error: 'No email in token' });
 
   const user = await upsertUser(email, 'google');
-  const bearer = await mintToken({ sub: user.id, email: user.email });
 
-  // Decode state to recover local_port, redirect_to, and client from the initiating page.
+  // Phase 1: Determine audience based on client type (desktop vs web).
+  // Default to 'web' if not set by Phase 0 nonce path.
+  let aud: 'desktop' | 'web' | 'cloud' = 'web';
   let localPort = '8324';
   let redirectTo = '/account';
   let clientWeb = false;
-  try {
-    const stateRaw = typeof req.query.state === 'string' ? req.query.state : '';
-    const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString());
-    if (typeof state.local_port === 'string' && /^\d+$/.test(state.local_port)) localPort = state.local_port;
-    if (state.redirect_to === '/app') redirectTo = '/app';
-    if (state.client === 'web') clientWeb = true;
-  } catch {}
 
-  // Render the bearer-handoff page.
+  // If we have install_id from nonce, this is a desktop sign-in (aud=desktop).
+  if (installId) {
+    aud = 'desktop';
+  } else {
+    // Fall back to old state-based detection (Phase 1 compatibility).
+    try {
+      const stateRaw = typeof req.query.state === 'string' ? req.query.state : '';
+      const state = JSON.parse(Buffer.from(stateRaw, 'base64url').toString());
+      if (typeof state.local_port === 'string' && /^\d+$/.test(state.local_port)) localPort = state.local_port;
+      if (state.redirect_to === '/app') redirectTo = '/app';
+      if (state.client === 'web') {
+        clientWeb = true;
+        aud = 'web';
+      } else {
+        aud = 'desktop';
+      }
+    } catch {}
+  }
+
+  // Mint access token + refresh token (15m + 30d, audience-scoped).
+  const accessToken = await mintAccessToken({ sub: user.id, email: user.email }, aud);
+  const refreshToken = await mintRefreshToken({ sub: user.id, email: user.email }, aud);
+
+  // Store refresh token hash in DB for revocation checks.
+  const refreshTokenHash = createHash('sha256').update(refreshToken).digest('hex');
+  const refreshExpiresAt = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60; // 30 days
+  const claims = await verifyToken(refreshToken);
+  if (claims?.jti) {
+    await storeRefreshToken(claims.jti, user.id, refreshTokenHash, aud, refreshExpiresAt);
+  }
+
+  // Render the bearer-handoff page. Pass both access token (15m) + refresh token (30d).
+  // Desktop POSTs to /api/auth/signin-activate with nonce; web gets redirected with token in URL.
   const displayEmail = email.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
-  const tokenJson = JSON.stringify(bearer);
+  const accessTokenJson = JSON.stringify(accessToken);
+  const refreshTokenJson = JSON.stringify(refreshToken);
   const userIdJson = JSON.stringify(user.id);
   const emailJson = JSON.stringify(email);
   const localPortJson = JSON.stringify(localPort);
@@ -137,7 +183,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   </div>
 
   <script>
-    const token = ${tokenJson};
+    const accessToken = ${accessTokenJson};
+    const refreshToken = ${refreshTokenJson};
     const userId = ${userIdJson};
     const email = ${emailJson};
     const localPort = ${localPortJson};
@@ -154,7 +201,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             fetch('http://localhost:' + localPort + '/api/auth/signin-activate', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ token, signin_method: 'google', email }),
+              body: JSON.stringify({
+                token: accessToken,
+                refresh_token: refreshToken,
+                signin_method: 'google',
+                email,
+              }),
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
           ]);
@@ -172,7 +224,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // localStorage is origin-scoped; setting it here (api.*) would not be visible on the web app domain.
       try {
         const url = new URL(webAppUrl);
-        url.searchParams.set('token', token);
+        url.searchParams.set('token', accessToken);
+        url.searchParams.set('refresh_token', refreshToken);
         window.location.href = url.toString();
       } catch (err) {
         document.body.innerHTML = '<div class="container"><h1>Error</h1><p>Could not sign in. Please try again.</p></div>';

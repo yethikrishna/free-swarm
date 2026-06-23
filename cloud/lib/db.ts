@@ -186,3 +186,22 @@ export async function isRefreshTokenValid(jti: string): Promise<boolean> {
   `;
   return rows.length > 0;
 }
+
+// Phase 1 OAuth: store a nonce + PKCE verifier for a sign-in request (one-time use, 10-min TTL).
+export async function storeOAuthNonce(nonce: string, codeVerifier: string, installId: string): Promise<void> {
+  await db()`
+    insert into oauth_nonces (nonce, code_verifier, install_id)
+    values (${nonce}, ${codeVerifier}, ${installId})
+    on conflict (nonce) do nothing
+  `;
+}
+
+// Look up and consume an OAuth nonce (delete on read; single-use).
+export async function consumeOAuthNonce(nonce: string): Promise<{ code_verifier: string; install_id: string } | null> {
+  const rows = await db()`
+    delete from oauth_nonces
+    where nonce = ${nonce} and created_at > now() - interval '10 minutes'
+    returning code_verifier, install_id
+  `;
+  return (rows[0] as { code_verifier: string; install_id: string }) ?? null;
+}

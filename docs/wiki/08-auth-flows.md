@@ -238,7 +238,35 @@ warning. There is no refresh-token grant and no sliding window.
 
 ---
 
-## Critical gaps
+## Gap resolution status (device-login refactor)
+
+The device-login refactor landed on branch `claude/gifted-gates-r327i6` across
+five phases (cloud token foundation → cloud OAuth → Electron keychain → backend
+validation → frontend). Status of each gap below; details follow.
+
+| Gap | Status | How it was closed |
+|---|---|---|
+| A — unauthenticated localhost write | **Closed** | `/api/auth/begin-signin` mints an install nonce (`auth/router.py`); `signin-activate` requires + consumes it (single-use, 5-min TTL). The cloud carries it through OAuth and echoes it in the handoff POST. |
+| B — split-brain web token | **Closed** | `extractBearer` prefers `fs_web_token`; `fs_session` cookie demoted to one-release legacy fallback (`cloud/lib/auth.ts`). Web client stays header+localStorage. |
+| C — missing `google/start` route | **Closed** | `cloud/api/auth/google/start.ts` (GET) generates PKCE + CSRF nonce and 302s to consent. `google.ts` no-code branch forwards to it (single path). |
+| D — sign-out cannot revoke | **Closed** | `cloud/api/auth/signout.ts` revokes all JTIs + refresh tokens (`revoked_jtis`/`refresh_tokens` tables). Tokens now carry `jti`; `verifyToken` can check the revocation list. |
+| E — `state` is not a CSRF nonce | **Closed** | `state` now carries only a single-use server-side nonce (`oauth_nonces`, 10-min TTL); handoff metadata + PKCE verifier are recovered server-side, never trusted from the URL. |
+| F — `expires`/`current_period_end` mismatch | **Noted** | `me.ts` already returns ISO `expires`; the `subscription/router.py:154` consumer read remains the spot to align (tracked; not part of the auth-token refactor). |
+| G — cross-surface token collision | **Closed** | Tokens are audience-scoped (`aud: desktop\|web\|cloud`). `signin-activate` enforces `aud=desktop`; web redirect carries `aud=web`. A web token can no longer be activated on desktop. |
+| H — dead `signin=true` deep-link | **Closed (wired emitter)** | Both handoff pages now emit `freeswarm://auth?signin=true&token=…&refresh_token=…` as a fallback when the localhost POST fails. `useDeepLink` reads the refresh token + nonce + method. |
+
+**Also added (beyond the original gaps):**
+- **Refresh tokens.** 15-min access + 30-day refresh pair (`mintAccessToken`/`mintRefreshToken`). `POST /api/auth/refresh` (cloud + backend) silently re-mints the access token; `fetchMe` retries once on 401 before signing out. No more day-30 hard logout.
+- **OS-keychain API keys (military-grade).** Provider keys live in the OS keychain (Electron `safeStorage`: Keychain/DPAPI/libsecret) and are pushed into a RAM-only backend store (`secret_store.py`) on boot. `credentials.py` resolves keychain-first, settings.json fallback. Endpoints: `/api/settings/secrets/{push,clear,present}`. Fully additive; covered by `tests/test_secret_store.py`.
+
+### Remaining follow-ups
+- **Remove keys from disk by default.** The keychain store is wired and preferred, but `update_settings` still persists keys to settings.json. Completing this needs the Settings API tab to show a "stored securely" presence state (via `/secrets/present`) and omit unchanged keys from the PUT. Until then keys live in *both* places on keychain-capable installs.
+- **Gap F consumer fix** in `subscription/router.py:154`.
+- **Device-code flow for FreeSwarm account** (RFC 8628) is designed but not yet built (Phase 5); distinct from the 9Router third-party provider device flows.
+
+---
+
+## Critical gaps (original audit — see resolution table above)
 
 These are the blockers the device-login separation must close. Each is grounded.
 

@@ -143,7 +143,8 @@ async def activate(body: ActivateRequest):
     me = r.json()
 
     # Persist to settings. Prefer cloud-reported values; fall back to the
-    # deep-link's own fields if cloud is sparse.
+    # deep-link's own fields if cloud is sparse. Cloud can return either
+    # current_period_end (ms) or expires (ISO), so check both.
     settings_obj = load_settings()
     settings_obj.connection_mode = "freeswarm-pro"
     settings_obj.freeswarm_bearer_token = body.token
@@ -153,11 +154,12 @@ async def activate(body: ActivateRequest):
     )
     period_end = me.get("current_period_end")
     if isinstance(period_end, (int, float)):
-        # cloud returns unix ms
         from datetime import datetime, timezone
         settings_obj.freeswarm_subscription_expires = (
             datetime.fromtimestamp(period_end / 1000, tz=timezone.utc).isoformat()
         )
+    elif isinstance(me.get("expires"), str):
+        settings_obj.freeswarm_subscription_expires = me.get("expires")
     elif body.expires:
         settings_obj.freeswarm_subscription_expires = body.expires
 

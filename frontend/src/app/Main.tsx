@@ -30,6 +30,7 @@ const Modes = React.lazy(() => import('./pages/Modes/Modes'));
 const Views = React.lazy(() => import('./pages/Views/Views'));
 const Customization = React.lazy(() => import('./pages/Customization/Customization'));
 const Analytics = React.lazy(() => import('./pages/Analytics/Analytics'));
+const Automation = React.lazy(() => import('./pages/Automation/Automation'));
 const OnboardingRoot = React.lazy(() =>
   import('./components/Onboarding').then((m) => ({ default: m.OnboardingRoot })),
 );
@@ -559,6 +560,7 @@ const ThemedApp: React.FC = () => {
                         <Route path="/apps" element={<Views />} />
                         <Route path="/apps/:id" element={<Views />} />
                         <Route path="/analytics" element={<Analytics />} />
+                        <Route path="/automation" element={<Automation />} />
                       </Route>
                     </Routes>
                   </Suspense>

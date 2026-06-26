@@ -19,6 +19,7 @@ import { LayoutDashboard } from 'lucide-react';
 import PsychologyIcon from '@mui/icons-material/PsychologyOutlined';
 import BuildIcon from '@mui/icons-material/BuildOutlined';
 import TuneIcon from '@mui/icons-material/TuneOutlined';
+import ScheduleIcon from '@mui/icons-material/ScheduleOutlined';
 import { LayoutGrid } from 'lucide-react';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Settings as LucideSettings } from 'lucide-react';
@@ -61,6 +62,7 @@ const CUSTOMIZATION_ITEMS = [
   { label: 'Skills', path: '/skills', icon: <PsychologyIcon />, onboarding: 'sidebar-skills' },
   { label: 'Actions', path: '/actions', icon: <BuildIcon />, onboarding: 'sidebar-actions' },
   { label: 'Modes', path: '/modes', icon: <TuneIcon />, onboarding: 'sidebar-modes' },
+  { label: 'Automation', path: '/automation', icon: <ScheduleIcon />, onboarding: 'sidebar-automation' },
 ];
 
 const CUSTOMIZATION_PATHS = new Set(CUSTOMIZATION_ITEMS.map((i) => i.path));

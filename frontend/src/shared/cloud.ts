@@ -157,3 +157,109 @@ export async function deviceApprove(
     return { ok: false, error: 'Could not reach the server. Check your connection and try again.' };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Account-management API (F1-F13). All bearer-authed; thin typed wrappers over
+// the cloud endpoints so the account portal components stay declarative.
+// ---------------------------------------------------------------------------
+
+const BASE = FREESWARM_DEFAULT_PROXY_URL;
+
+async function authGet(path: string, token: string): Promise<any> {
+  const r = await fetch(`${BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error(`GET ${path} -> ${r.status}`);
+  return r.json();
+}
+async function authSend(method: string, path: string, body: unknown, token: string): Promise<any> {
+  const r = await fetch(`${BASE}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body ?? {}),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data?.error || `${method} ${path} -> ${r.status}`);
+  return data;
+}
+
+// F1 Sessions
+export interface CloudSession {
+  jti: string; aud: string; label: string; last_seen: string; created: string; current: boolean;
+}
+export const listSessions = (t: string): Promise<{ sessions: CloudSession[] }> => authGet('/api/sessions', t);
+export const revokeSession = (t: string, jti: string) => authSend('POST', '/api/sessions/revoke', { jti }, t);
+
+// F2/F8 Teams
+export interface CloudTeam { id: string; name: string; owner_id: string; role?: string; }
+export interface CloudTeamMember { id: string; user_id: string | null; invite_email: string; role: string; status: string; }
+export const listTeams = (t: string): Promise<{ teams: CloudTeam[] }> => authGet('/api/teams', t);
+export const createTeam = (t: string, name: string) => authSend('POST', '/api/teams', { name }, t);
+export const listTeamMembers = (t: string, teamId: string): Promise<{ members: CloudTeamMember[]; my_role: string }> =>
+  authGet(`/api/teams/members?team_id=${encodeURIComponent(teamId)}`, t);
+export const inviteMember = (t: string, teamId: string, email: string, role: string) =>
+  authSend('POST', '/api/teams/members', { team_id: teamId, action: 'invite', email, role }, t);
+export const setMemberRole = (t: string, teamId: string, memberId: string, role: string) =>
+  authSend('POST', '/api/teams/members', { team_id: teamId, action: 'role', member_id: memberId, role }, t);
+export const removeMember = (t: string, teamId: string, memberId: string) =>
+  authSend('POST', '/api/teams/members', { team_id: teamId, action: 'remove', member_id: memberId }, t);
+
+// F3 Share links
+export interface CloudShare { token: string; kind: string; title: string; created: string; expires: string | null; }
+export const listShares = (t: string): Promise<{ shares: CloudShare[] }> => authGet('/api/share', t);
+export const createShare = (t: string, kind: string, title: string, payload: unknown, ttlDays?: number) =>
+  authSend('POST', '/api/share', { kind, title, payload, ttl_days: ttlDays ?? 0 }, t);
+export const deleteShare = (t: string, token: string) => authSend('DELETE', '/api/share', { token }, t);
+export const resolveShare = (shareToken: string): Promise<any> =>
+  fetch(`${BASE}/api/share/get?token=${encodeURIComponent(shareToken)}`).then((r) => (r.ok ? r.json() : null));
+
+// F4 Cost
+export interface CostSummary {
+  days: number; total_usd: number; total_calls: number;
+  by_day: { day: string; cost_usd: number; calls: number }[];
+  by_model: { model: string; provider: string; cost_usd: number; calls: number }[];
+}
+export const costSummary = (t: string, days = 30): Promise<CostSummary> => authGet(`/api/cost/summary?days=${days}`, t);
+
+// F6 Audit
+export interface AuditEvent { id: number; action: string; target: string; metadata: unknown; created_at: string; }
+export const queryAudit = (t: string, opts: { action?: string; limit?: number; before?: number } = {}): Promise<{ events: AuditEvent[]; next_before: number | null }> => {
+  const p = new URLSearchParams();
+  if (opts.action) p.set('action', opts.action);
+  if (opts.limit) p.set('limit', String(opts.limit));
+  if (opts.before) p.set('before', String(opts.before));
+  return authGet(`/api/audit?${p.toString()}`, t);
+};
+
+// F9 API keys
+export interface CloudApiKey { id: string; name: string; prefix: string; scopes: string; last_used: string | null; created: string; revoked: string | null; }
+export const listApiKeys = (t: string): Promise<{ keys: CloudApiKey[] }> => authGet('/api/keys', t);
+export const createApiKey = (t: string, name: string, scopes: string): Promise<{ id: string; key: string }> =>
+  authSend('POST', '/api/keys', { name, scopes }, t);
+export const revokeApiKey = (t: string, id: string) => authSend('DELETE', '/api/keys', { id }, t);
+
+// F9 Webhooks
+export interface CloudWebhook { id: string; url: string; events: string; active: boolean; secret: string; }
+export const listWebhooks = (t: string): Promise<{ webhooks: CloudWebhook[] }> => authGet('/api/webhooks', t);
+export const createWebhook = (t: string, url: string, events: string): Promise<{ id: string; secret: string }> =>
+  authSend('POST', '/api/webhooks', { url, events }, t);
+export const deleteWebhook = (t: string, id: string) => authSend('DELETE', '/api/webhooks', { id }, t);
+
+// F11 TOTP 2FA
+export interface TotpStatus { enrolled: boolean; confirmed: boolean; }
+export const totpStatus = (t: string): Promise<TotpStatus> => authGet('/api/totp', t);
+export const totpEnroll = (t: string): Promise<{ secret: string; otpauth: string }> =>
+  authSend('POST', '/api/totp', { action: 'enroll' }, t);
+export const totpVerify = (t: string, code: string): Promise<{ ok: boolean; confirmed?: boolean; error?: string }> =>
+  authSend('POST', '/api/totp', { action: 'verify', code }, t);
+export const totpDisable = (t: string) => authSend('POST', '/api/totp', { action: 'disable' }, t);
+
+// F12 Org/branding
+export interface OrgSettings { display_name: string; accent_color: string; logo_url: string; }
+export const getOrgSettings = (t: string): Promise<OrgSettings> => authGet('/api/org/settings', t);
+export const putOrgSettings = (t: string, s: OrgSettings) => authSend('PUT', '/api/org/settings', s, t);
+
+// F13 Notifications
+export interface NotificationChannel { id: string; kind: string; target: string; events: string; enabled: boolean; }
+export const listChannels = (t: string): Promise<{ channels: NotificationChannel[] }> => authGet('/api/notifications', t);
+export const createChannel = (t: string, kind: string, target: string) =>
+  authSend('POST', '/api/notifications', { kind, target }, t);
+export const deleteChannel = (t: string, id: string) => authSend('DELETE', '/api/notifications', { id }, t);

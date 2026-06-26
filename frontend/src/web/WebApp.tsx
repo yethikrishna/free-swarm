@@ -16,13 +16,13 @@ import {
   CloudMe,
   devLogin,
   fetchMe,
-  subscriptionSync,
   getCloudToken,
   setCloudToken,
   clearCloudToken,
 } from '@/shared/cloud';
 import { FREESWARM_DEFAULT_PROXY_URL } from '@/shared/config';
 import DeviceApproval from './DeviceApproval';
+import AccountPortal from './account/AccountPortal';
 
 const theme = createTheme({ palette: { mode: 'light' } });
 
@@ -110,44 +110,6 @@ const LoginView: React.FC<{ onSignedIn: (token: string) => void }> = ({ onSigned
   );
 };
 
-const AccountView: React.FC<{ me: CloudMe; onRefresh: () => void; onSignOut: () => void }> = ({ me, onRefresh, onSignOut }) => {
-  const [syncing, setSyncing] = useState(false);
-  const token = getCloudToken();
-
-  const sync = async () => {
-    setSyncing(true);
-    try {
-      await subscriptionSync(token);
-      onRefresh();
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const Row: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 1, borderBottom: '1px solid #f3f4f6' }}>
-      <Typography variant="body2" sx={{ color: 'text.secondary' }}>{label}</Typography>
-      <Typography variant="body2" sx={{ fontWeight: 600 }}>{value}</Typography>
-    </Box>
-  );
-
-  return (
-    <Centered>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>Your account</Typography>
-      <Row label="Email" value={me.email} />
-      <Row label="Plan" value={me.plan} />
-      <Row label="Status" value={me.status} />
-      <Row label="Renews" value={me.expires ? new Date(me.expires).toLocaleDateString() : 'No active subscription'} />
-      <Box sx={{ display: 'flex', gap: 1, mt: 3 }}>
-        <Button variant="outlined" onClick={sync} disabled={syncing} sx={{ flex: 1 }}>
-          {syncing ? <CircularProgress size={20} /> : 'Sync subscription'}
-        </Button>
-        <Button variant="text" onClick={onSignOut} sx={{ color: 'text.secondary' }}>Sign out</Button>
-      </Box>
-    </Centered>
-  );
-};
-
 const WebApp: React.FC = () => {
   // Consume ?token= (OAuth redirect) and ?code= (device approval link) on mount,
   // persist the device code so it outlives the OAuth bounce, then clean the URL.
@@ -224,7 +186,7 @@ const WebApp: React.FC = () => {
       />
     );
   } else if (me) {
-    content = <AccountView me={me} onRefresh={() => load(token)} onSignOut={() => { clearCloudToken(); setToken(''); setMe(null); }} />;
+    content = <AccountPortal me={me} token={token} onRefresh={() => load(token)} onSignOut={() => { clearCloudToken(); setToken(''); setMe(null); }} />;
   } else {
     content = <LoginView onSignedIn={setToken} />;
   }

@@ -32,6 +32,8 @@ ROUTING_DIR = os.path.join(DATA_ROOT, "routing")
 MEMORY_DIR = os.path.join(DATA_ROOT, "memory")
 REPLAY_DIR = os.path.join(DATA_ROOT, "replay")
 COORDINATION_DIR = os.path.join(DATA_ROOT, "coordination")
+TESTING_DIR = os.path.join(DATA_ROOT, "testing")
+REWIND_DIR = os.path.join(DATA_ROOT, "rewind")
 BUILTIN_PERMISSIONS_PATH = os.path.join(DATA_ROOT, "builtin_permissions.json")
 TRUSTED_SENSITIVE_PATHS_PATH = os.path.join(DATA_ROOT, "trusted_sensitive_paths.json")
 

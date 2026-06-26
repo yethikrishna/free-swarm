@@ -57,14 +57,21 @@ New tables: `teams`, `team_members`, `shared_resources`, `cost_events`,
 - Cloud: `npm run typecheck` clean (pre-existing stripe-module warnings aside).
 - Frontend: `tsc --noEmit` + `npm run build` clean.
 
-## Not yet wired (honest status)
+## Producers + delivery (now wired)
 
-- Cost/audit *producers* on the desktop (emitting a `cost_events`/`audit_events`
-  row per agent turn) are not auto-emitted yet; the cloud ingest endpoints +
-  dashboards are ready for them. Sign-in/account-management actions DO emit audit
-  events today (from the cloud endpoints themselves).
-- Webhook/notification *outbound delivery* (the cloud actually POSTing to a
-  registered webhook/Slack URL on an event) is registration-only so far; the
-  tables + management UI exist, the dispatcher is the next step.
-- Desktop "Share this transcript" button: the backend `/api/automation/share`
-  route works; surfacing it in the chat header UI is pending.
+The three "next step" gaps are closed:
+
+- **Cost/audit producers (L1).** `backend/apps/telemetry/emitter.py` posts a
+  per-turn cost DELTA to `/api/cost/ingest` (clamped >= 0, idempotent
+  submission ids) and an `agent.run_completed` event to `/api/audit` on close.
+  Fire-and-forget; no-op when signed out. Hooked at the agent loop's turn
+  cost-finalized point. Tested: `tests/test_telemetry.py` (10 cases).
+- **Webhook/notification delivery (L2).** `cloud/lib/dispatch.ts` fans an event
+  out to every registered webhook (HMAC-SHA256 signed body,
+  `X-FreeSwarm-Signature`) and notification channel (Slack `{text}`; email via
+  optional `NOTIFY_EMAIL_WEBHOOK` relay). Per-target 4s timeout. Wired into the
+  audit POST hub and share creation; the per-webhook `events` filter self-gates.
+- **Share-transcript button (L3).** The chat header has a Share button:
+  POST `/api/automation/share` -> copy a public link
+  (`/api/share/view?token=`, an XSS-safe HTML transcript page) to the clipboard,
+  with a transient "Link copied" / "Sign in to share" state.

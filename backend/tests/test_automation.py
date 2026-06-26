@@ -123,3 +123,36 @@ def test_template_crud():
     assert upd["model"] == "claude-opus-4-8"
     assert store.delete_template(tpl["id"]) is True
     assert store.list_templates() == []
+
+
+# ---- transcript export (F3) ----
+
+def _sample_session():
+    return {
+        "name": "My session", "model": "sonnet",
+        "messages": [
+            {"role": "user", "content": "hello", "hidden": False},
+            {"role": "assistant", "content": [{"type": "text", "text": "hi there"}], "hidden": False},
+            {"role": "assistant", "content": "secret", "hidden": True},  # dropped
+            {"role": "tool_call", "content": [{"type": "tool_use", "name": "Bash"}], "hidden": False},
+        ],
+    }
+
+
+def test_render_markdown_skips_hidden_and_labels_roles():
+    from backend.apps.automation import export as ex
+    md = ex.render_markdown(_sample_session())
+    assert "# My session" in md
+    assert "## User" in md and "hello" in md
+    assert "## Assistant" in md and "hi there" in md
+    assert "secret" not in md  # hidden message dropped
+    assert "[tool: Bash]" in md
+
+
+def test_render_json_trims_to_display_fields():
+    from backend.apps.automation import export as ex
+    out = ex.render_json(_sample_session())
+    assert out["name"] == "My session"
+    # 3 visible messages (hidden one dropped)
+    assert len(out["messages"]) == 3
+    assert out["messages"][0] == {"role": "user", "text": "hello", "timestamp": None}

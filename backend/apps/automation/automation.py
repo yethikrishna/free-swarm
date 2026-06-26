@@ -25,8 +25,11 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from typeguard import typechecked
 
+import httpx
+
 from backend.config.Apps import SubApp
 from backend.apps.automation import store
+from backend.apps.automation import export as export_mod
 
 logger = logging.getLogger(__name__)
 
@@ -195,3 +198,72 @@ async def delete_template(template_id: str) -> dict:
     if not store.delete_template(template_id):
         raise HTTPException(status_code=404, detail="Template not found")
     return {"ok": True}
+
+
+# ---- Transcript export + share (F3) ----
+
+class ExportBody(BaseModel):
+    session_id: str
+    format: Optional[str] = None  # 'markdown' | 'json'
+
+
+class ShareBody(BaseModel):
+    session_id: str
+    title: Optional[str] = None
+    ttl_days: Optional[int] = None
+
+
+async def _load_session_dict(session_id: str) -> dict:
+    # Lazy import keeps automation a leaf at module load.
+    from backend.apps.agents.agent_manager import agent_manager
+    session = agent_manager.get_session(session_id)
+    if not session:
+        try:
+            session = await agent_manager.resume_session(session_id)
+        except Exception:
+            session = None
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session.model_dump(mode="json")
+
+
+@automation.router.post("/export")
+@typechecked
+async def export_session(body: ExportBody) -> dict:
+    """Render a session transcript as Markdown (default) or structured JSON."""
+    session = await _load_session_dict(body.session_id)
+    if body.format == "json":
+        return {"format": "json", "transcript": export_mod.render_json(session)}
+    return {"format": "markdown", "transcript": export_mod.render_markdown(session)}
+
+
+@automation.router.post("/share")
+@typechecked
+async def share_session(body: ShareBody) -> dict:
+    """Create a public share link for a session transcript via the cloud. Requires
+    the user to be signed in (a FreeSwarm account bearer in settings)."""
+    from backend.apps.auth.router import _proxy_url
+    from backend.apps.settings.settings import load_settings
+
+    settings_obj = load_settings()
+    bearer = getattr(settings_obj, "freeswarm_bearer_token", None)
+    if not bearer:
+        raise HTTPException(status_code=401, detail="Sign in to your FreeSwarm account to share")
+
+    session = await _load_session_dict(body.session_id)
+    payload = export_mod.render_json(session)
+    title = body.title or session.get("name") or "Shared transcript"
+    proxy = _proxy_url()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(
+                f"{proxy}/api/share",
+                headers={"Authorization": f"Bearer {bearer}"},
+                json={"kind": "transcript", "title": title, "payload": payload, "ttl_days": body.ttl_days or 0},
+            )
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Could not reach the sharing service: {e}")
+    if r.status_code >= 400:
+        raise HTTPException(status_code=502, detail="The sharing service rejected the request")
+    token = r.json().get("token")
+    return {"token": token}

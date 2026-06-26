@@ -349,7 +349,8 @@ async def seed_workspace(body: WorkspaceSeedRequest):
     if body.files:
         for rel_path, content in body.files.items():
             full_path = os.path.normpath(os.path.join(folder, rel_path))
-            if not full_path.startswith(os.path.normpath(folder)):
+            folder_norm = os.path.normpath(folder)
+            if full_path != folder_norm and not full_path.startswith(folder_norm + os.sep):
                 continue
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
             with open(full_path, "w", encoding="utf-8") as f:

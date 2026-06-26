@@ -26,6 +26,7 @@ from backend.apps.oauth_state import (
     _completed_oauth,
     _MAX_COMPLETED_OAUTH,
     _mark_oauth_completed,
+    _cleanup_pending_oauth,
 )
 from backend.config.Apps import MainApp
 from backend.apps.health.health import health
@@ -46,6 +47,8 @@ from backend.apps.web.web import web
 from backend.apps.agents.proxy.anthropic_proxy import anthropic_proxy
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, Field
+from typeguard import typechecked
 import json
 
 main_app = MainApp([health, agents, skills, tools_lib, modes, settings, mcp_registry, skill_registry, outputs, dashboards, service, subscription, auth, web, anthropic_proxy])
@@ -83,6 +86,28 @@ try:
         _save_boot_settings(_boot_settings)
 except Exception:
     pass
+
+
+@app.middleware("http")
+async def _body_size_middleware(request: Request, call_next):
+    """Enforce a global request body size limit to prevent DoS.
+
+    10 MB is generous for most operations (agent messages, session compaction,
+    tool results) but small enough to catch runaway JSON or file uploads.
+    """
+    content_length_header = request.headers.get("content-length")
+    if content_length_header:
+        try:
+            content_length = int(content_length_header)
+            if content_length > 10 * 1024 * 1024:
+                return JSONResponse(
+                    {"error": "payload_too_large", "detail": "Request body exceeds 10 MB limit"},
+                    status_code=413,
+                )
+        except (ValueError, TypeError):
+            pass
+    response = await call_next(request)
+    return response
 
 
 # CORS: previously wide open (`allow_origins=["*"]`), which combined with
@@ -404,6 +429,35 @@ async def websocket_dashboard(websocket: WebSocket):
         ws_manager.disconnect_global(websocket)
 
 
+class BrowserCommandRequest(BaseModel):
+    action: str
+    browser_id: str
+    tab_id: str | None = None
+    params: dict = Field(default_factory=dict)
+
+
+class BrowserAgentRunRequest(BaseModel):
+    tasks: list
+    model: str = "sonnet"
+    dashboard_id: str | None = None
+    pre_selected_browser_ids: list = Field(default_factory=list)
+    parent_session_id: str | None = None
+
+
+class MCPMetaRequest(BaseModel):
+    parent_session_id: str | None = None
+    query: str | None = None
+    server_name: str | None = None
+    reason: str | None = None
+
+
+class InvokeAgentRunRequest(BaseModel):
+    session_id: str
+    message: str
+    parent_session_id: str | None = None
+    dashboard_id: str | None = None
+
+
 @app.get("/api/dev/token")
 async def dev_token():
     """Hand the per-install token to the dev frontend, which has no Electron
@@ -416,35 +470,27 @@ async def dev_token():
 
 
 @app.post("/api/browser/command")
-async def browser_command(request: Request):
+@typechecked
+async def browser_command(body: BrowserCommandRequest):
     """HTTP endpoint called by the browser MCP server subprocess.
     Proxies commands to the frontend via WebSocket and waits for results."""
-    body = await request.json()
-    action = body.get("action", "")
-    browser_id = body.get("browser_id", "")
-    tab_id = body.get("tab_id", "")
-    params = body.get("params", {})
-
-    if not action or not browser_id:
-        return JSONResponse({"error": "action and browser_id are required"}, status_code=400)
-
     request_id = uuid4().hex
-    result = await ws_manager.send_browser_command(request_id, action, browser_id, params, tab_id=tab_id)
+    result = await ws_manager.send_browser_command(request_id, body.action, body.browser_id, body.params, tab_id=body.tab_id)
     return JSONResponse(result)
 
 
 @app.get("/api/subscriptions/pending/{state}")
 async def subscriptions_pending(state: str):
     """Return pending OAuth data for a state param. Called by 9Router's callback page."""
+    _cleanup_pending_oauth()
     pending = _pending_oauth.get(state)
     if not pending:
-        return JSONResponse({"error": "not found"}, status_code=404,
-                           headers={"Access-Control-Allow-Origin": "*"})
+        return JSONResponse({"error": "not found"}, status_code=404)
     return JSONResponse({
         "provider": pending["provider"],
         "code_verifier": pending["code_verifier"],
         "redirect_uri": pending["redirect_uri"],
-    }, headers={"Access-Control-Allow-Origin": "*"})
+    })
 
 
 _SUCCESS_HTML = (
@@ -513,34 +559,26 @@ async def subscriptions_callback(request: Request):
 
 
 @app.post("/api/browser-agent/run")
-async def browser_agent_run(request: Request):
+@typechecked
+async def browser_agent_run(body: BrowserAgentRunRequest):
     """Run one or more browser sub-agents in parallel.
     Called by the browser_agent_mcp_server stdio subprocess."""
     from backend.apps.settings.settings import load_settings
     from backend.apps.agents.browser.browser_agent import run_browser_agents
 
-    body = await request.json()
-    tasks = body.get("tasks", [])
-    model = body.get("model", "sonnet")
-    dashboard_id = body.get("dashboard_id", "")
-    pre_selected_browser_ids = body.get("pre_selected_browser_ids", [])
-    parent_session_id = body.get("parent_session_id", "")
-
-    if not tasks:
-        return JSONResponse({"error": "tasks array is required"}, status_code=400)
-
     results = await run_browser_agents(
-        tasks=tasks,
-        model=model,
-        dashboard_id=dashboard_id or None,
-        pre_selected_browser_ids=pre_selected_browser_ids,
-        parent_session_id=parent_session_id or None,
+        tasks=body.tasks,
+        model=body.model,
+        dashboard_id=body.dashboard_id,
+        pre_selected_browser_ids=body.pre_selected_browser_ids,
+        parent_session_id=body.parent_session_id,
     )
     return JSONResponse({"results": results})
 
 
 @app.post("/api/mcp-meta/{action}")
-async def mcp_meta(action: str, request: Request):
+@typechecked
+async def mcp_meta(action: str, body: MCPMetaRequest):
     """Back the freeswarm-mcp-meta stdio MCP server.
 
     Actions:
@@ -554,8 +592,7 @@ async def mcp_meta(action: str, request: Request):
     from backend.apps.agents.agent_manager import agent_manager
     from backend.apps.tools_lib.tools_lib import _load_all as load_all_tools, _sanitize_server_name
 
-    body = await request.json()
-    parent_session_id = body.get("parent_session_id", "")
+    parent_session_id = body.parent_session_id or ""
 
     # Aliases that broaden the search corpus for common user intents. Without
     # these, MCPSearch("email") fails to surface Google Workspace because
@@ -619,7 +656,7 @@ async def mcp_meta(action: str, request: Request):
         return JSONResponse({"active": active, "available": available})
 
     if action == "search":
-        query = (body.get("query") or "").strip().lower()
+        query = (body.query or "").strip().lower()
         servers = _connected_servers()
         session = agent_manager.sessions.get(parent_session_id) if parent_session_id else None
         active_set = set(session.active_mcps) if session else set()
@@ -652,8 +689,8 @@ async def mcp_meta(action: str, request: Request):
         return JSONResponse({"matches": matches})
 
     if action == "activate":
-        server_name = (body.get("server_name") or "").strip()
-        reason = body.get("reason") or ""
+        server_name = (body.server_name or "").strip()
+        reason = body.reason or ""
         if not server_name:
             return JSONResponse({"error": "server_name is required"}, status_code=400)
         if not parent_session_id:
@@ -799,27 +836,17 @@ async def session_clear(session_id: str):
 
 
 @app.post("/api/invoke-agent/run")
-async def invoke_agent_run(request: Request):
+@typechecked
+async def invoke_agent_run(body: InvokeAgentRunRequest):
     """Fork an existing agent session and send it a new message.
     Called by the invoke_agent_mcp_server stdio subprocess."""
-    body = await request.json()
-    session_id = body.get("session_id", "")
-    message = body.get("message", "")
-    parent_session_id = body.get("parent_session_id", "")
-    dashboard_id = body.get("dashboard_id", "")
-
-    if not session_id:
-        return JSONResponse({"error": "session_id is required"}, status_code=400)
-    if not message:
-        return JSONResponse({"error": "message is required"}, status_code=400)
-
     try:
         from backend.apps.agents.agent_manager import agent_manager
         result = await agent_manager.invoke_agent(
-            source_session_id=session_id,
-            message=message,
-            parent_session_id=parent_session_id or None,
-            dashboard_id=dashboard_id or None,
+            source_session_id=body.session_id,
+            message=body.message,
+            parent_session_id=body.parent_session_id,
+            dashboard_id=body.dashboard_id,
         )
         return JSONResponse(result)
     except ValueError as e:

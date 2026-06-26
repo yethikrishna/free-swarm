@@ -250,10 +250,25 @@ async def duplicate_session(session_id: str, body: dict = {}):
 
 @agents.router.post("/sessions/{session_id}/close")
 async def close_session(session_id: str):
+    # Snapshot a couple of fields for the audit event before the session is
+    # evicted from memory by close_session.
+    _closing = agent_manager.sessions.get(session_id)
+    _audit_meta = (
+        {"name": _closing.name, "model": _closing.model, "cost_usd": _closing.cost_usd}
+        if _closing else None
+    )
     try:
         await agent_manager.close_session(session_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    # F6 producer: record the completed run, and release the cost-delta baseline.
+    try:
+        from backend.apps.telemetry import emitter as _telemetry
+        if _audit_meta is not None:
+            _telemetry.emit_audit("agent.run_completed", target=session_id, metadata=_audit_meta)
+        _telemetry.forget_session(session_id)
+    except Exception:
+        pass
     return {"ok": True}
 
 @agents.router.delete("/sessions/{session_id}")

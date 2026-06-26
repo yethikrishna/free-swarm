@@ -2817,6 +2817,17 @@ class AgentManager:
                                 "session_id": session_id,
                                 "cost_usd": session.cost_usd,
                             })
+                            # F4/F6 producer: record this turn's spend to the
+                            # cloud cost ledger. Fire-and-forget, never raises.
+                            try:
+                                from backend.apps.telemetry import emitter as _telemetry
+                                _telemetry.emit_turn_cost(
+                                    session_id, session.model,
+                                    getattr(session, "provider", "anthropic"),
+                                    session.cost_usd, total_input, out,
+                                )
+                            except Exception:
+                                pass
 
                         if isinstance(usage, dict):
                             # Per-turn context-usage broadcast. Drives the UI

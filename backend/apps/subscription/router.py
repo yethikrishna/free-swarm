@@ -47,6 +47,38 @@ async def _sync_pro_routing(settings_obj) -> None:
         logger.debug("pro routing sync skipped: %s", e)
 
 
+async def _try_refresh_bearer(settings_obj) -> Optional[str]:
+    """Exchange the stored 30d refresh token for a fresh 15m access bearer.
+
+    Returns the new access token on success (and persists it + re-syncs pro
+    routing), or None when there is no refresh token or the cloud rejects it.
+    Lets a routine 15-minute access-token expiry self-heal instead of forcing
+    a paying user to sign in again. Best-effort: network failures return None,
+    leaving the caller to keep the cached state."""
+    refresh = getattr(settings_obj, "freeswarm_refresh_token", None)
+    if not refresh:
+        return None
+    proxy = _proxy_url()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(
+                f"{proxy}/api/auth/refresh",
+                json={"refresh_token": refresh, "aud": "desktop"},
+            )
+    except httpx.HTTPError as e:
+        logger.debug("bearer refresh network error: %s", e)
+        return None
+    if r.status_code != 200:
+        return None
+    access_token = r.json().get("access_token")
+    if not access_token:
+        return None
+    settings_obj.freeswarm_bearer_token = access_token
+    await save_settings_async(settings_obj)
+    await _sync_pro_routing(settings_obj)
+    return access_token
+
+
 async def _clear_subscription(settings_obj, *, drop_bearer: bool = True) -> None:
     """Revert to own_key mode and drop FreeSwarm Pro routing state.
 
@@ -205,22 +237,34 @@ async def status():
                 f"{_proxy_url()}/api/me",
                 headers={"Authorization": f"Bearer {bearer}"},
             )
-        upstream_code = r.status_code
-        if r.status_code == 200:
-            me = r.json()
-            live_usage = me.get("usage")
-            live_status = me.get("status")
-            # Update cache for offline display.
-            if isinstance(live_usage, dict):
-                settings_obj.freeswarm_usage_cached = live_usage
-                await save_settings_async(settings_obj)
+            upstream_code = r.status_code
+            # A 401 here is usually just the 15m access token expiring, not a
+            # revoked account. Try to silently re-mint from the 30d refresh
+            # token and retry once before giving up on the subscription.
+            if r.status_code == 401:
+                fresh = await _try_refresh_bearer(settings_obj)
+                if fresh:
+                    r = await client.get(
+                        f"{_proxy_url()}/api/me",
+                        headers={"Authorization": f"Bearer {fresh}"},
+                    )
+                    upstream_code = r.status_code
+            if r.status_code == 200:
+                me = r.json()
+                live_usage = me.get("usage")
+                live_status = me.get("status")
+                # Update cache for offline display.
+                if isinstance(live_usage, dict):
+                    settings_obj.freeswarm_usage_cached = live_usage
+                    await save_settings_async(settings_obj)
     except httpx.HTTPError as e:
         logger.debug("subscription/status live fetch failed: %s", e)
 
-    # Cloud says the bearer is gone (401) or the sub is past its grace
-    # period (402); drop local credentials so the desktop stops routing
-    # through a dead subscription. Settings UI sees connected=False and
-    # falls back to the Subscribe CTA; chat reverts to own_key routing.
+    # Cloud says the bearer is gone (401, even after a refresh attempt) or the
+    # sub is past its grace period (402); drop local credentials so the desktop
+    # stops routing through a dead subscription. Settings UI sees
+    # connected=False and falls back to the Subscribe CTA; chat reverts to
+    # own_key routing.
     if upstream_code in (401, 402):
         await _clear_subscription(settings_obj)
         return {

@@ -116,4 +116,21 @@ export function useDashboardShortcuts({
     window.addEventListener('keydown', handleSearch);
     return () => window.removeEventListener('keydown', handleSearch);
   }, []);
+
+  // Escape clears the current card selection (the canonical "get me out of
+  // this" gesture). Skipped inside text fields and when nothing is selected,
+  // so it never competes with a modal/overlay's own Escape handler.
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (!isActive) return;
+      if (e.key !== 'Escape') return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
+      if (selection.selectedIds.size === 0) return;
+      e.preventDefault();
+      selection.deselectAll();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [selection, isActive]);
 }

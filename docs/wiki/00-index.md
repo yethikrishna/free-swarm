@@ -30,9 +30,12 @@ dead / TODO" subsections so the wiki doubles as a refactor backlog.
 
 - **Auth surfaces are not yet cleanly separated** across desktop-app (local
   bearer token), web (cloud token), and cloud (OAuth/magic-link/Stripe). Needs
-  section 08 before refactoring callbacks.
-- **Backend attack-surface gaps** catalogued in section 03 (unvalidated
-  `request.json` bodies, response size caps, a couple of resource-leak paths).
+  section 08 before refactoring callbacks. Phase 4 (keychain) complete.
+- **Backend attack-surface gaps** (section 03): 5 of 7 gaps closed (body-size cap,
+  unvalidated bodies, write-path traversal, CORS on pending, unbounded OAuth entries).
+  Remaining 2 are design tradeoffs (origin=None for natives, ?token= for iframes).
+- **Canvas improvements** pending: terminal card, keyboard shortcuts, UX polish.
+- **Login UX** pending: auto sign-in, device-code flow (Phase 5), AI provider OAuth.
 - **Apps/Views** has a legacy `/vibe-code` codegen endpoint that predates the
   current workspace-driven builder (section 02); keep but verify callers before
   any change.

@@ -248,15 +248,33 @@ The anthropic-proxy route is deliberately NOT exempt (`main.py:130-134`).
 
 ---
 
-## 7. Incomplete / dead / TODO
+## 7. Gaps closed (verified post-implementation)
+
+- **Gap #1 (body-size cap)** ✓: Added `_body_size_middleware` enforcing 10MB limit.
+  Middleware added before CORS so large payloads are rejected early.
+- **Gap #2 (unvalidated bodies)** ✓: Converted 4 raw endpoints to pydantic + @typechecked:
+  - `/api/browser/command` → `BrowserCommandRequest`
+  - `/api/browser-agent/run` → `BrowserAgentRunRequest`
+  - `/api/mcp-meta/{action}` → `MCPMetaRequest`
+  - `/api/invoke-agent/run` → `InvokeAgentRunRequest`
+- **Gap #3 (write-path traversal)** ✓: Updated `outputs.py:352` to add trailing `os.sep`
+  check, matching the hardening in serve route (gap #3 closed).
+- **Gap #6 (wildcard CORS)** ✓: Removed `Access-Control-Allow-Origin: *` from
+  `/api/subscriptions/pending`.
+- **Gap #7a (unbounded _pending_oauth)** ✓: Added `_cleanup_pending_oauth()` with
+  30-min TTL; entries evicted on staleness via timestamp tracking.
+
+## 8. Remaining gaps (design tradeoffs or unflagged)
 
 - `main.py:694`: stray `pass  # MCP activation captured via session dump on close` - a
   no-op leftover after the broadcast block.
-- `apps/outputs/outputs.py:352`: write-path traversal guard not updated to the trailing-sep
-  form used by the serve route (`:83-84`); latent inconsistency (see gap #3).
 - `main.py:407-415` (`/api/dev/token`): dev-only by design; 404s when packaged
   (`main.py:412`). Localhost binding is its only gate in dev (acknowledged, not a bug).
 - `auth.py:108`: `# pragma: no cover (defensive)` - the scrubber `filter` is untested by
   design.
-- No global body-size middleware exists despite multiple raw `request.json()` routes
-  (gap #1); no TODO marker present, so it is an unflagged omission rather than tracked work.
+- **Gap #4 (origin=None)** ✓ acknowledged intentional: `is_origin_allowed` accepts None
+  for native clients; token is the primary gate.
+- **Gap #5 (?token= query param)** ✓ acknowledged intentional: needed for iframe src;
+  log scrubber mitigates server-side logging. Recommend HTTPS-only in production.
+- **Gap #7b (_group_meta_inflight)** ✓ verified: cleared on completion
+  (`agents.py:218-219`).

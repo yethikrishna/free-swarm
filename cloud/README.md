@@ -34,6 +34,15 @@ contract.
 | POST | `/api/billing/portal` | Bearer -> `{ url }` (gated on `STRIPE_SECRET_KEY`) |
 | POST | `/api/billing/webhook` | Stripe webhook (gated on `STRIPE_WEBHOOK_SECRET`) |
 | POST | `/api/service/sync` | Usage ingest (web mode), idempotent |
+| GET/POST | `/api/sessions`, `/api/sessions/revoke` | F1 list active device sessions / sign one out |
+| GET/POST | `/api/teams`, `/api/teams/members` | F2/F8 teams + RBAC membership (invite/role/remove) |
+| GET/POST/DELETE + GET | `/api/share`, `/api/share/get` | F3 share links (create/list/revoke; public resolve) |
+| POST/GET | `/api/cost/ingest`, `/api/cost/summary` | F4 cost ingest + aggregation (by day/model) |
+| GET/POST | `/api/audit` | F6 activity-log query (keyset) + ingest |
+| GET/POST/DELETE | `/api/keys`, `/api/webhooks` | F9 API keys + webhooks management |
+| GET/POST | `/api/totp` | F11 2FA TOTP enroll/verify/disable |
+| GET/PUT | `/api/org/settings` | F12 custom branding |
+| GET/POST/DELETE | `/api/notifications` | F13 Slack/email notification channels |
 
 Working today: health, dev-login, signin-activate, me, subscription/sync,
 service/sync, Google OAuth (if GOOGLE_* env vars set), GitHub OAuth (if GITHUB_* env vars set),

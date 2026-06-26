@@ -49,6 +49,8 @@ from backend.apps.automation.launcher import wire as wire_automation_launcher
 from backend.apps.routing.routing import routing
 from backend.apps.memory.memory import memory
 from backend.apps.replay.replay import replay
+from backend.apps.coordination.coordination import coordination
+from backend.apps.coordination.launcher import wire as wire_coordination_launcher
 from backend.apps.agents.proxy.anthropic_proxy import anthropic_proxy
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import WebSocket, WebSocketDisconnect
@@ -56,12 +58,15 @@ from pydantic import BaseModel, Field
 from typeguard import typechecked
 import json
 
-main_app = MainApp([health, agents, skills, tools_lib, modes, settings, mcp_registry, skill_registry, outputs, dashboards, service, subscription, auth, web, automation, routing, memory, replay, anthropic_proxy])
+main_app = MainApp([health, agents, skills, tools_lib, modes, settings, mcp_registry, skill_registry, outputs, dashboards, service, subscription, auth, web, automation, routing, memory, replay, coordination, anthropic_proxy])
 app = main_app.app
 
 # Inject the real "launch an agent" behavior into the automation scheduler now
 # that both apps are imported (keeps apps/automation a leaf, no agent imports).
 wire_automation_launcher()
+# Same pattern for the coordination dispatcher (P1): inject the real worker
+# spawner now that the agent stack is imported, keeping apps/coordination a leaf.
+wire_coordination_launcher()
 
 # Generate per-install auth token BEFORE we bind the HTTP port. By the
 # time any request lands, the token file exists. See backend/auth.py.

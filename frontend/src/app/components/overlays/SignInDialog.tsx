@@ -1,12 +1,13 @@
 // Optional sign-in dialog opened from Settings; Google OAuth or GitHub OAuth handoff.
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Box,
   Typography,
   Modal,
   Button,
   IconButton,
+  CircularProgress,
 } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
 import CloseIcon from '@mui/icons-material/Close';
@@ -29,12 +30,35 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
     (s) => s.settings.data.freeswarm_proxy_url || FREESWARM_DEFAULT_PROXY_URL,
   );
   const installId = useAppSelector((s) => s.settings.data.installation_id ?? '');
+  // Signed-in once a user_id lands in settings (set by the backend's
+  // signin-activate after the OAuth handoff completes out-of-band).
+  const userId = useAppSelector((s) => s.settings.data.user_id ?? null);
+  const userEmail = useAppSelector((s) => s.settings.data.user_email ?? null);
+
+  // 'idle' until the user picks a provider; 'waiting' once the browser is
+  // opened and we're polling for the handoff; 'done' when settings show a
+  // signed-in user, which holds a brief confirmation before auto-closing.
+  const [phase, setPhase] = useState<'idle' | 'waiting' | 'done'>('idle');
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // OAuth handoff page POSTs the bearer to the local backend out-of-band; poll so the dialog notices.
   useEffect(() => {
     const id = setInterval(() => { dispatch(fetchSettings()); }, 2000);
     return () => clearInterval(id);
   }, [dispatch]);
+
+  // When a user_id appears mid-flow, flip to the success state and auto-close
+  // after a short beat so the user sees the confirmation, not an abrupt vanish.
+  useEffect(() => {
+    if (userId && phase === 'waiting') {
+      setPhase('done');
+      report('signin', 'completed');
+      closeTimerRef.current = setTimeout(() => onClose(), 1400);
+    }
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, [userId, phase, onClose]);
 
   const cloudBase = proxyUrl.replace(/\/$/, '');
 
@@ -57,6 +81,7 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
     const url = `${cloudBase}${path}`;
     if (api?.openExternal) api.openExternal(url);
     else window.open(url, '_blank');
+    setPhase('waiting');
   };
 
   const onGoogle = async () => {
@@ -107,61 +132,110 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
           <CloseIcon sx={{ fontSize: 18 }} />
         </IconButton>
 
-        <Typography
-          variant="h5"
-          sx={{ fontFamily: '"Charter", Georgia, serif', fontWeight: 500, mb: 1 }}
-        >
-          Sign in to FreeSwarm
-        </Typography>
-        <Typography
-          variant="body2"
-          sx={{ color: tokens.text.muted, mb: 3, lineHeight: 1.5 }}
-        >
-          Sign in lets us sync your settings and back up your data.
-        </Typography>
+        {phase === 'done' ? (
+          <>
+            <Box
+              sx={{
+                width: 56, height: 56, borderRadius: '50%', mx: 'auto', mb: 2,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                backgroundColor: `${tokens.accent.primary}1a`,
+                color: tokens.accent.primary, fontSize: 28,
+              }}
+            >
+              &#10003;
+            </Box>
+            <Typography
+              variant="h5"
+              sx={{ fontFamily: '"Charter", Georgia, serif', fontWeight: 500, mb: 1 }}
+            >
+              You're signed in
+            </Typography>
+            <Typography variant="body2" sx={{ color: tokens.text.muted, lineHeight: 1.5 }}>
+              {userEmail ? `Signed in as ${userEmail}` : 'Your account is connected.'}
+            </Typography>
+          </>
+        ) : phase === 'waiting' ? (
+          <>
+            <Box sx={{ mt: 1, mb: 2.5, display: 'flex', justifyContent: 'center' }}>
+              <CircularProgress size={28} sx={{ color: tokens.accent.primary }} />
+            </Box>
+            <Typography
+              variant="h5"
+              sx={{ fontFamily: '"Charter", Georgia, serif', fontWeight: 500, mb: 1 }}
+            >
+              Finish in your browser
+            </Typography>
+            <Typography variant="body2" sx={{ color: tokens.text.muted, mb: 3, lineHeight: 1.5 }}>
+              We opened a browser window to complete sign-in. Come back here once
+              you're done; this will update automatically.
+            </Typography>
+            <Button
+              variant="text"
+              onClick={() => setPhase('idle')}
+              sx={{ textTransform: 'none', fontSize: 13, color: tokens.text.muted }}
+            >
+              Use a different method
+            </Button>
+          </>
+        ) : (
+          <>
+            <Typography
+              variant="h5"
+              sx={{ fontFamily: '"Charter", Georgia, serif', fontWeight: 500, mb: 1 }}
+            >
+              Sign in to FreeSwarm
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{ color: tokens.text.muted, mb: 3, lineHeight: 1.5 }}
+            >
+              Sign in lets us sync your settings and back up your data.
+            </Typography>
 
-        <Button
-          fullWidth
-          variant="contained"
-          size="large"
-          startIcon={<GoogleIcon />}
-          onClick={onGoogle}
-          sx={{
-            py: 1.4,
-            mb: 1.5,
-            backgroundColor: tokens.text.primary,
-            color: tokens.text.inverse,
-            textTransform: 'none',
-            fontSize: 15,
-            fontWeight: 500,
-            '&:hover': { backgroundColor: tokens.text.primary, opacity: 0.9 },
-          }}
-        >
-          Continue with Google
-        </Button>
+            <Button
+              fullWidth
+              variant="contained"
+              size="large"
+              startIcon={<GoogleIcon />}
+              onClick={onGoogle}
+              sx={{
+                py: 1.4,
+                mb: 1.5,
+                backgroundColor: tokens.text.primary,
+                color: tokens.text.inverse,
+                textTransform: 'none',
+                fontSize: 15,
+                fontWeight: 500,
+                '&:hover': { backgroundColor: tokens.text.primary, opacity: 0.9 },
+              }}
+            >
+              Continue with Google
+            </Button>
 
-        <Button
-          fullWidth
-          variant="outlined"
-          size="large"
-          startIcon={<GitHubIcon />}
-          onClick={onGitHub}
-          sx={{
-            py: 1.4,
-            borderColor: tokens.border.medium,
-            color: tokens.text.primary,
-            textTransform: 'none',
-            fontSize: 15,
-            fontWeight: 500,
-            '&:hover': { borderColor: tokens.text.primary },
-          }}
-        >
-          Continue with GitHub
-        </Button>
+            <Button
+              fullWidth
+              variant="outlined"
+              size="large"
+              startIcon={<GitHubIcon />}
+              onClick={onGitHub}
+              sx={{
+                py: 1.4,
+                borderColor: tokens.border.medium,
+                color: tokens.text.primary,
+                textTransform: 'none',
+                fontSize: 15,
+                fontWeight: 500,
+                '&:hover': { borderColor: tokens.text.primary },
+              }}
+            >
+              Continue with GitHub
+            </Button>
 
-        <Typography sx={{ mt: 2.5, fontSize: 12, color: tokens.text.muted }}>
-          Email sign-in coming soon.
-        </Typography>
+            <Typography sx={{ mt: 2.5, fontSize: 12, color: tokens.text.muted }}>
+              Email sign-in coming soon.
+            </Typography>
+          </>
+        )}
       </Box>
     </Modal>
   );

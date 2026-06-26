@@ -54,6 +54,8 @@ from backend.apps.coordination.launcher import wire as wire_coordination_launche
 from backend.apps.context.context import context
 from backend.apps.testing.testing import testing
 from backend.apps.testing.launcher import wire as wire_testing_runner
+from backend.apps.rewind.rewind import rewind
+from backend.apps.rewind.launcher import wire as wire_rewind_driver
 from backend.apps.agents.proxy.anthropic_proxy import anthropic_proxy
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import WebSocket, WebSocketDisconnect
@@ -61,7 +63,7 @@ from pydantic import BaseModel, Field
 from typeguard import typechecked
 import json
 
-main_app = MainApp([health, agents, skills, tools_lib, modes, settings, mcp_registry, skill_registry, outputs, dashboards, service, subscription, auth, web, automation, routing, memory, replay, coordination, context, testing, anthropic_proxy])
+main_app = MainApp([health, agents, skills, tools_lib, modes, settings, mcp_registry, skill_registry, outputs, dashboards, service, subscription, auth, web, automation, routing, memory, replay, coordination, context, testing, rewind, anthropic_proxy])
 app = main_app.app
 
 # Inject the real "launch an agent" behavior into the automation scheduler now
@@ -73,6 +75,9 @@ wire_coordination_launcher()
 # P12: inject the live outcome resolver (reads the real session) into the test
 # runner, keeping apps/testing a leaf with no agent imports at load.
 wire_testing_runner()
+# P4: inject the existing fork-and-rerun (edit_message) as the rewind driver,
+# keeping apps/rewind a leaf.
+wire_rewind_driver()
 
 # Generate per-install auth token BEFORE we bind the HTTP port. By the
 # time any request lands, the token file exists. See backend/auth.py.

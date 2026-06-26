@@ -95,6 +95,15 @@ export async function verifyToken(token: string, expectedAud?: 'desktop' | 'web'
   }
 }
 
+// Convenience guard for the feature endpoints: verify the bearer and return the
+// claims, or null when missing/invalid. Callers 401 on null. Accepts any aud
+// (these are account-management calls reachable from web or desktop).
+export async function requireUser(req: VercelRequest): Promise<TokenClaims | null> {
+  const token = extractBearer(req);
+  if (!token) return null;
+  return verifyToken(token);
+}
+
 // Pull the bearer from the Authorization header (server-to-server, desktop) or
 // the web token from localStorage/fs_web_token cookie (browser). Note: fs_session
 // cookie is dead code (never set by backend); kept here for old clients only.

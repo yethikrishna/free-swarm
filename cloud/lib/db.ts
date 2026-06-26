@@ -305,3 +305,471 @@ export async function deleteDeviceCode(deviceCode: string): Promise<void> {
   await db()`delete from device_codes where device_code = ${deviceCode}`;
   await db()`delete from device_codes where expires_at < now()`;
 }
+
+// ---------------------------------------------------------------------------
+// F1 Device/session management
+// ---------------------------------------------------------------------------
+
+export interface SessionRow {
+  jti: string;
+  aud: string;
+  device_label: string;
+  last_seen_at: string;
+  created_at: string;
+  expires_at: string;
+}
+
+// List a user's active sessions (un-revoked, unexpired refresh tokens), newest first.
+export async function listSessions(userId: string): Promise<SessionRow[]> {
+  const rows = await db()`
+    select jti, aud, device_label, last_seen_at, created_at, expires_at
+    from refresh_tokens
+    where user_id = ${userId} and revoked_at is null and expires_at > now()
+    order by last_seen_at desc
+  `;
+  return rows as SessionRow[];
+}
+
+// Bump last-seen for a session's jti (called on token refresh).
+export async function touchSession(jti: string): Promise<void> {
+  await db()`update refresh_tokens set last_seen_at = now() where jti = ${jti}`;
+}
+
+// Revoke one session (and blacklist its jti) if it belongs to the user. Returns
+// true when a row was actually revoked, so the caller can 404 a foreign jti.
+export async function revokeSession(userId: string, jti: string): Promise<boolean> {
+  const rows = await db()`
+    update refresh_tokens set revoked_at = now()
+    where jti = ${jti} and user_id = ${userId} and revoked_at is null
+    returning jti
+  `;
+  if (rows.length === 0) return false;
+  await db()`
+    insert into revoked_jtis (jti, user_id, revoked_at)
+    values (${jti}, ${userId}, now())
+    on conflict (jti) do update set revoked_at = now()
+  `;
+  return true;
+}
+
+// Label a freshly-minted refresh token's device (best-effort; called post-mint).
+export async function labelSession(jti: string, deviceLabel: string): Promise<void> {
+  await db()`update refresh_tokens set device_label = ${deviceLabel} where jti = ${jti}`;
+}
+
+// ---------------------------------------------------------------------------
+// F2/F8 Teams + membership
+// ---------------------------------------------------------------------------
+
+export interface TeamRow {
+  id: string;
+  name: string;
+  owner_id: string;
+  role?: string;
+}
+export interface TeamMemberRow {
+  id: string;
+  user_id: string | null;
+  invite_email: string;
+  role: string;
+  status: string;
+}
+
+export async function createTeam(ownerId: string, name: string, ownerEmail: string): Promise<TeamRow> {
+  const rows = await db()`
+    insert into teams (name, owner_id) values (${name}, ${ownerId})
+    returning id, name, owner_id
+  `;
+  const team = rows[0] as TeamRow;
+  // The owner is implicitly the first member with role 'owner'.
+  await db()`
+    insert into team_members (team_id, user_id, invite_email, role, status)
+    values (${team.id}, ${ownerId}, ${ownerEmail}, 'owner', 'active')
+    on conflict (team_id, invite_email) do nothing
+  `;
+  return team;
+}
+
+// Teams the user owns or belongs to, with the user's role in each.
+export async function listTeamsForUser(userId: string, email: string): Promise<TeamRow[]> {
+  const rows = await db()`
+    select t.id, t.name, t.owner_id, m.role
+    from teams t
+    join team_members m on m.team_id = t.id
+    where m.user_id = ${userId} or m.invite_email = ${email}
+    order by t.created_at desc
+  `;
+  return rows as TeamRow[];
+}
+
+export async function getTeamRole(teamId: string, userId: string, email: string): Promise<string | null> {
+  const rows = await db()`
+    select role from team_members
+    where team_id = ${teamId} and (user_id = ${userId} or invite_email = ${email})
+    limit 1
+  `;
+  return rows.length ? String((rows[0] as { role: string }).role) : null;
+}
+
+export async function listTeamMembers(teamId: string): Promise<TeamMemberRow[]> {
+  const rows = await db()`
+    select id, user_id, invite_email, role, status
+    from team_members where team_id = ${teamId}
+    order by created_at asc
+  `;
+  return rows as TeamMemberRow[];
+}
+
+export async function inviteTeamMember(teamId: string, email: string, role: string): Promise<void> {
+  // If the email already maps to a user, bind it now so they see the team on login.
+  const u = await db()`select id from users where email = ${email}`;
+  const userId = u.length ? String((u[0] as { id: string }).id) : null;
+  const status = userId ? 'active' : 'invited';
+  await db()`
+    insert into team_members (team_id, user_id, invite_email, role, status)
+    values (${teamId}, ${userId}, ${email}, ${role}, ${status})
+    on conflict (team_id, invite_email) do update set role = excluded.role
+  `;
+}
+
+export async function setMemberRole(teamId: string, memberId: string, role: string): Promise<void> {
+  await db()`update team_members set role = ${role} where id = ${memberId} and team_id = ${teamId}`;
+}
+
+export async function removeTeamMember(teamId: string, memberId: string): Promise<void> {
+  // Never remove the owner row via this path; the team would be orphaned.
+  await db()`delete from team_members where id = ${memberId} and team_id = ${teamId} and role <> 'owner'`;
+}
+
+// ---------------------------------------------------------------------------
+// F3 Share links
+// ---------------------------------------------------------------------------
+
+export interface SharedResourceRow {
+  token: string;
+  kind: string;
+  title: string;
+  payload: unknown;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export async function createSharedResource(args: {
+  token: string;
+  userId: string;
+  kind: string;
+  title: string;
+  payload: unknown;
+  expiresAtUnix: number | null;
+}): Promise<void> {
+  const expiresAt = args.expiresAtUnix ? new Date(args.expiresAtUnix * 1000) : null;
+  await db()`
+    insert into shared_resources (token, user_id, kind, title, payload, expires_at)
+    values (${args.token}, ${args.userId}, ${args.kind}, ${args.title},
+            ${JSON.stringify(args.payload)}, ${expiresAt})
+  `;
+}
+
+export async function getSharedResource(token: string): Promise<SharedResourceRow | null> {
+  const rows = await db()`
+    select token, kind, title, payload, created_at, expires_at
+    from shared_resources
+    where token = ${token} and (expires_at is null or expires_at > now())
+  `;
+  return (rows[0] as SharedResourceRow) ?? null;
+}
+
+export async function listSharedResources(userId: string): Promise<SharedResourceRow[]> {
+  const rows = await db()`
+    select token, kind, title, payload, created_at, expires_at
+    from shared_resources where user_id = ${userId}
+    order by created_at desc
+  `;
+  return rows as SharedResourceRow[];
+}
+
+export async function deleteSharedResource(userId: string, token: string): Promise<void> {
+  await db()`delete from shared_resources where token = ${token} and user_id = ${userId}`;
+  await db()`delete from shared_resources where expires_at is not null and expires_at < now()`;
+}
+
+// ---------------------------------------------------------------------------
+// F4 Cost events
+// ---------------------------------------------------------------------------
+
+export async function insertCostEvent(row: {
+  user_id: string | null;
+  install_id: string | null;
+  submission_id: string | null;
+  provider: string | null;
+  model: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}): Promise<void> {
+  await db()`
+    insert into cost_events (user_id, install_id, submission_id, provider, model,
+                             input_tokens, output_tokens, cost_usd)
+    values (${row.user_id}, ${row.install_id}, ${row.submission_id}, ${row.provider},
+            ${row.model}, ${row.input_tokens}, ${row.output_tokens}, ${row.cost_usd})
+    on conflict (install_id, submission_id) do nothing
+  `;
+}
+
+export interface CostByDay { day: string; cost_usd: number; calls: number; }
+export interface CostByModel { model: string; provider: string; cost_usd: number; calls: number; }
+
+export async function costSummary(userId: string, sinceDays: number): Promise<{
+  total_usd: number;
+  total_calls: number;
+  by_day: CostByDay[];
+  by_model: CostByModel[];
+}> {
+  const totals = await db()`
+    select coalesce(sum(cost_usd),0) as total_usd, count(*) as total_calls
+    from cost_events
+    where user_id = ${userId} and created_at > now() - (${sinceDays} || ' days')::interval
+  `;
+  const byDay = await db()`
+    select to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day,
+           coalesce(sum(cost_usd),0) as cost_usd, count(*) as calls
+    from cost_events
+    where user_id = ${userId} and created_at > now() - (${sinceDays} || ' days')::interval
+    group by 1 order by 1
+  `;
+  const byModel = await db()`
+    select coalesce(model,'unknown') as model, coalesce(provider,'unknown') as provider,
+           coalesce(sum(cost_usd),0) as cost_usd, count(*) as calls
+    from cost_events
+    where user_id = ${userId} and created_at > now() - (${sinceDays} || ' days')::interval
+    group by 1,2 order by 3 desc limit 20
+  `;
+  const t = totals[0] as { total_usd: number; total_calls: number };
+  return {
+    total_usd: Number(t.total_usd),
+    total_calls: Number(t.total_calls),
+    by_day: byDay as CostByDay[],
+    by_model: byModel as CostByModel[],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// F6 Audit events
+// ---------------------------------------------------------------------------
+
+export async function insertAuditEvent(row: {
+  user_id: string | null;
+  install_id: string | null;
+  action: string;
+  target: string;
+  metadata: unknown;
+}): Promise<void> {
+  await db()`
+    insert into audit_events (user_id, install_id, action, target, metadata)
+    values (${row.user_id}, ${row.install_id}, ${row.action}, ${row.target},
+            ${row.metadata == null ? null : JSON.stringify(row.metadata)})
+  `;
+}
+
+export interface AuditEventRow {
+  id: number;
+  action: string;
+  target: string;
+  metadata: unknown;
+  created_at: string;
+}
+
+export async function queryAuditEvents(userId: string, opts: {
+  action?: string; limit: number; before?: number;
+}): Promise<AuditEventRow[]> {
+  const limit = Math.min(Math.max(opts.limit, 1), 200);
+  const beforeId = opts.before ?? Number.MAX_SAFE_INTEGER;
+  const action = opts.action ?? '';
+  const rows = await db()`
+    select id, action, target, metadata, created_at
+    from audit_events
+    where user_id = ${userId} and id < ${beforeId}
+      and (${action} = '' or action = ${action})
+    order by id desc limit ${limit}
+  `;
+  return rows as AuditEventRow[];
+}
+
+// ---------------------------------------------------------------------------
+// F9 API keys
+// ---------------------------------------------------------------------------
+
+export interface ApiKeyRow {
+  id: string;
+  name: string;
+  key_prefix: string;
+  scopes: string;
+  last_used_at: string | null;
+  created_at: string;
+  revoked_at: string | null;
+}
+
+export async function createApiKey(args: {
+  userId: string; name: string; keyHash: string; keyPrefix: string; scopes: string;
+}): Promise<string> {
+  const rows = await db()`
+    insert into api_keys (user_id, name, key_hash, key_prefix, scopes)
+    values (${args.userId}, ${args.name}, ${args.keyHash}, ${args.keyPrefix}, ${args.scopes})
+    returning id
+  `;
+  return String((rows[0] as { id: string }).id);
+}
+
+export async function listApiKeys(userId: string): Promise<ApiKeyRow[]> {
+  const rows = await db()`
+    select id, name, key_prefix, scopes, last_used_at, created_at, revoked_at
+    from api_keys where user_id = ${userId} order by created_at desc
+  `;
+  return rows as ApiKeyRow[];
+}
+
+export async function revokeApiKey(userId: string, id: string): Promise<void> {
+  await db()`update api_keys set revoked_at = now() where id = ${id} and user_id = ${userId}`;
+}
+
+// Resolve an API key by its hash (for programmatic-access auth). Returns the user
+// + scopes if active; bumps last_used_at.
+export async function resolveApiKey(keyHash: string): Promise<{ user_id: string; scopes: string } | null> {
+  const rows = await db()`
+    select user_id, scopes from api_keys
+    where key_hash = ${keyHash} and revoked_at is null
+  `;
+  if (!rows.length) return null;
+  await db()`update api_keys set last_used_at = now() where key_hash = ${keyHash}`;
+  return rows[0] as { user_id: string; scopes: string };
+}
+
+// ---------------------------------------------------------------------------
+// F9/F13 Webhooks + notification channels
+// ---------------------------------------------------------------------------
+
+export interface WebhookRow {
+  id: string;
+  url: string;
+  secret: string;
+  events: string;
+  active: boolean;
+}
+
+export async function createWebhook(args: {
+  userId: string; url: string; secret: string; events: string;
+}): Promise<string> {
+  const rows = await db()`
+    insert into webhooks (user_id, url, secret, events)
+    values (${args.userId}, ${args.url}, ${args.secret}, ${args.events})
+    returning id
+  `;
+  return String((rows[0] as { id: string }).id);
+}
+
+export async function listWebhooks(userId: string): Promise<WebhookRow[]> {
+  const rows = await db()`
+    select id, url, secret, events, active from webhooks
+    where user_id = ${userId} order by created_at desc
+  `;
+  return rows as WebhookRow[];
+}
+
+export async function deleteWebhook(userId: string, id: string): Promise<void> {
+  await db()`delete from webhooks where id = ${id} and user_id = ${userId}`;
+}
+
+// Active webhooks for a user that subscribe to an event (or '*').
+export async function webhooksForEvent(userId: string, event: string): Promise<WebhookRow[]> {
+  const rows = await db()`
+    select id, url, secret, events, active from webhooks
+    where user_id = ${userId} and active = true
+      and (events = '*' or events like ${'%' + event + '%'})
+  `;
+  return rows as WebhookRow[];
+}
+
+export interface NotificationChannelRow {
+  id: string;
+  kind: string;
+  target: string;
+  events: string;
+  enabled: boolean;
+}
+
+export async function createNotificationChannel(args: {
+  userId: string; kind: string; target: string; events: string;
+}): Promise<string> {
+  const rows = await db()`
+    insert into notification_channels (user_id, kind, target, events)
+    values (${args.userId}, ${args.kind}, ${args.target}, ${args.events})
+    returning id
+  `;
+  return String((rows[0] as { id: string }).id);
+}
+
+export async function listNotificationChannels(userId: string): Promise<NotificationChannelRow[]> {
+  const rows = await db()`
+    select id, kind, target, events, enabled from notification_channels
+    where user_id = ${userId} order by created_at desc
+  `;
+  return rows as NotificationChannelRow[];
+}
+
+export async function deleteNotificationChannel(userId: string, id: string): Promise<void> {
+  await db()`delete from notification_channels where id = ${id} and user_id = ${userId}`;
+}
+
+// ---------------------------------------------------------------------------
+// F11 TOTP 2FA
+// ---------------------------------------------------------------------------
+
+export async function getTotp(userId: string): Promise<{ secret: string; confirmed: boolean } | null> {
+  const rows = await db()`select secret, confirmed from user_totp where user_id = ${userId}`;
+  return (rows[0] as { secret: string; confirmed: boolean }) ?? null;
+}
+
+export async function upsertTotpSecret(userId: string, secret: string): Promise<void> {
+  await db()`
+    insert into user_totp (user_id, secret, confirmed)
+    values (${userId}, ${secret}, false)
+    on conflict (user_id) do update set secret = excluded.secret, confirmed = false
+  `;
+}
+
+export async function confirmTotp(userId: string): Promise<void> {
+  await db()`update user_totp set confirmed = true where user_id = ${userId}`;
+}
+
+export async function disableTotp(userId: string): Promise<void> {
+  await db()`delete from user_totp where user_id = ${userId}`;
+}
+
+// ---------------------------------------------------------------------------
+// F12 Org/branding settings
+// ---------------------------------------------------------------------------
+
+export interface OrgSettingsRow {
+  display_name: string;
+  accent_color: string;
+  logo_url: string;
+}
+
+export async function getOrgSettings(userId: string): Promise<OrgSettingsRow> {
+  const rows = await db()`
+    select display_name, accent_color, logo_url from org_settings where user_id = ${userId}
+  `;
+  return (rows[0] as OrgSettingsRow) ?? { display_name: '', accent_color: '', logo_url: '' };
+}
+
+export async function upsertOrgSettings(userId: string, s: OrgSettingsRow): Promise<void> {
+  await db()`
+    insert into org_settings (user_id, display_name, accent_color, logo_url, updated_at)
+    values (${userId}, ${s.display_name}, ${s.accent_color}, ${s.logo_url}, now())
+    on conflict (user_id) do update set
+      display_name = excluded.display_name,
+      accent_color = excluded.accent_color,
+      logo_url = excluded.logo_url,
+      updated_at = now()
+  `;
+}

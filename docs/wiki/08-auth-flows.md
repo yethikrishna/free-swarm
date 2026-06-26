@@ -266,8 +266,21 @@ validation → frontend). Status of each gap below; details follow.
   fields already in the store, and boot migrates any legacy on-disk keys into the
   keychain. Keys now live only in the OS keychain + RAM. Dev/headless without a
   keychain falls back to settings.json as before. Covered by `tests/test_keychain_secrets.py`.
-- **Gap F consumer fix** in `subscription/router.py:154`.
-- **Device-code flow for FreeSwarm account** (RFC 8628) is designed but not yet built (Phase 5); distinct from the 9Router third-party provider device flows.
+- ~~**Gap F consumer fix** in `subscription/router.py`.~~ **Done.** `/api/subscription/activate`
+  now reads both `current_period_end` (ms) and `expires` (ISO) from the cloud, matching
+  what `signin-activate` already accepts; whichever the cloud sends resolves correctly.
+- ~~**Desktop access-token expiry signed users out.**~~ **Done.** `subscription/status` got
+  a 401 from cloud `/api/me` and immediately cleared the subscription, logging out paying
+  users every 15 min (the access-token lifetime). It now calls `_try_refresh_bearer()` to
+  silently re-mint from the 30d refresh token and retries once; only a dead/missing refresh
+  token drops the subscription. Covered by `tests/test_subscription_refresh.py` (3 cases).
+- ~~**SignInDialog gave no handoff feedback.**~~ **Done.** The dialog now shows a
+  waiting state (spinner + "Finish in your browser") after a provider is clicked and a
+  success state ("Signed in as {email}") that auto-closes, instead of polling silently.
+- **Device-code flow for FreeSwarm account** (RFC 8628) is designed but not yet built (Phase 5);
+  distinct from the 9Router third-party provider device flows. Deferred: it needs a cloud-side
+  `/device/code` + `/device/token` pair to build against, and adding it blind would violate
+  the "no unverified code" constraint. Tracked for when the cloud endpoints land.
 
 ---
 

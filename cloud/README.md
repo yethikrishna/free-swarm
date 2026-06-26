@@ -25,6 +25,11 @@ contract.
 | POST | `/api/auth/dev-login` | `{ email }` -> `{ token }` (dev only, `ALLOW_DEV_LOGIN=1`) |
 | GET  | `/api/auth/google` | OAuth start + callback (gated on `GOOGLE_*`) |
 | GET  | `/api/auth/github` | OAuth start + callback (gated on `GITHUB_*`) |
+| POST | `/api/auth/refresh` | `{ refresh_token, aud }` -> `{ access_token }` (15m re-mint) |
+| POST | `/api/auth/device/code` | `{ aud, install_id }` -> `{ device_code, user_code, verification_uri, ... }` (RFC 8628 start) |
+| POST | `/api/auth/device/token` | `{ device_code }` -> `{ status, access_token?, refresh_token?, ... }` (poll) |
+| POST | `/api/auth/device/approve` | Bearer + `{ user_code, action }` -> bind/deny the device |
+| GET  | `/api/auth/device/info` | `?user_code=` -> `{ status }` (coarse, pre-auth) |
 | POST | `/api/subscription/sync` | Bearer -> `{ plan, current_period_end, status, synced }` |
 | POST | `/api/billing/portal` | Bearer -> `{ url }` (gated on `STRIPE_SECRET_KEY`) |
 | POST | `/api/billing/webhook` | Stripe webhook (gated on `STRIPE_WEBHOOK_SECRET`) |

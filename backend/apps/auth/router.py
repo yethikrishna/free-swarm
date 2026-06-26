@@ -186,33 +186,17 @@ async def signin_activate(body: SigninActivateRequest):
     method = me.get("signin_method") or body.signin_method
 
     settings_obj = load_settings()
-    settings_obj.user_id = user_id
-    settings_obj.user_email = email
-    settings_obj.signin_method = method
-    # If the user happens to be a paying customer too (Stripe + sign-in
-    # share a user row by email), surface plan/expires so the chat picker
-    # exposes Pro models. Free-tier signups land here with plan="free"
-    # and expires=null; connection_mode stays own_key.
-    if isinstance(plan, str) and plan != "free":
-        settings_obj.connection_mode = "freeswarm-pro"
-        settings_obj.freeswarm_bearer_token = body.token
-        settings_obj.freeswarm_refresh_token = body.refresh_token
-        settings_obj.freeswarm_proxy_url = proxy
-        settings_obj.freeswarm_subscription_plan = plan
-        if isinstance(expires, str):
-            settings_obj.freeswarm_subscription_expires = expires
-    else:
-        # Free-tier: still store the bearer so future API calls can identify
-        # the user (used by /api/me/profile, /api/auth/signout). Do NOT flip
-        # connection_mode; that's reserved for paid plans only so chat
-        # routing keeps using own_key/BYO.
-        settings_obj.freeswarm_bearer_token = body.token
-        settings_obj.freeswarm_refresh_token = body.refresh_token
-        settings_obj.freeswarm_proxy_url = proxy
-
-    await save_settings_async(settings_obj)
-    _sync_identity_to_service(settings_obj)
-    await _sync_pro_routing(settings_obj)
+    await persist_account_signin(
+        settings_obj,
+        access_token=body.token,
+        refresh_token=body.refresh_token,
+        user_id=user_id,
+        email=email,
+        plan=plan,
+        expires=expires,
+        method=method,
+        proxy=proxy,
+    )
 
     return {
         "ok": True,
@@ -221,6 +205,42 @@ async def signin_activate(body: SigninActivateRequest):
         "plan": plan or "free",
         "signin_method": method,
     }
+
+
+async def persist_account_signin(
+    settings_obj,
+    *,
+    access_token: Optional[str],
+    refresh_token: Optional[str],
+    user_id: Optional[str],
+    email: Optional[str],
+    plan: Optional[str],
+    expires: Optional[str],
+    method: Optional[str],
+    proxy: str,
+) -> None:
+    """Write a validated sign-in into local settings (shared by the OAuth-handoff
+    and device-code paths). A paid plan flips connection_mode to freeswarm-pro and
+    surfaces plan/expires; a free-tier sign-in still stores the bearer (so /api/me
+    + signout can identify the user) but leaves chat routing on own_key."""
+    settings_obj.user_id = user_id
+    settings_obj.user_email = email
+    settings_obj.signin_method = method
+    if isinstance(plan, str) and plan != "free":
+        settings_obj.connection_mode = "freeswarm-pro"
+        settings_obj.freeswarm_bearer_token = access_token
+        settings_obj.freeswarm_refresh_token = refresh_token
+        settings_obj.freeswarm_proxy_url = proxy
+        settings_obj.freeswarm_subscription_plan = plan
+        if isinstance(expires, str):
+            settings_obj.freeswarm_subscription_expires = expires
+    else:
+        settings_obj.freeswarm_bearer_token = access_token
+        settings_obj.freeswarm_refresh_token = refresh_token
+        settings_obj.freeswarm_proxy_url = proxy
+    await save_settings_async(settings_obj)
+    _sync_identity_to_service(settings_obj)
+    await _sync_pro_routing(settings_obj)
 
 
 # ---------------------------------------------------------------------------
@@ -348,3 +368,9 @@ async def signout():
     _sync_identity_to_service(settings_obj)
     await _sync_pro_routing(settings_obj)
     return {"ok": True}
+
+
+# Register device-code endpoints (/device/start, /device/poll, /device/cancel)
+# on the same SubApp router. Imported last so `auth` + persist_account_signin are
+# already defined when device.py imports them.
+from backend.apps.auth import device  # noqa: E402,F401

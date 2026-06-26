@@ -121,3 +121,39 @@ export async function fetchMe(token: string): Promise<CloudMe | null> {
 export async function subscriptionSync(token: string): Promise<void> {
   await post('/api/subscription/sync', {}, token);
 }
+
+// ---------------------------------------------------------------------------
+// Device authorization grant (RFC 8628) - web approval side
+// ---------------------------------------------------------------------------
+
+// Coarse status of a user_code, used by the /device page to show the right
+// prompt before the signed-in user commits. Never returns identifying data.
+export async function deviceInfo(userCode: string): Promise<string> {
+  try {
+    const r = await fetch(
+      `${FREESWARM_DEFAULT_PROXY_URL}/api/auth/device/info?user_code=${encodeURIComponent(userCode)}`,
+    );
+    if (!r.ok) return 'not_found';
+    const d = (await r.json()) as { status?: string };
+    return d.status || 'not_found';
+  } catch {
+    return 'not_found';
+  }
+}
+
+// Bind the signed-in user to a pending user_code (or reject it). The bearer is
+// what authorizes the waiting device to receive tokens for this account.
+export async function deviceApprove(
+  token: string,
+  userCode: string,
+  action: 'approve' | 'deny' = 'approve',
+): Promise<{ ok: boolean; status?: string; error?: string }> {
+  try {
+    const r = await post('/api/auth/device/approve', { user_code: userCode, action }, token);
+    const d = (await r.json().catch(() => ({}))) as { status?: string; error?: string };
+    if (!r.ok) return { ok: false, error: d.error || 'Could not approve this code.' };
+    return { ok: true, status: d.status };
+  } catch {
+    return { ok: false, error: 'Could not reach the server. Check your connection and try again.' };
+  }
+}

@@ -22,8 +22,13 @@ import {
   clearCloudToken,
 } from '@/shared/cloud';
 import { FREESWARM_DEFAULT_PROXY_URL } from '@/shared/config';
+import DeviceApproval from './DeviceApproval';
 
 const theme = createTheme({ palette: { mode: 'light' } });
+
+// Survives the OAuth bounce: a device user_code captured at /device is stashed
+// here so it's still around after a GitHub/Google sign-in returns to /account.
+const PENDING_CODE_KEY = 'fs_pending_device_code';
 
 const Centered: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3, bgcolor: '#f9fafb' }}>
@@ -144,21 +149,29 @@ const AccountView: React.FC<{ me: CloudMe; onRefresh: () => void; onSignOut: () 
 };
 
 const WebApp: React.FC = () => {
-  // Consume ?token= from OAuth redirect and store it, then clean the URL.
-  const initialToken = React.useMemo(() => {
+  // Consume ?token= (OAuth redirect) and ?code= (device approval link) on mount,
+  // persist the device code so it outlives the OAuth bounce, then clean the URL.
+  const initial = React.useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get('token');
-    if (urlToken) {
-      setCloudToken(urlToken);
-      window.history.replaceState({}, '', window.location.pathname);
-      return urlToken;
+    const urlCode = params.get('code');
+    const onDevicePath = window.location.pathname.replace(/\/+$/, '').endsWith('/device');
+    if (urlToken) setCloudToken(urlToken);
+    let code = '';
+    try {
+      if (urlCode && onDevicePath) localStorage.setItem(PENDING_CODE_KEY, urlCode);
+      code = onDevicePath && urlCode ? urlCode : localStorage.getItem(PENDING_CODE_KEY) || '';
+    } catch {
+      code = urlCode || '';
     }
-    return getCloudToken();
+    if (urlToken || urlCode) window.history.replaceState({}, '', window.location.pathname);
+    return { token: urlToken || getCloudToken(), code };
   }, []);
 
-  const [token, setToken] = useState<string>(initialToken);
+  const [token, setToken] = useState<string>(initial.token);
+  const [pendingCode, setPendingCode] = useState<string>(initial.code);
   const [me, setMe] = useState<CloudMe | null>(null);
-  const [loading, setLoading] = useState<boolean>(!!initialToken);
+  const [loading, setLoading] = useState<boolean>(!!initial.token);
   const [error, setError] = useState<string | null>(null);
 
   const load = React.useCallback(async (t: string) => {
@@ -195,6 +208,20 @@ const WebApp: React.FC = () => {
         <Alert severity="warning" sx={{ mb: 2 }}>{error}</Alert>
         <Button variant="contained" fullWidth onClick={() => load(token)}>Try again</Button>
       </Centered>
+    );
+  } else if (me && pendingCode) {
+    // Signed in with a device code waiting: approve the device, not the account view.
+    content = (
+      <DeviceApproval
+        token={token}
+        email={me.email}
+        initialCode={pendingCode}
+        onDone={() => {
+          try { localStorage.removeItem(PENDING_CODE_KEY); } catch { /* ignore */ }
+          setPendingCode('');
+          window.history.replaceState({}, '', '/');
+        }}
+      />
     );
   } else if (me) {
     content = <AccountView me={me} onRefresh={() => load(token)} onSignOut={() => { clearCloudToken(); setToken(''); setMe(null); }} />;

@@ -277,10 +277,12 @@ validation → frontend). Status of each gap below; details follow.
 - ~~**SignInDialog gave no handoff feedback.**~~ **Done.** The dialog now shows a
   waiting state (spinner + "Finish in your browser") after a provider is clicked and a
   success state ("Signed in as {email}") that auto-closes, instead of polling silently.
-- **Device-code flow for FreeSwarm account** (RFC 8628) is designed but not yet built (Phase 5);
-  distinct from the 9Router third-party provider device flows. Deferred: it needs a cloud-side
-  `/device/code` + `/device/token` pair to build against, and adding it blind would violate
-  the "no unverified code" constraint. Tracked for when the cloud endpoints land.
+- ~~**Device-code flow for FreeSwarm account** (RFC 8628).~~ **Done.** Built end-to-end and
+  verified (cloud typecheck + 6 backend tests + frontend build). It is an alternative to the
+  localhost OAuth handoff for installs that can't receive the browser->localhost POST
+  (WSL/remote/sandboxed) or want to approve from another machine. Distinct from the 9Router
+  third-party provider device flows in [§4](#device-code-flow-third-party-providers-only). See
+  [§7 below](#7-device-code-flow-freeswarm-account) for the full surface map.
 
 ---
 
@@ -366,6 +368,75 @@ wire an emitter (cloud handoff page emitting the deep link) or delete the branch
 right now desktop sign-in relies solely on the auth-exempt localhost POST (Gap A).
 
 ---
+
+## 7. Device-code flow (FreeSwarm account) {#7-device-code-flow-freeswarm-account}
+
+A second, parallel sign-in path to the localhost OAuth handoff, implementing the
+OAuth 2.0 Device Authorization Grant (RFC 8628) for the **FreeSwarm account**
+(not the 9Router provider flows in §4). It exists because the handoff page's
+`POST http://localhost:<port>/api/auth/signin-activate` is unreachable on some
+installs (WSL, remote/SSH desktops, locked-down sandboxes) and forces the
+browser onto the same machine as the app. The device-code path needs neither:
+the user approves a short code from **any** already-signed-in browser.
+
+```
+desktop renderer            local backend                cloud                         signed-in browser
+  POST /api/auth/device/start ─▶  POST /api/auth/device/code ─▶  insert device_codes(pending)
+       ◀── {user_code, verification_uri, flow_id} ──────────────┘
+  show user_code + "open page"
+                                                                       user visits /device, types user_code
+                                                                       POST /api/auth/device/approve (web bearer)
+                                                                       └▶ device_codes.status=approved, user_id bound
+  POST /api/auth/device/poll ──▶  POST /api/auth/device/token ─▶  approved? mint access+refresh, delete row
+       ◀── {status: approved} ◀── persist via persist_account_signin ◀──┘
+```
+
+### Cloud (`cloud/api/auth/device/*.ts`, table `device_codes`)
+
+| Endpoint | Auth | Role |
+|---|---|---|
+| `POST /device/code` | none | Mint `device_code` (32-byte secret) + `user_code` (XXXX-XXXX, unambiguous alphabet). Inserts a `pending` row, 15-min TTL, 5s poll interval. Returns RFC 8628 fields incl. `verification_uri` = `<WEB_APP_ORIGIN>/device`. |
+| `POST /device/token` | none (holds the secret `device_code`) | Poll. Returns `status: pending\|slow_down\|denied\|expired\|approved`. On `approved`: mints audience-scoped access+refresh (same shape as OAuth handoff), stores the refresh hash for revocation, **deletes the row (single-use)**, returns tokens + profile. |
+| `POST /device/approve` | **web bearer** | The signed-in user binds their `user_id` to a `pending` `user_code` (`action: approve\|deny`). Any valid token of the user's works (self-authorized, not a cross-surface replay). |
+| `GET /device/info?user_code=` | none | Coarse status only (`pending\|approved\|denied\|expired\|not_found`); never returns user_id/email/device_code, so it is safe pre-auth. |
+
+The `device_codes` table (`cloud/db/schema.sql`) is the only server-side state.
+`status` flips `pending -> approved\|denied`; rows are deleted on redemption or
+swept by `expires_at`. `db.ts` helpers: `createDeviceCode`,
+`getDeviceCodeBy{DeviceCode,UserCode}`, `approveDeviceCode`, `denyDeviceCode`,
+`touchDeviceCodePoll` (slow_down enforcement), `deleteDeviceCode`.
+
+### Desktop backend (`backend/apps/auth/device.py`)
+
+Routes registered on the `auth` SubApp (`/api/auth/device/{start,poll,cancel}`).
+The secret `device_code` lives **only** here, in an in-memory `_device_flows`
+map keyed by an opaque `flow_id` handed to the renderer; flows are swept by TTL.
+`start` calls cloud `/device/code`; `poll` relays cloud `/device/token` and, on
+`approved`, persists the cloud-minted token pair through
+`auth.router.persist_account_signin` (the same helper the OAuth handoff uses, so
+a paid plan still flips to `freeswarm-pro` and a free plan stays `own_key`).
+Covered by `tests/test_device_flow.py` (6 cases).
+
+### Frontend
+
+- **Desktop**: `SignInDialog` gains a "Sign in with a code" path rendering
+  `DeviceCodePanel` (`app/components/overlays/`): shows the `user_code`, opens
+  the verification page, polls `/api/auth/device/poll`, flips the dialog to the
+  shared `done` state on approval.
+- **Web**: `WebApp.tsx` routes `<origin>/device?code=` to `DeviceApproval.tsx`.
+  The pending code is stashed in `localStorage` so it survives the OAuth bounce
+  (a not-signed-in approver can sign in, land back on `/account`, and still be
+  shown the approval). Helpers `deviceInfo` / `deviceApprove` in `shared/cloud.ts`.
+
+### Security notes
+
+- The `device_code` is a 32-byte secret never exposed to either renderer; the
+  short `user_code` is useless without an authenticated approver, so the unauthed
+  `/device/code` and `/device/info` endpoints leak nothing actionable.
+- Tokens stay audience-scoped (`aud=desktop`) and single-use: the row is deleted
+  the instant it is redeemed, so a replayed `device_code` returns `expired`.
+- No install-nonce is needed here (unlike the localhost handoff / Gap A): the
+  trust comes from a signed-in user approving the code, not from a localhost POST.
 
 ## Pre-flight / initialization order (load-bearing)
 

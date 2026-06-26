@@ -86,7 +86,30 @@ create table if not exists oauth_nonces (
   created_at    timestamptz not null default now()
 );
 
+-- Device authorization grant (RFC 8628) for FreeSwarm account sign-in on
+-- input-constrained or network-isolated surfaces (a desktop that can't receive
+-- the localhost OAuth handoff, e.g. WSL/remote/sandboxed). The desktop polls
+-- with the secret device_code; the user approves the short user_code from any
+-- already-signed-in browser. status: 'pending' until the user approves/denies;
+-- 'approved' binds user_id; 'denied' is a hard stop. The row is deleted once the
+-- desktop redeems the approved code for tokens (single-use), or by TTL sweep.
+create table if not exists device_codes (
+  device_code    text primary key,
+  user_code      text unique not null,
+  user_id        text references users(id) on delete cascade,
+  status         text not null default 'pending',
+  aud            text not null default 'desktop',
+  install_id     text not null default '',
+  interval_sec   int not null default 5,
+  created_at     timestamptz not null default now(),
+  expires_at     timestamptz not null,
+  last_polled_at timestamptz,
+  approved_at    timestamptz
+);
+
 create index if not exists usage_logs_user_idx on usage_logs (user_id, created_at desc);
 create index if not exists fusion_configs_user_idx on fusion_configs (user_id);
 create index if not exists revoked_jtis_user_idx on revoked_jtis (user_id, revoked_at desc);
 create index if not exists refresh_tokens_user_idx on refresh_tokens (user_id, revoked_at);
+create index if not exists device_codes_user_code_idx on device_codes (user_code);
+create index if not exists device_codes_expires_idx on device_codes (expires_at);

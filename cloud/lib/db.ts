@@ -217,3 +217,91 @@ export async function consumeOAuthNonce(nonce: string): Promise<OAuthNonceData |
   `;
   return (rows[0] as OAuthNonceData) ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// Device authorization grant (RFC 8628)
+// ---------------------------------------------------------------------------
+
+export interface DeviceCodeRow {
+  device_code: string;
+  user_code: string;
+  user_id: string | null;
+  status: string; // 'pending' | 'approved' | 'denied'
+  aud: string;
+  install_id: string;
+  interval_sec: number;
+  expires_at: string; // ISO from pg
+  last_polled_at: string | null;
+}
+
+// Create a pending device-code request. expiresAtUnix is seconds since epoch.
+export async function createDeviceCode(args: {
+  deviceCode: string;
+  userCode: string;
+  aud: 'desktop' | 'web' | 'cloud';
+  installId: string;
+  intervalSec: number;
+  expiresAtUnix: number;
+}): Promise<void> {
+  const expiresAt = new Date(args.expiresAtUnix * 1000);
+  await db()`
+    insert into device_codes (device_code, user_code, aud, install_id, interval_sec, expires_at)
+    values (${args.deviceCode}, ${args.userCode}, ${args.aud}, ${args.installId},
+            ${args.intervalSec}, ${expiresAt})
+  `;
+}
+
+// Look up a request by its (secret) device_code, for the polling endpoint.
+export async function getDeviceCodeByDeviceCode(deviceCode: string): Promise<DeviceCodeRow | null> {
+  const rows = await db()`
+    select device_code, user_code, user_id, status, aud, install_id,
+           interval_sec, expires_at, last_polled_at
+    from device_codes where device_code = ${deviceCode}
+  `;
+  return (rows[0] as DeviceCodeRow) ?? null;
+}
+
+// Look up a request by the human-entered user_code, for the approval page.
+export async function getDeviceCodeByUserCode(userCode: string): Promise<DeviceCodeRow | null> {
+  const rows = await db()`
+    select device_code, user_code, user_id, status, aud, install_id,
+           interval_sec, expires_at, last_polled_at
+    from device_codes where user_code = ${userCode}
+  `;
+  return (rows[0] as DeviceCodeRow) ?? null;
+}
+
+// Record a poll attempt; used to enforce the minimum poll interval (slow_down).
+export async function touchDeviceCodePoll(deviceCode: string): Promise<void> {
+  await db()`update device_codes set last_polled_at = now() where device_code = ${deviceCode}`;
+}
+
+// Bind a signed-in user to a pending user_code (the approval step). Only flips a
+// still-pending, unexpired row; returns true when exactly one row was approved.
+export async function approveDeviceCode(userCode: string, userId: string): Promise<boolean> {
+  const rows = await db()`
+    update device_codes
+    set status = 'approved', user_id = ${userId}, approved_at = now()
+    where user_code = ${userCode} and status = 'pending' and expires_at > now()
+    returning device_code
+  `;
+  return rows.length > 0;
+}
+
+// Reject a pending user_code (explicit user deny). Returns true when it flipped.
+export async function denyDeviceCode(userCode: string): Promise<boolean> {
+  const rows = await db()`
+    update device_codes
+    set status = 'denied'
+    where user_code = ${userCode} and status = 'pending'
+    returning device_code
+  `;
+  return rows.length > 0;
+}
+
+// Delete an approved request once the desktop has redeemed it for tokens
+// (single-use), and opportunistically sweep expired rows.
+export async function deleteDeviceCode(deviceCode: string): Promise<void> {
+  await db()`delete from device_codes where device_code = ${deviceCode}`;
+  await db()`delete from device_codes where expires_at < now()`;
+}

@@ -16,6 +16,7 @@ import { fetchSettings } from '@/shared/state/settingsSlice';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import { API_BASE, FREESWARM_DEFAULT_PROXY_URL } from '@/shared/config';
 import { report } from '@/shared/serviceClient';
+import DeviceCodePanel from './DeviceCodePanel';
 
 const GitHubIcon: React.FC = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
@@ -35,10 +36,10 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
   const userId = useAppSelector((s) => s.settings.data.user_id ?? null);
   const userEmail = useAppSelector((s) => s.settings.data.user_email ?? null);
 
-  // 'idle' until the user picks a provider; 'waiting' once the browser is
-  // opened and we're polling for the handoff; 'done' when settings show a
-  // signed-in user, which holds a brief confirmation before auto-closing.
-  const [phase, setPhase] = useState<'idle' | 'waiting' | 'done'>('idle');
+  // 'idle' until the user picks a provider; 'waiting' once the OAuth browser is
+  // opened and we're polling for the handoff; 'code' for the device-code path;
+  // 'done' when a signed-in user appears, held briefly before auto-closing.
+  const [phase, setPhase] = useState<'idle' | 'waiting' | 'code' | 'done'>('idle');
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // OAuth handoff page POSTs the bearer to the local backend out-of-band; poll so the dialog notices.
@@ -47,18 +48,24 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
     return () => clearInterval(id);
   }, [dispatch]);
 
-  // When a user_id appears mid-flow, flip to the success state and auto-close
-  // after a short beat so the user sees the confirmation, not an abrupt vanish.
+  // When a user_id appears during the OAuth handoff, flip to the success state.
+  // (The device-code path sets 'done' itself via DeviceCodePanel's onApproved.)
   useEffect(() => {
     if (userId && phase === 'waiting') {
-      setPhase('done');
       report('signin', 'completed');
-      closeTimerRef.current = setTimeout(() => onClose(), 1400);
+      setPhase('done');
     }
+  }, [userId, phase]);
+
+  // Any path that reaches 'done' holds the confirmation briefly, then closes, so
+  // the user sees they're signed in instead of an abrupt vanish.
+  useEffect(() => {
+    if (phase !== 'done') return;
+    closeTimerRef.current = setTimeout(() => onClose(), 1400);
     return () => {
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     };
-  }, [userId, phase, onClose]);
+  }, [phase, onClose]);
 
   const cloudBase = proxyUrl.replace(/\/$/, '');
 
@@ -154,6 +161,11 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
               {userEmail ? `Signed in as ${userEmail}` : 'Your account is connected.'}
             </Typography>
           </>
+        ) : phase === 'code' ? (
+          <DeviceCodePanel
+            onApproved={() => { report('signin', 'completed'); setPhase('done'); }}
+            onBack={() => setPhase('idle')}
+          />
         ) : phase === 'waiting' ? (
           <>
             <Box sx={{ mt: 1, mb: 2.5, display: 'flex', justifyContent: 'center' }}>
@@ -231,9 +243,13 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
               Continue with GitHub
             </Button>
 
-            <Typography sx={{ mt: 2.5, fontSize: 12, color: tokens.text.muted }}>
-              Email sign-in coming soon.
-            </Typography>
+            <Button
+              variant="text"
+              onClick={() => { report('signin', 'code_clicked'); setPhase('code'); }}
+              sx={{ mt: 1.5, textTransform: 'none', fontSize: 13, color: tokens.text.muted }}
+            >
+              Can't open a browser here? Sign in with a code
+            </Button>
           </>
         )}
       </Box>

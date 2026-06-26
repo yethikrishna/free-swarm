@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handlePreflight, json, methodNotAllowed } from '../../lib/http';
 import { requireUser } from '../../lib/auth';
 import { queryAuditEvents, insertAuditEvent } from '../../lib/db';
+import { dispatchEvent } from '../../lib/dispatch';
 
 // GET  /api/audit?action=&limit=&before=  -> paginated audit trail (keyset on id)
 // POST /api/audit {action,target,metadata} -> append an event (desktop emits these)
@@ -23,12 +24,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     const action = String(req.body?.action ?? '').trim();
     if (!action) return json(res, 400, { error: 'Missing action' });
+    const target = String(req.body?.target ?? '').slice(0, 300);
+    const metadata = req.body?.metadata ?? null;
     await insertAuditEvent({
       user_id: claims.sub,
       install_id: req.body?.install_id ? String(req.body.install_id) : null,
-      action,
-      target: String(req.body?.target ?? '').slice(0, 300),
-      metadata: req.body?.metadata ?? null,
+      action, target, metadata,
+    });
+    // F9/F13: fan the event out to the user's webhooks + channels. The per-
+    // webhook events filter decides who actually receives it; this is a no-op
+    // for users with nothing registered for `action`.
+    await dispatchEvent(claims.sub, action, {
+      title: action,
+      target,
+      summary: metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).name : undefined,
     });
     return json(res, 200, { ok: true });
   }

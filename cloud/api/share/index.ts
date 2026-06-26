@@ -5,6 +5,7 @@ import { requireUser } from '../../lib/auth';
 import {
   createSharedResource, listSharedResources, deleteSharedResource, insertAuditEvent,
 } from '../../lib/db';
+import { dispatchEvent } from '../../lib/dispatch';
 
 // GET    /api/share                 -> my share links
 // POST   /api/share {kind,title,payload,ttl_days?} -> create a share, returns token
@@ -41,6 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       user_id: claims.sub, install_id: null,
       action: 'share.created', target: token, metadata: { kind, title },
     });
+    await dispatchEvent(claims.sub, 'share.created', { title: title || 'New share', target: token, summary: kind });
     return json(res, 200, { token });
   }
 

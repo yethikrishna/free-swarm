@@ -720,6 +720,17 @@ export async function deleteNotificationChannel(userId: string, id: string): Pro
   await db()`delete from notification_channels where id = ${id} and user_id = ${userId}`;
 }
 
+// Enabled channels for a user subscribed to an event (or '*'). Mirrors
+// webhooksForEvent so the dispatcher can fan an event out to both.
+export async function channelsForEvent(userId: string, event: string): Promise<NotificationChannelRow[]> {
+  const rows = await db()`
+    select id, kind, target, events, enabled from notification_channels
+    where user_id = ${userId} and enabled = true
+      and (events = '*' or events like ${'%' + event + '%'})
+  `;
+  return rows as NotificationChannelRow[];
+}
+
 // ---------------------------------------------------------------------------
 // F11 TOTP 2FA
 // ---------------------------------------------------------------------------

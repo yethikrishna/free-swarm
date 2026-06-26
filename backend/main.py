@@ -45,6 +45,7 @@ from backend.apps.subscription.router import subscription
 from backend.apps.auth.router import auth
 from backend.apps.web.web import web
 from backend.apps.automation.automation import automation
+from backend.apps.automation.launcher import wire as wire_automation_launcher
 from backend.apps.agents.proxy.anthropic_proxy import anthropic_proxy
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import WebSocket, WebSocketDisconnect
@@ -54,6 +55,10 @@ import json
 
 main_app = MainApp([health, agents, skills, tools_lib, modes, settings, mcp_registry, skill_registry, outputs, dashboards, service, subscription, auth, web, automation, anthropic_proxy])
 app = main_app.app
+
+# Inject the real "launch an agent" behavior into the automation scheduler now
+# that both apps are imported (keeps apps/automation a leaf, no agent imports).
+wire_automation_launcher()
 
 # Generate per-install auth token BEFORE we bind the HTTP port. By the
 # time any request lands, the token file exists. See backend/auth.py.

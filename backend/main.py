@@ -51,6 +51,7 @@ from backend.apps.memory.memory import memory
 from backend.apps.replay.replay import replay
 from backend.apps.coordination.coordination import coordination
 from backend.apps.coordination.launcher import wire as wire_coordination_launcher
+from backend.apps.context.context import context
 from backend.apps.agents.proxy.anthropic_proxy import anthropic_proxy
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import WebSocket, WebSocketDisconnect
@@ -58,7 +59,7 @@ from pydantic import BaseModel, Field
 from typeguard import typechecked
 import json
 
-main_app = MainApp([health, agents, skills, tools_lib, modes, settings, mcp_registry, skill_registry, outputs, dashboards, service, subscription, auth, web, automation, routing, memory, replay, coordination, anthropic_proxy])
+main_app = MainApp([health, agents, skills, tools_lib, modes, settings, mcp_registry, skill_registry, outputs, dashboards, service, subscription, auth, web, automation, routing, memory, replay, coordination, context, anthropic_proxy])
 app = main_app.app
 
 # Inject the real "launch an agent" behavior into the automation scheduler now

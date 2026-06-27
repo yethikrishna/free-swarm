@@ -30,12 +30,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return json(res, 200, { skills: mine });
     }
     const { plan } = await getSubscription(claims.sub);
-    const skills = await listMarketplaceSkills({
+    const rows = await listMarketplaceSkills({
       viewerPlan: plan,
       query: req.query.q ? String(req.query.q) : undefined,
       category: req.query.category ? String(req.query.category) : undefined,
       limit: req.query.limit ? Number(req.query.limit) : undefined,
     });
+    // Project to a public shape: never leak owner_id (internal user id) to other
+    // viewers. Mirrors marketplace/get.ts.
+    const skills = rows.map((s) => ({
+      slug: s.slug, name: s.name, description: s.description, category: s.category,
+      latest_version: s.latest_version, downloads: s.downloads,
+      min_plan: s.min_plan, updated_at: s.updated_at,
+    }));
     return json(res, 200, { skills });
   }
 
@@ -52,6 +59,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!SEMVER_RE.test(version)) return json(res, 400, { error: 'version must be MAJOR.MINOR.PATCH' });
     if (manifest == null || typeof manifest !== 'object') {
       return json(res, 400, { error: 'manifest object is required' });
+    }
+    // Cap stored size so a published manifest can't be used to bloat storage.
+    if (JSON.stringify(manifest).length > 64_000) {
+      return json(res, 400, { error: 'manifest is too large (64KB max)' });
     }
     const minPlan = b.min_plan === 'pro' ? 'pro' : 'free';
     const visibility = b.visibility === 'unlisted' ? 'unlisted' : 'public';

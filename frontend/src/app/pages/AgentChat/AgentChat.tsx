@@ -20,6 +20,7 @@ import IosShareIcon from '@mui/icons-material/IosShare';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import SessionTelemetry from '@/app/components/telemetry/SessionTelemetry';
 import ThoughtTree from '@/app/components/telemetry/ThoughtTree';
+import TraceTimeline from '@/app/components/telemetry/TraceTimeline';
 import { useAppDispatch, useAppSelector } from '@/shared/hooks';
 import { friendlyStatusLabel } from '@/shared/statusLabel';
 import { openSettingsModal } from '@/shared/state/settingsSlice';
@@ -1558,6 +1559,9 @@ const AgentChat: React.FC<AgentChatProps> = ({ sessionId: sessionIdProp, onClose
           <Collapse in={showInsights} timeout={200} unmountOnExit>
             <Box sx={{ px: 2, pt: 1, pb: 1.5, maxHeight: 320, overflow: 'auto' }}>
               <SessionTelemetry sessionId={id} />
+              <Box sx={{ mt: 1 }}>
+                <TraceTimeline sessionId={id} />
+              </Box>
               <Box sx={{ mt: 1 }}>
                 <ThoughtTree sessionId={id} />
               </Box>

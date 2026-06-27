@@ -4,6 +4,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
+import Collapse from '@mui/material/Collapse';
 import TextField from '@mui/material/TextField';
 import ClickAwayListener from '@mui/material/ClickAwayListener';
 import CloseIcon from '@mui/icons-material/Close';
@@ -16,6 +17,9 @@ import CheckIcon from '@mui/icons-material/Check';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import IosShareIcon from '@mui/icons-material/IosShare';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
+import SessionTelemetry from '@/app/components/telemetry/SessionTelemetry';
+import ThoughtTree from '@/app/components/telemetry/ThoughtTree';
 import { useAppDispatch, useAppSelector } from '@/shared/hooks';
 import { friendlyStatusLabel } from '@/shared/statusLabel';
 import { openSettingsModal } from '@/shared/state/settingsSlice';
@@ -311,6 +315,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ sessionId: sessionIdProp, onClose
   // F3 share: idle -> busy -> done|signin|err. Drives the header Share button's
   // tooltip + icon; auto-resets to idle a couple seconds after a terminal state.
   const [shareState, setShareState] = useState<'idle' | 'busy' | 'done' | 'signin' | 'err'>('idle');
+  // P3/P7: collapsible live-telemetry + chain-of-thought panel under the header.
+  const [showInsights, setShowInsights] = useState(false);
   const [awaitingResponse, setAwaitingResponse] = useState(false);
   const [preSendActivityLabel, setPreSendActivityLabel] = useState<string | null>(null);
   const [activatingMcp, setActivatingMcp] = useState<string | null>(null);
@@ -1450,6 +1456,20 @@ const AgentChat: React.FC<AgentChatProps> = ({ sessionId: sessionIdProp, onClose
               )}
             </Box>
             {!isDraft && id && (
+              <Tooltip title={showInsights ? 'Hide insights' : 'Live cost, context & reasoning'}>
+                <IconButton
+                  size="small"
+                  onClick={() => setShowInsights((v) => !v)}
+                  sx={{
+                    color: showInsights ? c.accent.primary : c.text.tertiary,
+                    '&:hover': { color: c.text.primary },
+                  }}
+                >
+                  <InsightsOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            {!isDraft && id && (
               <Tooltip
                 title={
                   shareState === 'busy' ? 'Creating link...'
@@ -1532,6 +1552,17 @@ const AgentChat: React.FC<AgentChatProps> = ({ sessionId: sessionIdProp, onClose
               </IconButton>
             )}
           </Box>
+        )}
+
+        {!isDraft && id && (
+          <Collapse in={showInsights} timeout={200} unmountOnExit>
+            <Box sx={{ px: 2, pt: 1, pb: 1.5, maxHeight: 320, overflow: 'auto' }}>
+              <SessionTelemetry sessionId={id} />
+              <Box sx={{ mt: 1 }}>
+                <ThoughtTree sessionId={id} />
+              </Box>
+            </Box>
+          </Collapse>
         )}
 
         <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>

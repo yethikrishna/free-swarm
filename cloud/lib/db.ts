@@ -784,3 +784,144 @@ export async function upsertOrgSettings(userId: string, s: OrgSettingsRow): Prom
       updated_at = now()
   `;
 }
+
+// ---------------------------------------------------------------------------
+// P5 Skill marketplace
+// ---------------------------------------------------------------------------
+
+export interface MarketplaceSkillRow {
+  id: string;
+  owner_id: string;
+  slug: string;
+  name: string;
+  description: string;
+  category: string;
+  latest_version: string;
+  downloads: number;
+  visibility: string;
+  min_plan: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketplaceVersionRow {
+  version: string;
+  changelog: string;
+  manifest: unknown;
+  created_at: string;
+}
+
+// Publish a new version. Creates the listing on first publish (keyed by slug,
+// scoped to the owner), then appends the version and advances latest_version.
+// Returns null if the slug exists under a different owner (handle is taken).
+export async function publishSkillVersion(args: {
+  ownerId: string;
+  slug: string;
+  name: string;
+  description: string;
+  category: string;
+  version: string;
+  changelog: string;
+  manifest: unknown;
+  visibility: string;
+  minPlan: string;
+}): Promise<{ slug: string; version: string } | null> {
+  const existing = await db()`select id, owner_id from marketplace_skills where slug = ${args.slug}`;
+  let skillId: string;
+  if (existing[0]) {
+    if ((existing[0] as { owner_id: string }).owner_id !== args.ownerId) return null;
+    skillId = (existing[0] as { id: string }).id;
+    await db()`
+      update marketplace_skills set
+        name = ${args.name}, description = ${args.description}, category = ${args.category},
+        latest_version = ${args.version}, visibility = ${args.visibility},
+        min_plan = ${args.minPlan}, updated_at = now()
+      where id = ${skillId}
+    `;
+  } else {
+    const rows = await db()`
+      insert into marketplace_skills
+        (owner_id, slug, name, description, category, latest_version, visibility, min_plan)
+      values (${args.ownerId}, ${args.slug}, ${args.name}, ${args.description},
+              ${args.category}, ${args.version}, ${args.visibility}, ${args.minPlan})
+      returning id
+    `;
+    skillId = (rows[0] as { id: string }).id;
+  }
+  await db()`
+    insert into marketplace_skill_versions (skill_id, version, changelog, manifest)
+    values (${skillId}, ${args.version}, ${args.changelog}, ${JSON.stringify(args.manifest)})
+    on conflict (skill_id, version) do update set
+      changelog = excluded.changelog, manifest = excluded.manifest
+  `;
+  return { slug: args.slug, version: args.version };
+}
+
+// Discover public listings. Free-plan viewers don't see pro-gated skills; pro
+// viewers see everything public. Optional text + category filters.
+export async function listMarketplaceSkills(opts: {
+  viewerPlan: string;
+  query?: string;
+  category?: string;
+  limit?: number;
+}): Promise<MarketplaceSkillRow[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+  const proOk = opts.viewerPlan === 'pro';
+  const like = opts.query ? `%${opts.query.toLowerCase()}%` : null;
+  const rows = await db()`
+    select * from marketplace_skills
+    where visibility = 'public'
+      and (${proOk} or min_plan = 'free')
+      and (${opts.category ?? null}::text is null or category = ${opts.category ?? null})
+      and (${like}::text is null or lower(name) like ${like} or lower(description) like ${like})
+    order by downloads desc, updated_at desc
+    limit ${limit}
+  `;
+  return rows as MarketplaceSkillRow[];
+}
+
+export async function listMySkills(ownerId: string): Promise<MarketplaceSkillRow[]> {
+  const rows = await db()`
+    select * from marketplace_skills where owner_id = ${ownerId} order by updated_at desc
+  `;
+  return rows as MarketplaceSkillRow[];
+}
+
+export async function getMarketplaceSkill(slug: string): Promise<MarketplaceSkillRow | null> {
+  const rows = await db()`select * from marketplace_skills where slug = ${slug}`;
+  return (rows[0] as MarketplaceSkillRow) ?? null;
+}
+
+export async function getSkillVersions(skillId: string): Promise<MarketplaceVersionRow[]> {
+  const rows = await db()`
+    select version, changelog, manifest, created_at
+    from marketplace_skill_versions where skill_id = ${skillId}
+    order by created_at desc
+  `;
+  return rows as MarketplaceVersionRow[];
+}
+
+// Resolve a specific (or latest) version's manifest for install, and bump the
+// download counter. Returns null if the skill or version is missing.
+export async function installSkillManifest(
+  slug: string, version: string | null,
+): Promise<{ name: string; version: string; min_plan: string; manifest: unknown } | null> {
+  const skill = await getMarketplaceSkill(slug);
+  if (!skill) return null;
+  const target = version ?? skill.latest_version;
+  const rows = await db()`
+    select v.version, v.manifest from marketplace_skill_versions v
+    where v.skill_id = ${skill.id} and v.version = ${target}
+  `;
+  if (!rows[0]) return null;
+  await db()`update marketplace_skills set downloads = downloads + 1 where id = ${skill.id}`;
+  const row = rows[0] as { version: string; manifest: unknown };
+  return { name: skill.name, version: row.version, min_plan: skill.min_plan, manifest: row.manifest };
+}
+
+export async function deleteMarketplaceSkill(ownerId: string, slug: string): Promise<boolean> {
+  const rows = await db()`
+    delete from marketplace_skills where slug = ${slug} and owner_id = ${ownerId} returning id
+  `;
+  return rows.length > 0;
+}

@@ -232,6 +232,39 @@ create table if not exists notification_channels (
   created_at timestamptz not null default now()
 );
 
+-- P5 Skill marketplace. A published skill is a versioned agent template
+-- (F10 manifest: system_prompt/model/tools/skills). One listing row + N version
+-- rows. min_plan gates install behind a subscription tier; downloads is a simple
+-- popularity counter bumped on install.
+create table if not exists marketplace_skills (
+  id             text primary key default gen_random_uuid()::text,
+  owner_id       text not null references users(id) on delete cascade,
+  slug           text unique not null,        -- stable handle, used in install
+  name           text not null,
+  description    text not null default '',
+  category       text not null default 'general',
+  latest_version text not null default '0.0.0',
+  downloads      integer not null default 0,
+  visibility     text not null default 'public',  -- 'public' | 'unlisted'
+  min_plan       text not null default 'free',     -- 'free' | 'pro'
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+create table if not exists marketplace_skill_versions (
+  id         text primary key default gen_random_uuid()::text,
+  skill_id   text not null references marketplace_skills(id) on delete cascade,
+  version    text not null,               -- semver
+  changelog  text not null default '',
+  manifest   jsonb not null,              -- the installable template payload
+  created_at timestamptz not null default now(),
+  unique (skill_id, version)
+);
+
+create index if not exists marketplace_skills_owner_idx on marketplace_skills (owner_id, updated_at desc);
+create index if not exists marketplace_skills_discover_idx on marketplace_skills (visibility, category, downloads desc);
+create index if not exists marketplace_versions_skill_idx on marketplace_skill_versions (skill_id, created_at desc);
+
 create index if not exists usage_logs_user_idx on usage_logs (user_id, created_at desc);
 create index if not exists fusion_configs_user_idx on fusion_configs (user_id);
 create index if not exists revoked_jtis_user_idx on revoked_jtis (user_id, revoked_at desc);

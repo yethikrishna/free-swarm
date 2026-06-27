@@ -68,6 +68,7 @@ class RewindBody(BaseModel):
 class GatePolicyBody(BaseModel):
     default_action: Optional[str] = None
     rules: Optional[list] = None
+    enforce: Optional[bool] = None
 
 
 class DecideBody(BaseModel):
@@ -124,7 +125,9 @@ async def put_gates(body: GatePolicyBody) -> dict:
     problems = gates_mod.validate_rules(rules)
     if problems:
         raise HTTPException(status_code=400, detail="; ".join(problems))
-    return {"policy": store.save_policy({"default_action": default_action, "rules": rules})}
+    enforce = body.enforce if body.enforce is not None else current.get("enforce", False)
+    return {"policy": store.save_policy(
+        {"default_action": default_action, "rules": rules, "enforce": enforce})}
 
 
 @rewind.router.post("/gates/decide")

@@ -454,8 +454,12 @@ class AgentManager:
             resolve_model_id_for_sdk as _resolve_model_id_early,
             get_api_type as _get_api_type_early,
         )
-        _router_model_id = _resolve_model_id_early(session.model, load_settings())
-        _api_type_for_session = _get_api_type_early(session.model)
+        # P10 (Tier 0): per-turn model routing. A no-op returning session.model
+        # unless the user enabled routing in its policy; never raises.
+        from backend.apps.agents.live_integration import routed_model as _routed_model
+        _turn_model = _routed_model(prompt, session.model)
+        _router_model_id = _resolve_model_id_early(_turn_model, load_settings())
+        _api_type_for_session = _get_api_type_early(_turn_model)
 
         _builtin_perms = load_builtin_permissions()
 
@@ -786,6 +790,10 @@ class AgentManager:
                 policy, sensitive_pattern = _maybe_override_policy(
                     _get_effective_policy(tool_name), tool_name, input_data
                 )
+                # P4 (Tier 0): declarative gate policy. Only tightens (never
+                # loosens) the resolved policy; no-op unless enforcement is on.
+                from backend.apps.agents.live_integration import gated_policy as _gated_policy
+                policy = _gated_policy(policy, tool_name, input_data)
                 if policy == "always_allow":
                     return PermissionResultAllow(updated_input=input_data)
                 if policy == "deny":
@@ -811,6 +819,9 @@ class AgentManager:
                 policy, sensitive_pattern = _maybe_override_policy(
                     _get_effective_policy(tool_name), tool_name, tool_input
                 )
+                # P4 (Tier 0): apply the declarative gate policy (tighten-only).
+                from backend.apps.agents.live_integration import gated_policy as _gated_policy
+                policy = _gated_policy(policy, tool_name, tool_input)
 
                 if policy == "deny":
                     return {

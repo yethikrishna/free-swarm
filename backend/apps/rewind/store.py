@@ -14,7 +14,9 @@ from backend.config.paths import REWIND_DIR
 _POLICY_FILE = os.path.join(REWIND_DIR, "gate_policy.json")
 _lock = threading.Lock()
 
-_DEFAULT = {"default_action": "allow", "rules": []}
+# enforce=false means the policy is advisory only (evaluable via /gates/decide
+# but not applied to live tool dispatch). Tier 0 flips this on to activate it.
+_DEFAULT = {"default_action": "allow", "rules": [], "enforce": False}
 
 
 def _write(path: str, data: dict) -> None:
@@ -35,7 +37,8 @@ def load_policy() -> dict:
             data = json.load(f)
         if isinstance(data, dict):
             return {"default_action": data.get("default_action", "allow"),
-                    "rules": data.get("rules") or []}
+                    "rules": data.get("rules") or [],
+                    "enforce": bool(data.get("enforce", False))}
     except (FileNotFoundError, json.JSONDecodeError):
         pass
     return dict(_DEFAULT)
@@ -45,6 +48,7 @@ def save_policy(policy: dict) -> dict:
     clean = {
         "default_action": policy.get("default_action", "allow"),
         "rules": [r for r in (policy.get("rules") or []) if isinstance(r, dict)],
+        "enforce": bool(policy.get("enforce", False)),
     }
     with _lock:
         _write(_POLICY_FILE, clean)

@@ -8,7 +8,7 @@
 
 // Diagnostic marker so we can confirm the preload actually attached to
 // this webview. Surfaces via main.js's console-message listener.
-try { console.warn('[openswarm:webview-preload] loaded for', window.location.href); } catch (_) {}
+try { console.warn('[freeswarm:webview-preload] loaded for', window.location.href); } catch (_) {}
 
 // Hide webdriver flag
 Object.defineProperty(navigator, 'webdriver', {
@@ -130,8 +130,8 @@ try {
   // dialog.
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
-    if (event.data && event.data.__openswarm__ === '__openswarm_passkey__') {
-      console.warn('[openswarm:webview-preload] passkey bridge → sendToHost');
+    if (event.data && event.data.__freeswarm__ === '__freeswarm_passkey__') {
+      console.warn('[freeswarm:webview-preload] passkey bridge → sendToHost');
       try { ipcRenderer.sendToHost('passkey-detected', window.location.href); } catch (_) {}
     }
   });
@@ -156,7 +156,7 @@ try {
     e.preventDefault();
     e.stopPropagation();
     try {
-      console.warn('[openswarm:webview-preload] ctrl+wheel intercept → sendToHost', {
+      console.warn('[freeswarm:webview-preload] ctrl+wheel intercept → sendToHost', {
         deltaY: e.deltaY,
         clientX: e.clientX,
         clientY: e.clientY,
@@ -168,7 +168,7 @@ try {
         clientY: e.clientY,
       });
     } catch (err) {
-      console.warn('[openswarm:webview-preload] sendToHost failed', err);
+      console.warn('[freeswarm:webview-preload] sendToHost failed', err);
     }
   };
   // Listen on both window and document in capture phase so we run before any

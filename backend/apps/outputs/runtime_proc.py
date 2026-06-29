@@ -97,9 +97,9 @@ def _background_priority_kwargs() -> dict:
 
     We intentionally do NOT pass `start_new_session=True` here even
     though it would defend against an errant `kill 0` inside the
-    workspace propagating into the OpenSwarm group: doing so also
+    workspace propagating into the FreeSwarm group: doing so also
     detaches the workspace from the terminal's foreground process
-    group, so a user Ctrl+C only reaches OpenSwarm itself and the
+    group, so a user Ctrl+C only reaches FreeSwarm itself and the
     cleanup path has to chase every workspace by hand. If that path
     is even slightly slow or gets interrupted by a second Ctrl+C, the
     workspace's uvicorn / vite leaks past shutdown and the next
@@ -166,7 +166,7 @@ def _kill_descendant_tree(pid: int, sig_name: str = "TERM") -> None:
 def _is_port_free(port: int) -> bool:
     """True if nothing currently holds a TCP listener on 127.0.0.1:port.
     Cheap kernel-probe; resolves on bind success. Used as the cross-session
-    safety net: if a prior OpenSwarm run left a ghost subprocess holding
+    safety net: if a prior FreeSwarm run left a ghost subprocess holding
     the .env-persisted FRONTEND_PORT, we detect it here and reallocate
     rather than handing run.sh a port that will EADDRINUSE."""
     try:
@@ -213,7 +213,7 @@ def _write_env_value(env_path: str, key: str, value: str) -> None:
 def _is_new_mode(workspace_path: str) -> bool:
     """A workspace is "new-mode" (webapp-template scaffold) if it has a
     `run.sh` at its root. Old-mode workspaces are flat `index.html`-only
-    apps that pre-date the template swap; they're served by OpenSwarm's
+    apps that pre-date the template swap; they're served by FreeSwarm's
     own `/api/outputs/workspace/{ws}/serve/...` FastAPI route and have an
     optional `backend.py` we spawn directly.
 

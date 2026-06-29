@@ -43,7 +43,7 @@ export const step05: OnboardingStep = {
     {
       kind: 'type_into',
       target: S.chatInput,
-      text: 'Pull up the open swarm website (openswarm.com) and find the docs',
+      text: 'Pull up the open swarm website (freeswarm.myndlabs.tech) and find the docs',
       speedMs: 12,
     },
     { kind: 'move_to', target: S.chatSendButton },

@@ -19,23 +19,23 @@ import subprocess
 
 import httpx
 
-from backend.apps.settings.credentials import OPENSWARM_DEFAULT_PROXY_URL
+from backend.apps.settings.credentials import FREESWARM_DEFAULT_PROXY_URL
 from backend.apps.settings.settings import save_settings_async
 
 logger = logging.getLogger(__name__)
 
 # Namespaces the hash so a raw hardware UUID never leaves the device. Public on
 # purpose (open-source): it only prevents transmitting the raw id, not a secret.
-_FP_SALT = "openswarm-free-trial-v1"
+_FP_SALT = "freeswarm-free-trial-v1"
 
 
 def _enabled() -> bool:
     # Default ON as of 1.2.80: the cloud free-trial proxy is live on prod
-    # (api.openswarm.com) and arming + metered Haiku were verified end to end.
-    # Set OPENSWARM_FREE_TRIAL_ENABLED=0 to force it off. The pool-shed gate +
+    # (api.freeswarm.myndlabs.tech) and arming + metered Haiku were verified end to end.
+    # Set FREESWARM_FREE_TRIAL_ENABLED=0 to force it off. The pool-shed gate +
     # daily global budget on the cloud cap total spend; arming only happens for a
     # truly-unconnected user (no key, no sub), so paid users are never touched.
-    return os.environ.get("OPENSWARM_FREE_TRIAL_ENABLED", "1") == "1"
+    return os.environ.get("FREESWARM_FREE_TRIAL_ENABLED", "1") == "1"
 
 
 def _raw_hardware_id() -> str | None:
@@ -85,7 +85,7 @@ def _has_own_model(s) -> bool:
         "claude_subscription_token", "openai_subscription_token", "gemini_subscription_token",
     )):
         return True
-    if getattr(s, "connection_mode", "own_key") == "openswarm-pro" and getattr(s, "openswarm_bearer_token", None):
+    if getattr(s, "connection_mode", "own_key") == "freeswarm-pro" and getattr(s, "freeswarm_bearer_token", None):
         return True
     for cp in (getattr(s, "custom_providers", None) or []):
         name = cp.get("name") if isinstance(cp, dict) else getattr(cp, "name", None)
@@ -122,7 +122,7 @@ async def _has_connected_subscription() -> bool:
 
 
 def _proxy_base(settings_obj) -> str:
-    return (getattr(settings_obj, "openswarm_proxy_url", None) or OPENSWARM_DEFAULT_PROXY_URL).rstrip("/")
+    return (getattr(settings_obj, "freeswarm_proxy_url", None) or FREESWARM_DEFAULT_PROXY_URL).rstrip("/")
 
 
 async def _sync_routing(settings_obj) -> None:
@@ -186,7 +186,7 @@ async def arm_free_trial(settings_obj) -> dict:
     if remaining > 0:
         settings_obj.connection_mode = "free-trial"
         settings_obj.free_trial_token = data.get("trial_token")
-        settings_obj.openswarm_proxy_url = base
+        settings_obj.freeswarm_proxy_url = base
         # Pin the trial to Haiku, the exact tier the cloud serves a free run as. Critical:
         # a sonnet/opus pick makes the Claude Code CLI attach an `effort`/thinking param
         # (reasoning models), which Haiku 400s on ("does not support the effort parameter").

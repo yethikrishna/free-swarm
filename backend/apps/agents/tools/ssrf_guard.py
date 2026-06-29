@@ -27,6 +27,10 @@ class SSRFBlocked(Exception):
     """A fetch was refused because it targets a forbidden IP range."""
 
 
+# Credentials that must not follow a cross-host redirect (lowercased for compare).
+_SENSITIVE_HEADERS = {"authorization", "cookie", "proxy-authorization"}
+
+
 _BLOCKED_V4_NETS = [
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
@@ -119,7 +123,9 @@ async def safe_fetch(
     closing the per-redirect SSRF window that follow_redirects=True leaves open.
     """
     current_url = await assert_safe_url(url)
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, headers=headers or {}) as client:
+    origin_host = httpx.URL(current_url).host
+    req_headers = dict(headers or {})
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         for _ in range(max_redirects + 1):
             if method.upper() == "POST":
                 req_kwargs = {}
@@ -127,9 +133,9 @@ async def safe_fetch(
                     req_kwargs["json"] = json_body
                 if data is not None:
                     req_kwargs["data"] = data
-                resp = await client.post(current_url, **req_kwargs)
+                resp = await client.post(current_url, headers=req_headers, **req_kwargs)
             else:
-                resp = await client.get(current_url)
+                resp = await client.get(current_url, headers=req_headers)
             if not (300 <= resp.status_code < 400):
                 return resp
             location = resp.headers.get("location")
@@ -137,4 +143,9 @@ async def safe_fetch(
                 return resp
             next_url = urljoin(current_url, location)
             current_url = await assert_safe_url(next_url)
+            # Drop credentials when a redirect crosses to a different host, so a
+            # malicious or compromised redirect can't harvest the user's bearer
+            # token / API key by bouncing the request to a host it controls.
+            if httpx.URL(current_url).host != origin_host:
+                req_headers = {k: v for k, v in req_headers.items() if k.lower() not in _SENSITIVE_HEADERS}
     raise SSRFBlocked(f"Too many redirects (> {max_redirects}) starting from {url}.")

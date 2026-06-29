@@ -23,11 +23,11 @@ SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 
 
 def _migrate_legacy_fields(raw: dict) -> dict:
-    """Translate deprecated pre-launch field names ('managed', 'openswarm_auth_token') into production schema."""
+    """Translate deprecated pre-launch field names ('managed', 'freeswarm_auth_token') into production schema."""
     if raw.get("connection_mode") == "managed":
-        raw["connection_mode"] = "openswarm-pro"
-    if "openswarm_auth_token" in raw and "openswarm_bearer_token" not in raw:
-        raw["openswarm_bearer_token"] = raw.pop("openswarm_auth_token")
+        raw["connection_mode"] = "freeswarm-pro"
+    if "freeswarm_auth_token" in raw and "freeswarm_bearer_token" not in raw:
+        raw["freeswarm_bearer_token"] = raw.pop("freeswarm_auth_token")
     return raw
 
 

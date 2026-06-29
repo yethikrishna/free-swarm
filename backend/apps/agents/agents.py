@@ -15,13 +15,39 @@ logger = logging.getLogger(__name__)
 # Dedup concurrent generate-group-meta calls; collapses the 429 thundering herd by sharing one upstream Future per (session, group).
 _group_meta_inflight: dict[tuple[str, str], asyncio.Future] = {}
 
+_restore_task: asyncio.Task | None = None
+
 @asynccontextmanager
 async def agents_lifespan():
+    global _restore_task
     logger.info("Agents sub-app starting")
-    await agent_manager.reconcile_on_startup()
-    await agent_manager.restore_all_sessions()
+    # Restoring sessions is disk I/O whose cost scales with saved-history size.
+    # SubApp lifespans run sequentially before uvicorn binds the socket, so
+    # awaiting it here would delay /api/health/check and make the Electron splash
+    # give up ("closed before main window appeared"). Restore in the background;
+    # the session list simply fills in a moment after the window opens. reconcile
+    # must finish before restore (restore deletes the files reconcile rewrites),
+    # so keep them ordered inside the one task.
+    async def _restore_bg():
+        try:
+            await agent_manager.reconcile_on_startup()
+            await agent_manager.restore_all_sessions()
+        except Exception as e:
+            logger.warning(f"Session restore on startup failed: {e}")
+
+    _restore_task = asyncio.create_task(_restore_bg())
     yield
     logger.info("Agents sub-app shutting down")
+    # If we're shutting down mid-restore, stop it before persisting so the two
+    # don't race over the same session files. Cancellation is safe: restore adds
+    # a session to memory before deleting its file, so anything in flight is
+    # still captured by persist_all_sessions below.
+    if _restore_task and not _restore_task.done():
+        _restore_task.cancel()
+        try:
+            await _restore_task
+        except asyncio.CancelledError:
+            pass
     for session_id in list(agent_manager.tasks.keys()):
         await agent_manager.stop_agent(session_id)
     await agent_manager.persist_all_sessions()
@@ -224,10 +250,25 @@ async def duplicate_session(session_id: str, body: dict = {}):
 
 @agents.router.post("/sessions/{session_id}/close")
 async def close_session(session_id: str):
+    # Snapshot a couple of fields for the audit event before the session is
+    # evicted from memory by close_session.
+    _closing = agent_manager.sessions.get(session_id)
+    _audit_meta = (
+        {"name": _closing.name, "model": _closing.model, "cost_usd": _closing.cost_usd}
+        if _closing else None
+    )
     try:
         await agent_manager.close_session(session_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    # F6 producer: record the completed run, and release the cost-delta baseline.
+    try:
+        from backend.apps.telemetry import emitter as _telemetry
+        if _audit_meta is not None:
+            _telemetry.emit_audit("agent.run_completed", target=session_id, metadata=_audit_meta)
+        _telemetry.forget_session(session_id)
+    except Exception:
+        pass
     return {"ok": True}
 
 @agents.router.delete("/sessions/{session_id}")
@@ -392,11 +433,13 @@ async def subscriptions_connect(body: dict):
         result = await start_oauth(provider)
 
         if result.get("flow") == "authorization_code" and result.get("state"):
+            import time
             from backend.main import _pending_oauth
             _pending_oauth[result["state"]] = {
                 "provider": provider,
                 "code_verifier": result.get("code_verifier", ""),
                 "redirect_uri": result.get("redirect_uri", ""),
+                "ts": time.time(),
             }
 
         return result
@@ -500,9 +543,9 @@ async def probe_model(body: dict):
             client = anthropic.AsyncAnthropic(api_key="9router", base_url="http://localhost:20128")
         elif route == "api" and api_type == "anthropic" and getattr(settings, "anthropic_api_key", None):
             client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        elif api_type == "anthropic" and connection_mode == "openswarm-pro":
-            bearer = getattr(settings, "openswarm_bearer_token", "") or ""
-            proxy_url = (getattr(settings, "openswarm_proxy_url", None) or "https://api.openswarm.com").rstrip("/")
+        elif api_type == "anthropic" and connection_mode == "freeswarm-pro":
+            bearer = getattr(settings, "freeswarm_bearer_token", "") or ""
+            proxy_url = (getattr(settings, "freeswarm_proxy_url", None) or "https://api.freeswarm.myndlabs.tech").rstrip("/")
             if not bearer:
                 return {"ok": True, "skipped": True}
             client = anthropic.AsyncAnthropic(auth_token=bearer, base_url=proxy_url)
@@ -536,6 +579,51 @@ async def probe_model(body: dict):
         )):
             return {"ok": True, "skipped": True}
         return {"ok": False, "error": msg[:240]}
+
+
+@agents.router.post("/discover-models")
+async def discover_models(body: dict):
+    """List models from a custom OpenAI-compatible endpoint's GET /models.
+
+    Lets the custom-provider editor auto-populate models instead of making the
+    user type every id. SSRF-guarded (loopback is allowed on purpose so local
+    servers like Ollama/LM Studio work). Returns a friendly error, never raises.
+    """
+    base_url = ((body or {}).get("base_url") or "").strip()
+    api_key = ((body or {}).get("api_key") or "").strip()
+    if not base_url:
+        return {"ok": False, "error": "Add a base URL first."}
+    try:
+        from backend.apps.nine_router import normalize_openai_compat_base_url
+        from backend.apps.agents.tools.ssrf_guard import safe_fetch, SSRFBlocked
+        normalized = normalize_openai_compat_base_url(base_url)
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
+        try:
+            resp = await safe_fetch(f"{normalized}/models", headers=headers, timeout=10.0)
+        except SSRFBlocked:
+            return {"ok": False, "error": "That address isn't allowed."}
+        if resp.status_code == 401 or resp.status_code == 403:
+            return {"ok": False, "error": "The endpoint rejected the key."}
+        if resp.status_code >= 300:
+            return {"ok": False, "error": "Couldn't reach a model list there."}
+        data = resp.json()
+        # OpenAI shape: {"data": [{"id": "..."}]}; some servers return a bare list.
+        rows = data.get("data") if isinstance(data, dict) else data
+        if not isinstance(rows, list):
+            return {"ok": False, "error": "That endpoint didn't return a model list."}
+        models = []
+        seen = set()
+        for r in rows:
+            mid = r.get("id") if isinstance(r, dict) else (r if isinstance(r, str) else None)
+            if isinstance(mid, str) and mid and mid not in seen:
+                seen.add(mid)
+                models.append({"value": mid, "label": mid})
+        if not models:
+            return {"ok": False, "error": "No models listed at that endpoint."}
+        return {"ok": True, "models": models}
+    except Exception as e:
+        logger.warning(f"discover-models failed: {e}")
+        return {"ok": False, "error": "Couldn't load models. Add them by hand."}
 
 
 @agents.router.get("/models")
@@ -604,9 +692,9 @@ async def list_models():
         return out
 
     has_api_key = bool(getattr(settings, "anthropic_api_key", None))
-    is_openswarm_pro = (
-        getattr(settings, "connection_mode", "own_key") == "openswarm-pro"
-        and bool(getattr(settings, "openswarm_bearer_token", None))
+    is_freeswarm_pro = (
+        getattr(settings, "connection_mode", "own_key") == "freeswarm-pro"
+        and bool(getattr(settings, "freeswarm_bearer_token", None))
     )
     has_claude_sub = "claude" in connected
 
@@ -619,8 +707,8 @@ async def list_models():
 
     # Pro mode splits into Pro proxy + Anthropic alternates; own-key collapses to one adaptive group.
     notes: list[dict] = []
-    if is_openswarm_pro:
-        result["OpenSwarm Pro"] = _serialize(adaptive)
+    if is_freeswarm_pro:
+        result["FreeSwarm Pro"] = _serialize(adaptive)
         anth_alternates: list[dict] = []
         if has_claude_sub:
             anth_alternates += cc_variants
@@ -838,3 +926,250 @@ async def subscriptions_disconnect(body: dict):
         return {"ok": False, "error": "Connection not found"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents.router.get("/subscriptions/{provider}/accounts")
+async def subscriptions_list_accounts(provider: str):
+    """List all accounts (connections) for a provider + its routing strategy."""
+    import httpx
+    from backend.apps.nine_router import get_providers, NINE_ROUTER_API
+    try:
+        connections = await get_providers()
+        provider_accounts = [
+            {
+                "id": c.get("id"),
+                "provider": c.get("provider"),
+                "name": c.get("name"),
+                "displayName": c.get("displayName"),
+                "email": c.get("email"),
+                "isActive": c.get("isActive", True),
+                "testStatus": c.get("testStatus"),
+                "lastError": c.get("lastError"),
+                "lastErrorAt": c.get("lastErrorAt"),
+                "priority": c.get("priority"),
+                "lastUsedAt": c.get("lastUsedAt"),
+                "consecutiveUseCount": c.get("consecutiveUseCount", 0),
+            }
+            for c in connections
+            if c.get("provider") == provider
+        ]
+        # Priority orders the round-robin pool; present them in that order.
+        provider_accounts.sort(key=lambda a: (a.get("priority") if a.get("priority") is not None else 1_000_000))
+        # Surface the persisted routing strategy so the toggle reflects reality.
+        strategy = "fill-first"
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                s = await client.get(f"{NINE_ROUTER_API}/settings")
+                if s.status_code == 200:
+                    data = s.json()
+                    override = (data.get("providerStrategies") or {}).get(provider) or {}
+                    strategy = override.get("fallbackStrategy") or data.get("fallbackStrategy") or "fill-first"
+        except Exception:
+            pass
+        return {"ok": True, "accounts": provider_accounts, "strategy": strategy}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents.router.delete("/subscriptions/{provider}/accounts/{connection_id}")
+async def subscriptions_delete_account(provider: str, connection_id: str):
+    """Delete a specific account/connection for a provider."""
+    import httpx
+    from backend.apps.nine_router import NINE_ROUTER_API, get_providers
+    try:
+        connections = await get_providers()
+        connection = next(
+            (c for c in connections if c.get("id") == connection_id and c.get("provider") == provider),
+            None,
+        )
+        if not connection:
+            return {"ok": False, "error": "Account not found"}
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.delete(f"{NINE_ROUTER_API}/providers/{connection_id}")
+            if r.status_code in (200, 204):
+                from backend.apps.service.client import sync as _sync
+                from backend.apps.settings.settings import load_settings
+                _sync(load_settings().model_dump())
+                return {"ok": True}
+            return {"ok": False, "error": f"Failed to delete: {r.status_code}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents.router.post("/subscriptions/{provider}/accounts/reorder")
+async def subscriptions_reorder_accounts(provider: str, body: dict):
+    """Set per-account priority from a desired ordering.
+
+    The UI sends orderedIds (top = highest priority); we PUT priority=index to
+    each connection on 9router, which is what drives both fill-first selection
+    order and round-robin rotation order.
+    """
+    import httpx
+    from backend.apps.nine_router import NINE_ROUTER_API
+
+    ordered_ids = body.get("orderedIds")
+    if not isinstance(ordered_ids, list) or not ordered_ids:
+        raise HTTPException(status_code=400, detail="orderedIds must be a non-empty list")
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for index, connection_id in enumerate(ordered_ids):
+                r = await client.put(
+                    f"{NINE_ROUTER_API}/providers/{connection_id}",
+                    json={"priority": index + 1},
+                )
+                if r.status_code not in (200, 204):
+                    return {"ok": False, "error": f"Failed to reorder {connection_id}: {r.status_code}"}
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents.router.post("/subscriptions/{provider}/strategy")
+async def subscriptions_set_strategy(provider: str, body: dict):
+    """Set routing strategy for a provider (round-robin or fill-first).
+
+    9Router persists this under settings.providerStrategies[provider]; its
+    settings endpoint is PATCH with a SHALLOW merge, so we read the current
+    providerStrategies, splice in this provider, and write the whole object
+    back, otherwise we'd wipe every other provider's strategy.
+    """
+    import httpx
+    from backend.apps.nine_router import NINE_ROUTER_API
+
+    strategy = body.get("strategy", "fill-first")
+    if strategy not in ("round-robin", "fill-first"):
+        raise HTTPException(status_code=400, detail="strategy must be 'round-robin' or 'fill-first'")
+
+    sticky_limit = body.get("stickyRoundRobinLimit", 3)
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            cur = await client.get(f"{NINE_ROUTER_API}/settings")
+            existing = (cur.json().get("providerStrategies") if cur.status_code == 200 else None) or {}
+            if not isinstance(existing, dict):
+                existing = {}
+            existing[provider] = {
+                "fallbackStrategy": strategy,
+                "stickyRoundRobinLimit": sticky_limit,
+            }
+            r = await client.patch(
+                f"{NINE_ROUTER_API}/settings",
+                json={"providerStrategies": existing},
+            )
+            if r.status_code in (200, 204):
+                return {"ok": True, "strategy": strategy}
+            return {"ok": False, "error": f"Failed to set strategy: {r.status_code}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents.router.post("/combos/sync")
+async def combos_sync(body: dict):
+    """Sync FreeSwarm model combos to 9router.
+
+    FreeSwarm's combo list is stored locally; this endpoint posts each combo
+    to 9router's /api/combos so they're available for fallback/round-robin routing.
+    """
+    import httpx
+    from backend.apps.nine_router import NINE_ROUTER_API
+
+    combos = body.get("combos", [])
+    if not isinstance(combos, list):
+        raise HTTPException(status_code=400, detail="combos must be a list")
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for combo in combos:
+                combo_data = {
+                    "name": combo.get("name"),
+                    "models": combo.get("model_ids", []),
+                }
+                if combo.get("strategy"):
+                    combo_data["strategy"] = combo["strategy"]
+                if combo.get("description"):
+                    combo_data["description"] = combo["description"]
+
+                r = await client.post(f"{NINE_ROUTER_API}/api/combos", json=combo_data)
+                if r.status_code not in (200, 201):
+                    return {"ok": False, "error": f"Failed to sync combo '{combo.get('name')}': {r.status_code}"}
+
+            return {"ok": True, "synced": len(combos)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@agents.router.delete("/combos/{combo_name}")
+async def combo_delete(combo_name: str):
+    """Delete a combo from 9router by name."""
+    import httpx
+    from backend.apps.nine_router import NINE_ROUTER_API
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.delete(f"{NINE_ROUTER_API}/api/combos/{combo_name}")
+            if r.status_code in (200, 204):
+                return {"ok": True}
+            return {"ok": False, "error": f"Failed to delete combo: {r.status_code}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# 9router testStatus values that mean a connection is healthy.
+_PROVIDER_OK_STATUSES = ("active", "success")
+
+
+def _provider_status_from_connection(conn: dict) -> str:
+    """Map a 9router connection's testStatus/lastError to ok|error|unknown."""
+    if conn.get("lastError") or conn.get("testStatus") == "unavailable":
+        return "error"
+    if conn.get("testStatus") in _PROVIDER_OK_STATUSES and conn.get("isActive", True):
+        return "ok"
+    return "unknown"
+
+
+@agents.router.get("/providers/status")
+async def providers_status():
+    """Provider health, normalized from 9router connections.
+
+    Aggregates one row per provider id: a provider is "ok" if any of its
+    connections is healthy, "error" only if it has connections and none are
+    healthy. Providers with no connection are simply absent, so the UI renders
+    them as not-configured. Returns routerStatus="offline" when 9router is
+    unreachable so stale green badges never linger.
+    """
+    from datetime import datetime, timezone
+    from backend.apps.nine_router import get_providers
+
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        connections = await get_providers()
+    except Exception:
+        return {"routerStatus": "offline", "providers": [], "lastChecked": now}
+
+    by_provider: dict = {}
+    for c in connections:
+        pid = c.get("provider")
+        if not pid:
+            continue
+        st = _provider_status_from_connection(c)
+        entry = by_provider.get(pid)
+        if entry is None:
+            by_provider[pid] = {
+                "id": pid,
+                "name": c.get("name") or pid,
+                "configured": True,
+                "status": st,
+                "lastError": c.get("lastError"),
+                "lastChecked": now,
+            }
+        else:
+            # Healthiest connection wins; keep the first error message we saw.
+            if st == "ok":
+                entry["status"] = "ok"
+                entry["lastError"] = None
+            elif st == "error" and entry["status"] != "ok" and not entry["lastError"]:
+                entry["status"] = "error"
+                entry["lastError"] = c.get("lastError")
+
+    return {"routerStatus": "ok", "providers": list(by_provider.values()), "lastChecked": now}

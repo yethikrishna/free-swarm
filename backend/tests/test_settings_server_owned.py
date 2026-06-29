@@ -2,7 +2,7 @@
 
 Reproduces the production bug where a Settings save built from a pre-activation
 snapshot (the renderer PUTs the ENTIRE AppSettings object) silently wiped
-openswarm_bearer_token + connection_mode, disconnecting paying subscribers
+freeswarm_bearer_token + connection_mode, disconnecting paying subscribers
 minutes after a successful Stripe activation. The fix: subscription/identity
 fields are written only by their dedicated endpoints (activate, signin-activate,
 signout, disconnect); PUT /api/settings preserves whatever is on disk for them.
@@ -65,9 +65,9 @@ def test_stale_settings_put_cannot_wipe_activation(client, reset_settings):
 
     from backend.apps.settings.settings import load_settings
     s = load_settings()
-    assert s.openswarm_bearer_token == token
-    assert s.connection_mode == "openswarm-pro"
-    assert s.openswarm_subscription_plan == "pro"
+    assert s.freeswarm_bearer_token == token
+    assert s.connection_mode == "freeswarm-pro"
+    assert s.freeswarm_subscription_plan == "pro"
 
     stale = dict(snapshot)
     stale["user_name"] = "Stale Draft Save"
@@ -76,14 +76,14 @@ def test_stale_settings_put_cannot_wipe_activation(client, reset_settings):
 
     s = load_settings()
     assert s.user_name == "Stale Draft Save"
-    assert s.openswarm_bearer_token == token, "stale PUT wiped the bearer"
-    assert s.connection_mode == "openswarm-pro", "stale PUT reverted connection_mode"
-    assert s.openswarm_subscription_plan == "pro"
-    assert s.openswarm_subscription_expires is not None
+    assert s.freeswarm_bearer_token == token, "stale PUT wiped the bearer"
+    assert s.connection_mode == "freeswarm-pro", "stale PUT reverted connection_mode"
+    assert s.freeswarm_subscription_plan == "pro"
+    assert s.freeswarm_subscription_expires is not None
 
     body = r.json()["settings"]
-    assert body["openswarm_bearer_token"] == token
-    assert body["connection_mode"] == "openswarm-pro"
+    assert body["freeswarm_bearer_token"] == token
+    assert body["connection_mode"] == "freeswarm-pro"
 
 
 def test_put_cannot_inject_server_owned_fields(client, reset_settings):
@@ -91,9 +91,9 @@ def test_put_cannot_inject_server_owned_fields(client, reset_settings):
     state either (it would imply entitlement the cloud never granted)."""
     snapshot = client.get("/api/settings").json()
     forged = dict(snapshot)
-    forged["connection_mode"] = "openswarm-pro"
-    forged["openswarm_bearer_token"] = "forged-bearer-fedcba9876543210"
-    forged["openswarm_subscription_plan"] = "ultra"
+    forged["connection_mode"] = "freeswarm-pro"
+    forged["freeswarm_bearer_token"] = "forged-bearer-fedcba9876543210"
+    forged["freeswarm_subscription_plan"] = "ultra"
     forged["user_id"] = "u-forged"
 
     r = client.put("/api/settings", json=forged)
@@ -101,9 +101,9 @@ def test_put_cannot_inject_server_owned_fields(client, reset_settings):
 
     from backend.apps.settings.settings import load_settings
     s = load_settings()
-    assert s.openswarm_bearer_token == snapshot.get("openswarm_bearer_token")
+    assert s.freeswarm_bearer_token == snapshot.get("freeswarm_bearer_token")
     assert s.connection_mode == snapshot.get("connection_mode")
-    assert s.openswarm_subscription_plan == snapshot.get("openswarm_subscription_plan")
+    assert s.freeswarm_subscription_plan == snapshot.get("freeswarm_subscription_plan")
     assert s.user_id == snapshot.get("user_id")
 
 
@@ -117,9 +117,9 @@ def test_dedicated_endpoints_still_mutate(client, reset_settings):
     from backend.apps.settings.settings import load_settings
     s = load_settings()
     assert s.connection_mode == "own_key"
-    assert s.openswarm_bearer_token is not None  # disconnect keeps sign-in
+    assert s.freeswarm_bearer_token is not None  # disconnect keeps sign-in
 
     _activate_pro(client, token="second-bearer-aaaabbbbccccdddd")
     s = load_settings()
-    assert s.connection_mode == "openswarm-pro"
-    assert s.openswarm_bearer_token == "second-bearer-aaaabbbbccccdddd"
+    assert s.connection_mode == "freeswarm-pro"
+    assert s.freeswarm_bearer_token == "second-bearer-aaaabbbbccccdddd"

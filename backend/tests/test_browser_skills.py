@@ -12,7 +12,7 @@ from backend.apps.agents.browser import browser_skills as sk
 def _isolated_skills(monkeypatch):
     # Persist to a throwaway dir so tests never touch the real DATA_ROOT.
     d = tempfile.mkdtemp(prefix="skills_test_")
-    monkeypatch.setenv("OPENSWARM_BROWSER_SKILLS_DIR", d)
+    monkeypatch.setenv("FREESWARM_BROWSER_SKILLS_DIR", d)
     sk.clear(wipe_disk=True)
     yield d
     sk.clear(wipe_disk=True)
@@ -162,7 +162,7 @@ def test_sensitivity_detector():
     assert sk._looks_sensitive("anything", selector="#pwd")    # password field
     assert sk._looks_sensitive("aB3xK9mQ2pL7wR4tY8nZ")         # long high-entropy
     assert not sk._looks_sensitive("hello world")
-    assert not sk._looks_sensitive("openswarm", selector="#search")
+    assert not sk._looks_sensitive("freeswarm", selector="#search")
 
 
 def test_navigate_url_userinfo_and_fragment_stripped_on_disk(_isolated_skills):

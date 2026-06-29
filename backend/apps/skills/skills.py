@@ -27,7 +27,7 @@ def _save_index(index: dict[str, dict]):
         json.dump(index, f, indent=2)
 
 
-# Built-in skills shipped with OpenSwarm itself. Each entry describes a
+# Built-in skills shipped with FreeSwarm itself. Each entry describes a
 # skill file we copy into ~/.claude/skills/ on first boot and tag with
 # `built_in: true` in the index. Users can edit the content (their
 # changes flow through to the matching agent's prompt on the next turn),

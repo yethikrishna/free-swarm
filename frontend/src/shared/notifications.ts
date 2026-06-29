@@ -50,7 +50,7 @@ export function notifyAgentCompletion(p: AgentCompletionPayload): void {
     });
     n.onclick = () => {
       try { window.focus(); } catch {}
-      window.dispatchEvent(new CustomEvent('openswarm:notification-click', {
+      window.dispatchEvent(new CustomEvent('freeswarm:notification-click', {
         detail: { sessionId: p.sessionId, dashboardId: p.dashboardId },
       }));
       n.close();

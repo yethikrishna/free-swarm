@@ -6,7 +6,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-// All-pairs (or full Cartesian via OPENSWARM_E2E_EXHAUSTIVE=1) coverage of the
+// All-pairs (or full Cartesian via FREESWARM_E2E_EXHAUSTIVE=1) coverage of the
 // General-tab Switch settings + theme. Each row is applied directly via the
 // Redux dispatch path the UI uses, then a series of post-conditions confirms:
 //   (a) the renderer didn't crash
@@ -16,9 +16,9 @@ import path from 'path';
 //   (e) the final Settings render is screenshot-stable
 
 function backendLogPath(): string {
-  if (process.platform === 'win32') return path.join(process.env.APPDATA || '', 'OpenSwarm', 'data', 'backend.log');
-  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'OpenSwarm', 'data', 'backend.log');
-  return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'OpenSwarm', 'data', 'backend.log');
+  if (process.platform === 'win32') return path.join(process.env.APPDATA || '', 'FreeSwarm', 'data', 'backend.log');
+  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'FreeSwarm', 'data', 'backend.log');
+  return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'FreeSwarm', 'data', 'backend.log');
 }
 function crashCount(): number {
   try { return (fs.readFileSync(backendLogPath(), 'utf8').match(/renderer process gone/g) || []).length; }
@@ -40,12 +40,12 @@ const PARAMS: Params = {
   theme: ['light', 'dark'],
   default_model: ['sonnet', 'opus'],
   default_thinking_level: ['auto', 'high'],
-  connection_mode: ['own_key', 'openswarm-pro'],
+  connection_mode: ['own_key', 'freeswarm-pro'],
   analytics_opt_in: [false, true],
 };
 
-const EXHAUSTIVE = process.env.OPENSWARM_E2E_EXHAUSTIVE === '1';
-const THROUGH_BACKEND = process.env.OPENSWARM_E2E_THROUGH_BACKEND === '1';
+const EXHAUSTIVE = process.env.FREESWARM_E2E_EXHAUSTIVE === '1';
+const THROUGH_BACKEND = process.env.FREESWARM_E2E_THROUGH_BACKEND === '1';
 const ROWS = EXHAUSTIVE ? cartesian(PARAMS) : pairwise(PARAMS);
 
 test.describe.configure({ mode: 'serial' });
@@ -82,15 +82,15 @@ test.describe(`settings ${EXHAUSTIVE ? 'cartesian' : 'pairwise'} (${ROWS.length}
   async function applyRow(row: Record<string, unknown>) {
     await page.evaluate(async ({ rowJson, throughBackend }) => {
       const r = JSON.parse(rowJson);
-      const store = (window as any).__OPENSWARM_STORE__;
-      if (!store) throw new Error('Redux store not exposed; __OPENSWARM_E2E__ flag did not take effect');
+      const store = (window as any).__FREESWARM_STORE__;
+      if (!store) throw new Error('Redux store not exposed; __FREESWARM_E2E__ flag did not take effect');
       const current = store.getState().settings.data;
       const next = { ...current };
       for (const k of Object.keys(r)) if (k !== 'theme') next[k] = r[k];
       if (throughBackend) {
         // Real PUT round-trip via the same auth path the renderer uses.
-        const port: number = (window as any).openswarm?.getBackendPort?.();
-        const token: string = await ((window as any).openswarm?.getAuthToken?.() ?? Promise.resolve(''));
+        const port: number = (window as any).freeswarm?.getBackendPort?.();
+        const token: string = await ((window as any).freeswarm?.getAuthToken?.() ?? Promise.resolve(''));
         const res = await fetch(`http://127.0.0.1:${port}/api/settings/`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -110,7 +110,7 @@ test.describe(`settings ${EXHAUSTIVE ? 'cartesian' : 'pairwise'} (${ROWS.length}
 
   async function readState(): Promise<{ store: Record<string, unknown>; theme: string | null }> {
     return await page.evaluate(() => {
-      const store = (window as any).__OPENSWARM_STORE__;
+      const store = (window as any).__FREESWARM_STORE__;
       const s = store ? store.getState().settings.data : {};
       let theme: string | null = null;
       try { theme = localStorage.getItem('self-swarm-theme-mode'); } catch {}

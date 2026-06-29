@@ -23,8 +23,8 @@ import pytest
 # backend modules.
 # ---------------------------------------------------------------------------
 
-_TMPROOT = tempfile.mkdtemp(prefix="openswarm-phase1-stress-")
-os.environ.setdefault("OPENSWARM_DATA_DIR", _TMPROOT)
+_TMPROOT = tempfile.mkdtemp(prefix="freeswarm-phase1-stress-")
+os.environ.setdefault("FREESWARM_DATA_DIR", _TMPROOT)
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +193,39 @@ def test_reconcile_idempotent():
             mtime_after_second = os.path.getmtime(os.path.join(td, f"{sid}.json"))
         assert mtime_after_first == mtime_after_second, "reconcile must be idempotent"
 
+
+def test_agents_lifespan_yields_without_blocking_on_restore():
+    """agents_lifespan must yield (let uvicorn bind the socket) without waiting
+    on session restore, which runs in the background. Regression guard: restore
+    was once awaited inline, delaying the HTTP bind so /api/health/check stayed
+    unanswered and the Electron splash quit before the main window appeared."""
+    import time
+    from backend.apps.agents import agents as agents_mod
+    from backend.apps.agents.agent_manager import agent_manager
+
+    async def _run():
+        restore_done = asyncio.Event()
+
+        async def _noop_reconcile():
+            return None
+
+        async def _slow_restore():
+            await asyncio.sleep(0.5)  # stand in for a heavy disk restore
+            restore_done.set()
+
+        with patch.object(agent_manager, "reconcile_on_startup", _noop_reconcile), \
+             patch.object(agent_manager, "restore_all_sessions", _slow_restore):
+            cm = agents_mod.agents_lifespan()
+            t0 = time.monotonic()
+            await cm.__aenter__()
+            yield_ms = (time.monotonic() - t0) * 1000
+            # Must yield fast; the 0.5s restore is supposed to run in the background.
+            assert yield_ms < 100, f"lifespan blocked {yield_ms:.0f}ms on restore"
+            # The backgrounded restore still runs to completion.
+            await asyncio.wait_for(restore_done.wait(), timeout=2)
+            await cm.__aexit__(None, None, None)
+
+    asyncio.run(_run())
 
 
 # ---------------------------------------------------------------------------

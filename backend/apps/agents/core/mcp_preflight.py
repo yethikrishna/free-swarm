@@ -38,7 +38,7 @@ CURATED_SHORTLIST: list[CuratedEntry] = [
     {
         "id": "Discord",
         "title": "Discord",
-        "description": "Read messages, send messages, manage channels, interact with Discord servers via the OpenSwarm bot.",
+        "description": "Read messages, send messages, manage channels, interact with Discord servers via the FreeSwarm bot.",
     },
     {
         "id": "Notion",

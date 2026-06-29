@@ -2,7 +2,7 @@ import { Search, Hammer, Globe, Plug } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // Two-level starters shared by the empty-state and the first-run welcome chat: pick a
-// category, then a concrete prompt. Chosen to SHOWCASE what only OpenSwarm can do, and to
+// category, then a concrete prompt. Chosen to SHOWCASE what only FreeSwarm can do, and to
 // feel PERSONAL: the agents can see the user's own computer/files, drive the browser, plug
 // into their apps (MCPs), build real apps, and run agents in parallel, none of which a plain
 // chatbot can do out of the box. Many prompts deliberately touch the user's own stuff so it
@@ -38,7 +38,7 @@ export const STARTER_CATEGORIES: StarterCategory[] = [
     ],
   },
   {
-    // The browser agent: OpenSwarm's most powerful tool, it actually drives the web for you.
+    // The browser agent: FreeSwarm's most powerful tool, it actually drives the web for you.
     id: 'browse', label: 'Use the web', Icon: Globe,
     prompts: [
       'Send an agent to find the cheapest flights to Tokyo and show me the best options',

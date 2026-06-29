@@ -8,7 +8,7 @@ import {
 export function hasModelConnected(s: RootState): boolean {
   const d = s.settings.data as any;
   if (!d) return false;
-  if (d.connection_mode === 'openswarm-pro' && d.openswarm_bearer_token) return true;
+  if (d.connection_mode === 'freeswarm-pro' && d.freeswarm_bearer_token) return true;
   if (
     d.anthropic_api_key ||
     d.openai_api_key ||

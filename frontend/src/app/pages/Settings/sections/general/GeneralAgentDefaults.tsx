@@ -24,8 +24,8 @@ const GeneralAgentDefaults: React.FC<{
   modelOptions: { grouped: Record<string, ModelOption[]>; flat: Array<ModelOption & { provider: string }> };
   modesList: Array<{ id: string; name: string }>;
   providerColors: Record<string, string>;
-  openswarmGradient: string;
-}> = ({ form, setForm, styles, setBrowseOpen, modelOptions, modesList, providerColors, openswarmGradient }) => {
+  freeswarmGradient: string;
+}> = ({ form, setForm, styles, setBrowseOpen, modelOptions, modesList, providerColors, freeswarmGradient }) => {
   const c = useClaudeTokens();
   const dispatch = useAppDispatch();
   const { fieldSx, sectionSx, rowSx, inlineRowSx, inlineRowLastSx, labelSx, descSx } = styles;
@@ -143,7 +143,7 @@ const GeneralAgentDefaults: React.FC<{
             }}
           >
             {Object.entries(modelOptions.grouped).flatMap(([prov, models]) => {
-              const isOpenSwarmPro = prov === 'OpenSwarm Pro';
+              const isFreeSwarmPro = prov === 'FreeSwarm Pro';
               const brandColor = providerColors[prov.toLowerCase()] ?? c.text.tertiary;
               return [
                 <ListSubheader
@@ -162,8 +162,8 @@ const GeneralAgentDefaults: React.FC<{
                         height: 6,
                         borderRadius: '50%',
                         flexShrink: 0,
-                        background: isOpenSwarmPro ? openswarmGradient : brandColor,
-                        boxShadow: isOpenSwarmPro
+                        background: isFreeSwarmPro ? freeswarmGradient : brandColor,
+                        boxShadow: isFreeSwarmPro
                           ? '0 0 8px rgba(229, 107, 196, 0.6)'
                           : `0 0 6px ${brandColor}80`,
                       }}
@@ -174,9 +174,9 @@ const GeneralAgentDefaults: React.FC<{
                         fontWeight: 700,
                         letterSpacing: '0.08em',
                         textTransform: 'uppercase',
-                        ...(isOpenSwarmPro
+                        ...(isFreeSwarmPro
                           ? {
-                              background: openswarmGradient,
+                              background: freeswarmGradient,
                               WebkitBackgroundClip: 'text',
                               WebkitTextFillColor: 'transparent',
                               backgroundClip: 'text',

@@ -1,6 +1,10 @@
 #!/bin/bash
-# Fetch the pre-built 9router Next.js app from npm and stage it for packaging.
+# Stage the FreeSwarm Router (9router fork) for packaging.
 # Usage: bash scripts/fetch-router.sh <dest_dir>
+#
+# FreeSwarm now uses its own fork of 9router (vendored in ./router, built to
+# ./.next/standalone/router). This script copies the Next.js standalone build
+# to the destination directory for inclusion in the final package.
 
 set -euo pipefail
 
@@ -10,23 +14,27 @@ if [[ -z "$DEST" ]]; then
     exit 1
 fi
 
-ROUTER_VERSION="${ROUTER_VERSION:-0.3.60}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+STANDALONE="$REPO_ROOT/router/.next/standalone"
 
-echo "Fetching 9router@${ROUTER_VERSION} from npm..."
+# Next.js places the standalone app under a subdirectory matching the app's
+# path relative to outputFileTracingRoot. With the tracing root pinned to
+# router/ (see router/next.config.mjs, required to avoid the Windows EPERM
+# scandir crash) the output is FLAT at .next/standalone/server.js. With the
+# old inferred (monorepo) root it nested under .next/standalone/router/.
+# Detect whichever layout the build produced so staging works either way.
+echo "Staging FreeSwarm Router from fork..."
 
-SCRATCH="$(mktemp -d)"
-trap 'rm -rf "$SCRATCH"' EXIT
-
-cd "$SCRATCH"
-printf '{"name":"_fetch","version":"0.0.0","private":true}\n' > package.json
-npm install "9router@${ROUTER_VERSION}" --no-save --no-audit --no-fund --silent --ignore-scripts
-
-SRC="$SCRATCH/node_modules/9router/app"
-if [[ ! -d "$SRC" ]]; then
-    echo "ERROR: 9router@${ROUTER_VERSION} did not install to expected layout ($SRC missing)" >&2
+if [[ -f "$STANDALONE/router/server.js" ]]; then
+    ROUTER_FORK="$STANDALONE/router"
+elif [[ -f "$STANDALONE/server.js" ]]; then
+    ROUTER_FORK="$STANDALONE"
+else
+    echo "ERROR: Router fork not built (no server.js in $STANDALONE or $STANDALONE/router). Run: cd $REPO_ROOT/router && npm run build" >&2
     exit 1
 fi
 
 mkdir -p "$DEST"
-rsync -a --delete "$SRC/" "$DEST/"
-echo "9router staged at: $DEST"
+rsync -a --delete "$ROUTER_FORK/" "$DEST/"
+echo "FreeSwarm Router staged at: $DEST (from $ROUTER_FORK)"

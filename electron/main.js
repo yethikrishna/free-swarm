@@ -1,19 +1,19 @@
 const { app, components, BrowserWindow, ipcMain, shell, session, dialog, crashReporter, powerMonitor } = require('electron');
 
-// E2E flag: when OPENSWARM_E2E=1, append a Chromium command-line switch the
-// renderer reads at startup to set window.__OPENSWARM_E2E__ = true BEFORE any
+// E2E flag: when FREESWARM_E2E=1, append a Chromium command-line switch the
+// renderer reads at startup to set window.__FREESWARM_E2E__ = true BEFORE any
 // page script parses, so the production-build store-on-window gate fires
 // deterministically. Normal user launches never set the env var so this is a
 // no-op for them; only Playwright's electron.launch({env}) flips it on.
-if (process.env.OPENSWARM_E2E === '1') {
-  try { app.commandLine.appendSwitch('openswarm-e2e', '1'); } catch {}
+if (process.env.FREESWARM_E2E === '1') {
+  try { app.commandLine.appendSwitch('freeswarm-e2e', '1'); } catch {}
 }
 
-// Local-only crash reporter. Captures native renderer crashes that escape JS-level error handlers and don't otherwise surface in Crashpad. uploadToServer=false keeps minidumps on disk under %APPDATA%/OpenSwarm/Crashpad so we can inspect them post-mortem without sending anywhere.
+// Local-only crash reporter. Captures native renderer crashes that escape JS-level error handlers and don't otherwise surface in Crashpad. uploadToServer=false keeps minidumps on disk under %APPDATA%/FreeSwarm/Crashpad so we can inspect them post-mortem without sending anywhere.
 try {
   crashReporter.start({
-    productName: 'OpenSwarm',
-    companyName: 'OpenSwarm',
+    productName: 'FreeSwarm',
+    companyName: 'FreeSwarm',
     submitURL: 'https://localhost.invalid',
     uploadToServer: false,
     ignoreSystemCrashHandler: false,
@@ -74,11 +74,11 @@ function _squirrelUpdate(args) {
 })();
 
 // NSIS->Squirrel migration cleanup. The first time this Squirrel build runs after
-// an existing NSIS OpenSwarm was updated into it, silently uninstall that legacy
+// an existing NSIS FreeSwarm was updated into it, silently uninstall that legacy
 // NSIS copy so the user isn't left with two installs + two shortcuts. Found via
 // the HKCU Uninstall entry whose UninstallString is the NSIS uninstaller (NOT
 // Squirrel's Update.exe). Deferred to quit so the NSIS uninstaller's taskkill of
-// OpenSwarm.exe can't kill this live session (same exe name). Best-effort +
+// FreeSwarm.exe can't kill this live session (same exe name). Best-effort +
 // detached: a failure just leaves the old install (never bricks); NSIS
 // deleteAppDataOnUninstall=false keeps the user's data across the swap.
 function _removeLegacyNsisInstall() {
@@ -87,7 +87,7 @@ function _removeLegacyNsisInstall() {
     "$ErrorActionPreference='SilentlyContinue';" +
     "$e = Get-ChildItem 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' |" +
     " ForEach-Object { Get-ItemProperty $_.PSPath } |" +
-    " Where-Object { $_.DisplayName -like 'OpenSwarm*' -and $_.UninstallString -and ($_.UninstallString -notmatch 'Update\\.exe') } |" +
+    " Where-Object { $_.DisplayName -like 'FreeSwarm*' -and $_.UninstallString -and ($_.UninstallString -notmatch 'Update\\.exe') } |" +
     " Select-Object -First 1;" +
     "if ($e) { if ($e.QuietUninstallString) { $u = $e.QuietUninstallString } else { $u = $e.UninstallString + ' /S' };" +
     " Start-Process -FilePath cmd.exe -ArgumentList '/c', $u -WindowStyle Hidden }";
@@ -121,7 +121,7 @@ function perfMark(name) {
 let _preflightInfo = {};
 let _preflightVerdict = null;
 
-// Comprehensive preflight (electron/preflight.js): fans out checks under hard per-check timeouts, emits a [preflight2] verdict line, defers cache write until BOTH preflight finished AND backend-http-ready so a mid-boot kill cannot poison the next launch's cached verdict. Kill switch via OPENSWARM_DISABLE_PREFLIGHT=1.
+// Comprehensive preflight (electron/preflight.js): fans out checks under hard per-check timeouts, emits a [preflight2] verdict line, defers cache write until BOTH preflight finished AND backend-http-ready so a mid-boot kill cannot poison the next launch's cached verdict. Kill switch via FREESWARM_DISABLE_PREFLIGHT=1.
 let _preflightPendingCache = null;
 // Cheap deterministic hash of installation_id into [0,99]; used by the cohort gate so the same install always falls in the same bucket regardless of when it boots.
 function installIdBucket(id) {
@@ -131,7 +131,7 @@ function installIdBucket(id) {
 }
 
 function runComprehensivePreflight() {
-  if (process.env.OPENSWARM_DISABLE_PREFLIGHT === '1') { console.log('[preflight2] skipped (OPENSWARM_DISABLE_PREFLIGHT=1)'); return; }
+  if (process.env.FREESWARM_DISABLE_PREFLIGHT === '1') { console.log('[preflight2] skipped (FREESWARM_DISABLE_PREFLIGHT=1)'); return; }
   // Honor settings.preflight_enabled and cohort gate. Read sync from settings.json
   // since the backend isn't up yet; missing/unreadable file just means "use defaults".
   try {
@@ -174,6 +174,17 @@ function maybeCommitPreflightCache() {
   _preflightPendingCache = null;
   try { pf.writeCache(pf.defaultEnv(), dataDir, version, result); console.log(`[preflight2] cache committed for v${version}`); }
   catch (e) { console.log(`[preflight2] cache write failed: ${e && e.message}`); }
+}
+
+// Human-readable summary of any non-ok system checks, for the boot-failure UI.
+// Turns a generic "backend timed out" into "...; also: dns failed, disk low",
+// which names the real environmental cause (broken DNS, full disk) the user
+// can actually fix. Returns '' when preflight is clean or hasn't run.
+function preflightFailureSummary() {
+  if (!_preflightVerdict || !Array.isArray(_preflightVerdict.results)) return '';
+  const bad = _preflightVerdict.results.filter((r) => r && r.status && r.status !== 'ok');
+  if (!bad.length) return '';
+  return bad.map((r) => `${r.name}: ${r.reason || r.status}`).join('; ');
 }
 
 function logPreflight(backendPort) {
@@ -270,16 +281,16 @@ if (process.argv.includes('--prewarm') && process.platform === 'win32') {
 // (or macOS auto-launch + manual launch overlapping) spawns two independent
 // processes — each with its own backend on a different port — resulting in
 // one populated window and one empty window.
-// Register openswarm:// protocol handler BEFORE any gotLock branching.
+// Register freeswarm:// protocol handler BEFORE any gotLock branching.
 // Must happen synchronously at the top of main.js so the OS knows this
 // binary is the default handler even before whenReady fires.
 if (process.defaultApp) {
   // Dev run: `electron .` needs the entry-script path to re-launch cleanly.
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient('openswarm', process.execPath, [path.resolve(process.argv[1])]);
+    app.setAsDefaultProtocolClient('freeswarm', process.execPath, [path.resolve(process.argv[1])]);
   }
 } else {
-  app.setAsDefaultProtocolClient('openswarm');
+  app.setAsDefaultProtocolClient('freeswarm');
 }
 
 // Pending deep-link captured before mainWindow exists (cold-launch case).
@@ -288,14 +299,14 @@ let pendingDeepLink = null;
 
 function forwardDeepLinkToRenderer(url) {
   if (!url) return;
-  // openswarm:// URLs split by host: "auth" → subscription token,
+  // freeswarm:// URLs split by host: "auth" → subscription token,
   // "oauth/{provider}/complete" → OAuth claim. Each goes to its own
   // IPC channel so the renderer can route without parsing twice.
-  let channel = 'openswarm:auth-url';
+  let channel = 'freeswarm:auth-url';
   try {
     const u = new URL(url);
     if (u.host === 'oauth' && u.pathname.endsWith('/complete')) {
-      channel = 'openswarm:oauth-claim';
+      channel = 'freeswarm:oauth-claim';
     }
   } catch (_) {
     // Malformed URL — fall back to legacy channel; renderer ignores anything
@@ -311,7 +322,7 @@ function forwardDeepLinkToRenderer(url) {
 }
 
 function extractOpenswarmUrl(argv) {
-  return argv && argv.find((a) => typeof a === 'string' && a.startsWith('openswarm://'));
+  return argv && argv.find((a) => typeof a === 'string' && a.startsWith('freeswarm://'));
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -319,7 +330,7 @@ if (!gotLock) {
   app.exit(0);
 } else {
   app.on('second-instance', (_event, argv) => {
-    // Windows/Linux: a `openswarm://...` click lands here because the OS
+    // Windows/Linux: a `freeswarm://...` click lands here because the OS
     // re-launches the app with the URL as an argv. We swallow the second
     // instance, focus the existing window, and forward the URL to renderer.
     const url = extractOpenswarmUrl(argv);
@@ -331,7 +342,7 @@ if (!gotLock) {
   });
 }
 
-// macOS-only: clicks on openswarm:// links fire this event (instead of
+// macOS-only: clicks on freeswarm:// links fire this event (instead of
 // relaunching the process).
 app.on('open-url', (event, url) => {
   event.preventDefault();
@@ -380,6 +391,14 @@ app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
 let mainWindow = null;
 let backendProcess = null;
 let backendPort = null;
+// Runtime backend-crash watchdog state. backendBooted gates the watchdog off
+// until the initial boot succeeds (the boot retry loop owns pre-boot exits).
+// backendIntentionalKill suppresses a restart when WE killed the process.
+// backendRestartTimes caps the restart rate so a crash loop can't thrash.
+let backendBooted = false;
+let backendIntentionalKill = false;
+let backendRestartTimes = [];
+let respawnBackend = null;  // set by startBackend; re-spawns on the same port
 let cachedUpdateStatus = { status: 'idle', info: null, error: null };
 let isInstallingUpdate = false;
 
@@ -425,6 +444,17 @@ async function startFrontendServer() {
   const server = http.createServer((req, res) => {
     try {
       let pathname = decodeURIComponent((req.url || '/').split('?')[0]);
+      // The production frontend bundle is built with webpack publicPath '/app/'
+      // (so the same bundle works when the website serves it at
+      // freeswarm.myndlabs.tech/app). The desktop embedded server serves that
+      // bundle from the root, so every asset + async chunk is requested as
+      // '/app/<file>'. Strip the '/app' prefix to map it back onto frontendDir.
+      // Without this, '/app/bundle.js' 404s, the SPA fallback below returns
+      // index.html as the script body, the renderer can't parse HTML as JS, and
+      // the window shows a black screen. See frontend/webpack.config.js.
+      if (pathname === '/app' || pathname.startsWith('/app/')) {
+        pathname = pathname.slice('/app'.length) || '/';
+      }
       if (pathname === '/' || pathname === '') pathname = '/index.html';
       const resolved = path.normalize(path.join(frontendDir, pathname));
       // Defense-in-depth path-traversal guard; loopback-only listener already prevents external access but a misparsed URL must not escape the frontend dir.
@@ -455,12 +485,13 @@ async function startFrontendServer() {
   // port every launch, which wiped onboarding state on every restart and re-triggered the
   // tour. Try a preferred port; if held, fall back to OS-assigned.
   const PREFERRED_PORT = 4173;
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     server.once('error', () => {
       // Preferred port held; fall back. localStorage may rotate this run but stabilizes once 4173 frees up.
       const fallback = http.createServer(server.listeners('request')[0]);
       fallback.on('error', (err) => {
         console.error('[frontend-server] fallback also failed:', err && err.message);
+        reject(new Error(`Frontend server failed: preferred port held, fallback bind also failed: ${err && err.message || err}`));
       });
       fallback.listen(0, '127.0.0.1', () => {
         const addr = fallback.address();
@@ -483,11 +514,11 @@ const isDev = process.env.ELECTRON_DEV === '1';
 
 // Mac-only crash watchdog. Targets the macOS 26.5 + Electron 42 NSEvent
 // null-deref users have reported (wake-from-sleep mostly). When the parent
-// dies unexpectedly, the watchdog calls `open -n /Applications/OpenSwarm.app`
+// dies unexpectedly, the watchdog calls `open -n /Applications/FreeSwarm.app`
 // to bring the user back in ~2s. Five guards in crash-watchdog.js prevent
 // false-positive relaunches (intentional Cmd+Q, auto-updater swap, startup
 // crash loop, repeat cap). Packaged builds only; never runs in dev.
-const CRASH_WATCHDOG_SUPPORT_DIR = path.join(os.homedir(), 'Library', 'Application Support', 'openswarm');
+const CRASH_WATCHDOG_SUPPORT_DIR = path.join(os.homedir(), 'Library', 'Application Support', 'freeswarm');
 const CRASH_WATCHDOG_CLEAN_QUIT_LOCK = path.join(CRASH_WATCHDOG_SUPPORT_DIR, 'clean-quit.lock');
 // The watchdog skips a relaunch while this exists (guard 4) so the parent dying
 // mid-swap isn't read as a crash. We write it when an update install starts and
@@ -500,7 +531,7 @@ function spawnCrashWatchdog() {
   try {
     const watchdogScript = path.join(__dirname, 'crash-watchdog.js');
     if (!fs.existsSync(watchdogScript)) return;
-    // .../OpenSwarm.app/Contents/Resources/  ->  .../OpenSwarm.app
+    // .../FreeSwarm.app/Contents/Resources/  ->  .../FreeSwarm.app
     const appBundle = path.join(process.resourcesPath, '..', '..');
     const { spawn: _spawn } = require('child_process');
     const child = _spawn(process.execPath, [watchdogScript], {
@@ -509,9 +540,9 @@ function spawnCrashWatchdog() {
       env: {
         ...process.env,
         ELECTRON_RUN_AS_NODE: '1',
-        OPENSWARM_PARENT_PID: String(process.pid),
-        OPENSWARM_APP_BUNDLE_PATH: appBundle,
-        OPENSWARM_PARENT_START_TIME: String(Date.now()),
+        FREESWARM_PARENT_PID: String(process.pid),
+        FREESWARM_APP_BUNDLE_PATH: appBundle,
+        FREESWARM_PARENT_START_TIME: String(Date.now()),
       },
     });
     child.unref();
@@ -558,7 +589,7 @@ function loadSplashDataUrl() {
     const html = fs.readFileSync(path.join(__dirname, 'splash', 'splash.html'), 'utf8');
     const iconBytes = fs.readFileSync(iconPngPath);
     const iconDataUrl = 'data:image/png;base64,' + iconBytes.toString('base64');
-    const finalHtml = html.replace('__OPENSWARM_LOGO__', iconDataUrl);
+    const finalHtml = html.replace('__FREESWARM_LOGO__', iconDataUrl);
     splashDataUrlCache = 'data:text/html;charset=utf-8;base64,' + Buffer.from(finalHtml).toString('base64');
     return splashDataUrlCache;
   } catch (err) {
@@ -583,7 +614,7 @@ function createSplashWindow() {
     show: true,
     center: true,
     backgroundColor: '#0a0a10',  // opaque to dodge Windows DWM transparency quirks
-    title: 'OpenSwarm',
+    title: 'FreeSwarm',
     icon: iconPath,
     webPreferences: {
       // Splash content is fully self-contained (data URL, no remote
@@ -622,19 +653,41 @@ function emitSplashStatus(payload) {
   }
 }
 
+// Check if this is a first launch by reading install.json state.
+function isFirstLaunch(userDataDir) {
+  try {
+    const installJsonPath = path.join(userDataDir, 'install.json');
+    const content = fs.readFileSync(installJsonPath, 'utf8');
+    const state = JSON.parse(content);
+    // If first_launch_at is absent or null, it's a first launch
+    return !state.first_launch_at;
+  } catch (_) {
+    // install.json doesn't exist or can't be parsed: assume first launch
+    return true;
+  }
+}
+
 // OS-tailored status copy. The "first launch is slow" experience has very
 // different causes per platform (Defender on Windows, Gatekeeper +
 // XProtect notarization scan on macOS), and naming the actual culprit
 // helps users feel like the wait is intentional rather than the app being
 // broken. Used by the long-wait branches in waitForBackend below.
-function osStillStartingText() {
+// Only show "(first launch only)" message on actual first launch; on
+// subsequent launches, omit it since the message is misleading.
+function osStillStartingText(isFirst = true) {
   if (process.platform === 'win32') {
-    return 'Still starting — Windows Defender is scanning files (first launch only)…';
+    return isFirst
+      ? 'Still starting — Windows Defender is scanning files (first launch only)…'
+      : 'Still starting — Windows Defender is scanning files…';
   }
   if (process.platform === 'darwin') {
-    return 'Still starting — macOS is verifying the bundle (first launch only)…';
+    return isFirst
+      ? 'Still starting — macOS is verifying the bundle (first launch only)…'
+      : 'Still starting — macOS is verifying the bundle…';
   }
-  return 'Still starting (first launch is slower than subsequent launches)…';
+  return isFirst
+    ? 'Still starting (first launch is slower than subsequent launches)…'
+    : 'Still starting…';
 }
 function osTakingTooLongText() {
   if (process.platform === 'win32') {
@@ -763,7 +816,7 @@ function getPythonPath() {
 
 // Path to a real Node.js binary bundled in extraResources, or null if not
 // shipped (dev mode, or build that skipped the node-fetch step). Backend
-// reads OPENSWARM_NODE_PATH env var to prefer this over both system `node`
+// reads FREESWARM_NODE_PATH env var to prefer this over both system `node`
 // (which fresh user Macs lack) and the ELECTRON_RUN_AS_NODE fallback
 // (which has flaky Dock behavior + slow cold-start). Used by 9Router and
 // MCP bundle spawning.
@@ -795,7 +848,10 @@ function getBundledNodePath() {
 // warnings on the splash so the wait feels intentional.
 function waitForBackend(port, opts = {}) {
   const proc = opts.process || null;
+  const userDataDir = opts.userDataDir || app.getPath('userData');
+  const isFirstLaunchNow = opts.isFirstLaunch !== undefined ? opts.isFirstLaunch : isFirstLaunch(userDataDir);
   const start = Date.now();
+  const HARD_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes wall-clock
   return new Promise((resolve, reject) => {
     let settled = false;
     let stillStartingNotified = false;
@@ -820,9 +876,13 @@ function waitForBackend(port, opts = {}) {
     function check() {
       if (settled) return;
       const elapsed = Date.now() - start;
+      if (elapsed > HARD_TIMEOUT_MS) {
+        finish(reject, new Error('Backend startup timed out after 10 minutes'));
+        return;
+      }
       if (elapsed > 60_000 && !stillStartingNotified) {
         stillStartingNotified = true;
-        emitSplashStatus({ text: osStillStartingText(), level: 'warning' });
+        emitSplashStatus({ text: osStillStartingText(isFirstLaunchNow), level: 'warning' });
       }
       if (elapsed > 180_000 && !actionsShown) {
         actionsShown = true;
@@ -853,7 +913,7 @@ function waitForBackend(port, opts = {}) {
 // Race a port-range search against a 3-second wall clock. On most machines
 // `getPort.makeRange(8324, 8424)` returns within milliseconds, but Windows
 // EDR / corp-firewall stacks can intercept the bind() probes and stall each
-// attempt for seconds — 100 attempts × multi-second stalls = "OpenSwarm is
+// attempt for seconds — 100 attempts × multi-second stalls = "FreeSwarm is
 // hung at startup." The fallback `getPort({ port: 0 })` lets the OS pick
 // any free ephemeral port; we don't actually care about staying inside the
 // 8324-range — the renderer reads the port via IPC, no hardcoded assumption.
@@ -894,7 +954,7 @@ async function startBackend() {
   // run-from-source developers in dashboards. Honors a build-time override
   // (set in CI when producing platform installers) before falling back to
   // OS-derived defaults.
-  let installMethod = process.env.OPENSWARM_INSTALL_METHOD;
+  let installMethod = process.env.FREESWARM_INSTALL_METHOD;
   if (!installMethod) {
     if (!isPackaged) {
       installMethod = 'dev';
@@ -914,10 +974,10 @@ async function startBackend() {
   const env = {
     ...process.env,
     PATH: shellPath,
-    OPENSWARM_PACKAGED: isPackaged ? '1' : '0',
-    OPENSWARM_PORT: String(backendPort),
-    OPENSWARM_ELECTRON_PATH: process.execPath,
-    OPENSWARM_INSTALL_METHOD: installMethod,
+    FREESWARM_PACKAGED: isPackaged ? '1' : '0',
+    FREESWARM_PORT: String(backendPort),
+    FREESWARM_ELECTRON_PATH: process.execPath,
+    FREESWARM_INSTALL_METHOD: installMethod,
     // Inject the app version so the Python backend can report it in the
     // analytics envelope. Without this, _read_app_version() in
     // service/service.py tries to read electron/package.json via a relative
@@ -925,15 +985,15 @@ async function startBackend() {
     // packaged dmg/exe builds — which made every shipped install report
     // app_version="unknown". The path-based fallback stays in place so this
     // change is purely additive.
-    OPENSWARM_APP_VERSION: app.getVersion(),
+    FREESWARM_APP_VERSION: app.getVersion(),
     // Inject the user's BCP 47 locale + IANA timezone. The Python backend
     // doesn't have reliable APIs for either: locale.getdefaultlocale() is
     // deprecated and inconsistent across OSes, and Python's local-tz string
     // sometimes returns "PDT" or "Romance (zomertijd)" rather than
     // "America/Los_Angeles". Electron has both in canonical form via
     // app.getLocale() and Intl.DateTimeFormat().resolvedOptions().timeZone.
-    OPENSWARM_LOCALE: app.getLocale(),
-    OPENSWARM_TIMEZONE: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+    FREESWARM_LOCALE: app.getLocale(),
+    FREESWARM_TIMEZONE: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
     PYTHONDONTWRITEBYTECODE: '1',
     // PEP 540 UTF-8 mode: makes open() default to UTF-8 on Windows where
     // the locale is otherwise cp1252. Many backend modules read UTF-8
@@ -943,14 +1003,14 @@ async function startBackend() {
 
   // Tell the backend where to find a real Node binary for 9Router and
   // bundled MCP servers. Preferring this over ELECTRON_RUN_AS_NODE avoids
-  // (a) the second OpenSwarm-as-Node process briefly registering in the
+  // (a) the second FreeSwarm-as-Node process briefly registering in the
   // Dock on fresh Macs, and (b) the slow Electron cold-start tail (~5-15s)
   // that Electron-as-Node adds vs. native node (~1-2s). Falls back to the
   // existing system-node / Electron-as-Node chain in nine_router._find_node()
   // if the env var is unset (dev mode, or build without node fetch).
   const bundledNode = getBundledNodePath();
   if (bundledNode) {
-    env.OPENSWARM_NODE_PATH = bundledNode;
+    env.FREESWARM_NODE_PATH = bundledNode;
   }
 
   if (isPackaged) {
@@ -972,7 +1032,7 @@ async function startBackend() {
   // (not in whenReady) because openBackendLog() above just installed the console
   // tee; logging earlier would miss the persistent file.
   const _bi = getBuildInfo();
-  console.log(`[provenance] OpenSwarm ${app.getVersion()} sha=${_bi.shortSha} channel=${_bi.channel} builtAt=${_bi.builtAt || 'n/a'}`);
+  console.log(`[provenance] FreeSwarm ${app.getVersion()} sha=${_bi.shortSha} channel=${_bi.channel} builtAt=${_bi.builtAt || 'n/a'}`);
   logPreflight(backendPort);
   runComprehensivePreflight();
   // Record what we're about to launch and whether the interpreter is even
@@ -984,62 +1044,81 @@ async function startBackend() {
   console.log(`Starting backend: ${pythonPath} (exists=${pythonExists}) on port ${backendPort}`);
   console.log(`Project root: ${projectRoot}`);
 
-  backendProcess = spawn(
-    pythonPath,
-    ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(backendPort)],
-    {
-      cwd: projectRoot,
-      env,
-      stdio: ['pipe', 'pipe', 'pipe'],
+  const spawnBackend = () => {
+    backendProcess = spawn(
+      pythonPath,
+      ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(backendPort)],
+      {
+        cwd: projectRoot,
+        env,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }
+    );
+
+    backendProcess.stdout.on('data', (data) => {
+      const text = data.toString();
+      process.stdout.write(`[backend] ${text}`);
+      // uvicorn prints this exact phrase once the ASGI app is live and
+      // routes are mounted — perfect milestone for the splash to flip
+      // from "starting backend" to "loading components".
+      if (text.indexOf('Application startup complete') !== -1) {
+        emitSplashStatus('Loading components…');
+      }
+    });
+
+    backendProcess.stderr.on('data', (data) => {
+      const text = data.toString();
+      process.stderr.write(`[backend] ${text}`);
+      // Buffer the most recent stderr lines for the splash error UI so
+      // when boot fails we can show actionable context inline instead of
+      // making the user dig through a log file.
+      recentBackendStderr.push(text);
+      while (recentBackendStderr.length > 60) recentBackendStderr.shift();
+    });
+
+    // spawn() fires 'error' (not 'exit', not stdout/stderr) when the binary is
+    // missing, AV-quarantined, blocked, or the wrong arch (ENOEXEC). This is the
+    // most common silent cross-machine failure; without this handler it produced
+    // an unhandled emitter error and an empty log. Surface it in both the log and
+    // the splash error buffer so "View logs" actually explains the crash.
+    backendProcess.on('error', (err) => {
+      const msg = `\n[electron] backend spawn FAILED: ${err && err.code ? err.code + ' ' : ''}${err && err.message || err}\n` +
+        `  python path: ${pythonPath} (exists=${pythonExists})\n` +
+        `  arch: ${process.arch}, platform: ${process.platform}\n`;
+      console.error(msg);
+      recentBackendStderr.push(msg);
+      while (recentBackendStderr.length > 60) recentBackendStderr.shift();
+    });
+
+    backendProcess.on('exit', (code) => {
+      console.log(`Backend exited with code ${code}`);
+      handleBackendExit(code);
+    });
+  };
+
+  // Expose the spawn so the runtime watchdog can re-launch on the same port
+  // after a crash, reusing this closure's pythonPath/env/projectRoot.
+  respawnBackend = spawnBackend;
+
+  // Retry transient boot crashes (AV scan, slow disk, import race) before
+  // surfacing the failure UI. A single bad spawn shouldn't kill the launch.
+  // The hard health-poll timeout is NOT retried: it means the process is alive
+  // but unresponsive (a deeper hang), so restarting just multiplies the wait.
+  const MAX_BOOT_ATTEMPTS = 3;
+  for (let attempt = 1; attempt <= MAX_BOOT_ATTEMPTS; attempt++) {
+    spawnBackend();
+    emitSplashStatus(attempt === 1 ? 'Starting backend…' : `Restarting backend (attempt ${attempt})…`);
+    try {
+      await waitForBackend(backendPort, { process: backendProcess });
+      break;
+    } catch (err) {
+      const isTimeout = !!(err && /timed out/i.test(err.message || ''));
+      console.error(`[boot] backend attempt ${attempt}/${MAX_BOOT_ATTEMPTS} failed: ${err && err.message}`);
+      try { if (backendProcess && !backendProcess.killed) backendProcess.kill(); } catch (_) {}
+      if (attempt >= MAX_BOOT_ATTEMPTS || isTimeout) throw err;
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
     }
-  );
-
-  backendProcess.stdout.on('data', (data) => {
-    const text = data.toString();
-    process.stdout.write(`[backend] ${text}`);
-    // uvicorn prints this exact phrase once the ASGI app is live and
-    // routes are mounted — perfect milestone for the splash to flip
-    // from "starting backend" to "loading components".
-    if (text.indexOf('Application startup complete') !== -1) {
-      emitSplashStatus('Loading components…');
-    }
-  });
-
-  backendProcess.stderr.on('data', (data) => {
-    const text = data.toString();
-    process.stderr.write(`[backend] ${text}`);
-    // Buffer the most recent stderr lines for the splash error UI so
-    // when boot fails we can show actionable context inline instead of
-    // making the user dig through a log file.
-    recentBackendStderr.push(text);
-    while (recentBackendStderr.length > 60) recentBackendStderr.shift();
-  });
-
-  // spawn() fires 'error' (not 'exit', not stdout/stderr) when the binary is
-  // missing, AV-quarantined, blocked, or the wrong arch (ENOEXEC). This is the
-  // most common silent cross-machine failure; without this handler it produced
-  // an unhandled emitter error and an empty log. Surface it in both the log and
-  // the splash error buffer so "View logs" actually explains the crash.
-  backendProcess.on('error', (err) => {
-    const msg = `\n[electron] backend spawn FAILED: ${err && err.code ? err.code + ' ' : ''}${err && err.message || err}\n` +
-      `  python path: ${pythonPath} (exists=${pythonExists})\n` +
-      `  arch: ${process.arch}, platform: ${process.platform}\n`;
-    console.error(msg);
-    recentBackendStderr.push(msg);
-    while (recentBackendStderr.length > 60) recentBackendStderr.shift();
-  });
-
-  backendProcess.on('exit', (code) => {
-    console.log(`Backend exited with code ${code}`);
-    if (code !== 0 && code !== null && mainWindow) {
-      mainWindow.webContents.executeJavaScript(
-        `document.title = "OpenSwarm (backend crashed)";`
-      );
-    }
-  });
-
-  emitSplashStatus('Starting backend…');
-  await waitForBackend(backendPort, { process: backendProcess });
+  }
   perfMark('backend-http-ready');
   console.log(`Backend ready on port ${backendPort}`);
   maybeCommitPreflightCache();
@@ -1067,23 +1146,26 @@ const backendReadyPromise = new Promise((resolve) => { _backendReadyResolve = re
 function markBackendReady() {
   if (backendReady) return;
   backendReady = true;
+  // Arm the runtime crash watchdog now that the initial boot has fully
+  // succeeded. Before this, exits are handled by the boot retry loop.
+  backendBooted = true;
   _backendReadyResolve();
 }
 
 function getAuthTokenFilePath() {
   // Mirrors backend/config/paths.py. On macOS the file lives at
-  // ~/Library/Application Support/OpenSwarm/data/auth.token; on
-  // Windows under %APPDATA%/OpenSwarm/data/; on Linux under
-  // ~/.local/share/OpenSwarm/data/. In dev the backend writes it to
+  // ~/Library/Application Support/FreeSwarm/data/auth.token; on
+  // Windows under %APPDATA%/FreeSwarm/data/; on Linux under
+  // ~/.local/share/FreeSwarm/data/. In dev the backend writes it to
   // backend/data/auth.token instead.
   if (isPackaged) {
     if (process.platform === 'darwin') {
-      return path.join(os.homedir(), 'Library', 'Application Support', 'OpenSwarm', 'data', 'auth.token');
+      return path.join(os.homedir(), 'Library', 'Application Support', 'FreeSwarm', 'data', 'auth.token');
     } else if (process.platform === 'win32') {
-      return path.join(process.env.APPDATA || os.homedir(), 'OpenSwarm', 'data', 'auth.token');
+      return path.join(process.env.APPDATA || os.homedir(), 'FreeSwarm', 'data', 'auth.token');
     } else {
       const xdg = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
-      return path.join(xdg, 'OpenSwarm', 'data', 'auth.token');
+      return path.join(xdg, 'FreeSwarm', 'data', 'auth.token');
     }
   }
   // Dev: backend/data/auth.token relative to repo root.
@@ -1165,7 +1247,7 @@ function createWindow() {
     height: 900,
     minWidth: 800,
     minHeight: 600,
-    title: 'OpenSwarm',
+    title: 'FreeSwarm',
     icon: iconPath,
     titleBarStyle: 'hiddenInset',
     // Stay hidden until the renderer fires `ready-to-show`. The splash
@@ -1182,7 +1264,7 @@ function createWindow() {
       // E2E: additionalArguments lands in the renderer process.argv, which the
       // preload reads to expose the Redux store deterministically. No-op for
       // normal launches (env var unset).
-      ...(process.env.OPENSWARM_E2E === '1' ? { additionalArguments: ['--openswarm-e2e=1'] } : {}),
+      ...(process.env.FREESWARM_E2E === '1' ? { additionalArguments: ['--freeswarm-e2e=1'] } : {}),
     },
   });
 
@@ -1206,7 +1288,7 @@ function createWindow() {
     // is the user gesture that re-enables it. Scoped to webviews, not the main window.
     webPreferences.autoplayPolicy = 'document-user-activation-required';
     // Force our webview preload to attach for every <webview>, unconditionally.
-    // The alternative (reading window.openswarm.getWebviewPreloadPath() in
+    // The alternative (reading window.freeswarm.getWebviewPreloadPath() in
     // BrowserCard's React code at module-eval time) raced against the
     // preload's async contextBridge exposure — the resulting attribute on
     // the <webview> element ended up empty, so no preload ran and our
@@ -1215,7 +1297,7 @@ function createWindow() {
     // is what webPreferences expects.
     webPreferences.preload = path.join(__dirname, 'webview-preload.js');
     try {
-      console.log('[openswarm:attach-webview] forced preload=', webPreferences.preload, 'src=', params.src);
+      console.log('[freeswarm:attach-webview] forced preload=', webPreferences.preload, 'src=', params.src);
     } catch (_) {}
   });
 
@@ -1246,14 +1328,14 @@ function createWindow() {
   }
 
   // Once the renderer has loaded, flush any deep-link URL we captured before
-  // the window existed (cold-launch via openswarm://). pendingDeepLink may
+  // the window existed (cold-launch via freeswarm://). pendingDeepLink may
   // be a string (legacy) OR a {channel, url} object (v1.0.26+ OAuth claims).
   mainWindow.webContents.once('did-finish-load', () => {
     perfMark('first-paint');
     maybeSendBootBeacon();
     if (pendingDeepLink) {
       if (typeof pendingDeepLink === 'string') {
-        mainWindow.webContents.send('openswarm:auth-url', pendingDeepLink);
+        mainWindow.webContents.send('freeswarm:auth-url', pendingDeepLink);
       } else {
         mainWindow.webContents.send(pendingDeepLink.channel, pendingDeepLink.url);
       }
@@ -1350,7 +1432,7 @@ function createWindow() {
     const now = Date.now();
     if (now - _lastFocusEvent < FOCUS_THROTTLE_MS) return;
     _lastFocusEvent = now;
-    sendToRenderer('openswarm:window-focus', { kind, ts: now });
+    sendToRenderer('freeswarm:window-focus', { kind, ts: now });
   };
   mainWindow.on('blur', () => sendFocusEvent('blur'));
   mainWindow.on('focus', () => sendFocusEvent('focus'));
@@ -1430,8 +1512,8 @@ async function showCrashRecoveryOverlay() {
   try {
     const result = await dialog.showMessageBox({
       type: 'error',
-      title: 'OpenSwarm needs to reload',
-      message: 'OpenSwarm had repeated UI errors and stopped auto-recovering.',
+      title: 'FreeSwarm needs to reload',
+      message: 'FreeSwarm had repeated UI errors and stopped auto-recovering.',
       detail: 'Reload to try again, or quit if this keeps happening.',
       buttons: ['Reload', 'Quit'],
       defaultId: 0,
@@ -1526,7 +1608,7 @@ function setupAutoUpdater() {
     // Squirrel.Windows fetches its RELEASES feed from GH /latest/download/. The
     // built-in autoUpdater has no autoDownload/allowPrerelease/allowDowngrade knobs.
     try {
-      autoUpdater.setFeedURL({ url: 'https://github.com/openswarm-ai/openswarm/releases/latest/download/' });
+      autoUpdater.setFeedURL({ url: 'https://github.com/yethikrishna/free-swarm/releases/latest/download/' });
     } catch (err) {
       console.warn('[updater] Squirrel setFeedURL failed:', err && err.message);
       return;
@@ -1642,6 +1724,9 @@ function setupAutoUpdater() {
 }
 
 function killBackend() {
+  // Mark this as a deliberate kill so the crash watchdog doesn't try to revive
+  // a backend we intentionally tore down (quit, splash-quit, boot failure).
+  backendIntentionalKill = true;
   if (backendProcess) {
     console.log('Killing backend process...');
     if (process.platform === 'win32') {
@@ -1670,6 +1755,46 @@ function killBackend() {
   if (backendLogStream) {
     try { backendLogStream.end(`[electron] backend killed ${new Date().toISOString()}\n`); } catch (_) {}
     backendLogStream = null;
+  }
+}
+
+// Runtime backend-crash watchdog. If the backend dies unexpectedly AFTER a
+// successful boot, revive it on the same port instead of leaving the app a
+// dead shell (every API/WS call failing until a manual restart). Mirrors the
+// guard discipline of the macOS process crash-watchdog: only act post-boot,
+// never during a quit or update swap, never on a deliberate kill, and cap the
+// restart rate so a backend that crash-loops can't thrash forever.
+function handleBackendExit(code) {
+  // Pre-boot exits belong to the boot retry loop, not here.
+  if (!backendBooted) return;
+  // Clean exit (0) or one we triggered (null on signal / our own kill).
+  if (code === 0 || code === null || backendIntentionalKill) return;
+  // A quit or update install is allowed to take the backend down.
+  if (quitInitiated || isInstallingUpdate) return;
+
+  const now = Date.now();
+  backendRestartTimes = backendRestartTimes.filter((t) => now - t < 5 * 60_000);
+  if (backendRestartTimes.length >= 3) {
+    console.error('[backend-watchdog] restart cap hit (3 in 5min); leaving backend down');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript(`document.title = "FreeSwarm (backend crashed)";`).catch(() => {});
+    }
+    return;
+  }
+  backendRestartTimes.push(now);
+  console.warn(`[backend-watchdog] backend exited code=${code}; restarting (#${backendRestartTimes.length}/3)`);
+  if (typeof respawnBackend !== 'function') return;
+  try {
+    respawnBackend();
+    // Confirm recovery, then nudge the renderer to re-establish its connections.
+    waitForBackend(backendPort, { process: backendProcess })
+      .then(() => {
+        console.log('[backend-watchdog] backend recovered on port', backendPort);
+        sendToRenderer('backend-recovered', { port: backendPort });
+      })
+      .catch((e) => console.error('[backend-watchdog] restarted backend never became healthy:', e && e.message));
+  } catch (e) {
+    console.error('[backend-watchdog] respawn threw:', e && e.message);
   }
 }
 
@@ -1706,7 +1831,7 @@ app.whenReady().then(async () => {
   // Off-window mouse-release crash dodge (macOS). Safe to call before windows exist.
   installMacMouseClamp();
 
-  // Cold-launch: if the OS opened us via openswarm:// (Windows/Linux it's
+  // Cold-launch: if the OS opened us via freeswarm:// (Windows/Linux it's
   // in argv; macOS fires open-url AFTER whenReady which we handle above)
   // route through forwardDeepLinkToRenderer so the URL gets stashed under
   // its correct IPC channel (auth-url vs oauth-claim).
@@ -1787,7 +1912,7 @@ app.whenReady().then(async () => {
   // of double-clicking. Without this, on a cold-Defender Windows install
   // the dock/taskbar icon flashes for 30-60s with nothing visible.
   splashWindow = createSplashWindow();
-  emitSplashStatus('Starting OpenSwarm…');
+  emitSplashStatus('Starting FreeSwarm…');
 
   // Widevine CDM and backend startup are independent — run them
   // concurrently. Backend is the long pole on Windows (Defender + Python
@@ -1813,7 +1938,7 @@ app.whenReady().then(async () => {
 
   try {
     if (isDev) {
-      backendPort = parseInt(process.env.OPENSWARM_PORT || '8324', 10);
+      backendPort = parseInt(process.env.FREESWARM_PORT || '8324', 10);
       console.log(`Dev mode: using existing backend on port ${backendPort}`);
       emitSplashStatus('Connecting to dev backend…');
       // Load the token before marking ready, same as prod, so renderer
@@ -1912,9 +2037,11 @@ app.whenReady().then(async () => {
     console.error('Failed to start:', err);
     // Surface the failure on the splash instead of silently quitting.
     // The user picks: view logs, restart, or quit. This eliminates the
-    // class of "I clicked OpenSwarm and nothing happened" reports.
+    // class of "I clicked FreeSwarm and nothing happened" reports.
+    const pfSummary = preflightFailureSummary();
+    const baseMsg = "FreeSwarm couldn't start: " + (err && err.message ? err.message : String(err));
     emitSplashStatus({
-      text: "OpenSwarm couldn't start: " + (err && err.message ? err.message : String(err)),
+      text: pfSummary ? `${baseMsg}\nSystem checks: ${pfSummary}` : baseMsg,
       level: 'error',
       showActions: true,
       logs: recentBackendStderr.slice(-30).join(''),
@@ -1931,7 +2058,7 @@ app.on('web-contents-created', (_event, contents) => {
   // `Electron/X.Y.Z` token that accounts.google.com blacklists with a
   // "browser not supported" page — and auth.openai.com is similarly picky.
   // Spoofing a current Chrome UA makes those identity providers treat the
-  // popup like a real browser without changing the flow OpenSwarm uses to
+  // popup like a real browser without changing the flow FreeSwarm uses to
   // capture the callback (window.open + postMessage).
   //
   // This check runs synchronously during `new BrowserWindow()` construction.
@@ -2021,7 +2148,7 @@ app.on('web-contents-created', (_event, contents) => {
       const error = u.searchParams.get('error');
       if (!code && !error) return;
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('openswarm:oauth-callback', { code, state, error });
+        mainWindow.webContents.send('freeswarm:oauth-callback', { code, state, error });
       }
     } catch { /* not a URL we care about */ }
   };
@@ -2035,7 +2162,7 @@ app.on('web-contents-created', (_event, contents) => {
       if (message.includes('widevine') || message.includes('drm') ||
           message.includes('license') || message.includes('MediaKeySession') ||
           message.includes('EME') || message.includes('[drm-diag]') ||
-          message.includes('openswarm') ||
+          message.includes('freeswarm') ||
           level >= 2) {
         console.log(`[webview:${tag}] ${message}${src ? ` (${src}:${line})` : ''}`);
       }
@@ -2117,17 +2244,17 @@ app.on('web-contents-created', (_event, contents) => {
     contents.on('dom-ready', () => {
       contents.executeJavaScript(`
         (function() {
-          if (window.__openswarm_passkey_shim__) return;
-          window.__openswarm_passkey_shim__ = true;
+          if (window.__freeswarm_passkey_shim__) return;
+          window.__freeswarm_passkey_shim__ = true;
           try {
-            console.warn('[openswarm:shim] main-world shim installing at', location.href);
+            console.warn('[freeswarm:shim] main-world shim installing at', location.href);
             var notify = function(kind) {
-              try { console.warn('[openswarm:shim] passkey intercepted:', kind); } catch (_) {}
-              try { window.postMessage({ __openswarm__: '__openswarm_passkey__' }, '*'); } catch (_) {}
+              try { console.warn('[freeswarm:shim] passkey intercepted:', kind); } catch (_) {}
+              try { window.postMessage({ __freeswarm__: '__freeswarm_passkey__' }, '*'); } catch (_) {}
             };
             var rejected = function() {
               return Promise.reject(new DOMException(
-                'OpenSwarm does not support passkeys. Please use another sign-in method.',
+                'FreeSwarm does not support passkeys. Please use another sign-in method.',
                 'NotAllowedError'
               ));
             };
@@ -2145,7 +2272,7 @@ app.on('web-contents-created', (_event, contents) => {
                 if (options && options.publicKey) { notify('create'); return rejected(); }
                 return origCreate ? origCreate(options) : Promise.reject(new DOMException('Not supported', 'NotSupportedError'));
               };
-              console.warn('[openswarm:shim] navigator.credentials patched');
+              console.warn('[freeswarm:shim] navigator.credentials patched');
             }
             if (window.PublicKeyCredential) {
               window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = function() { return Promise.resolve(false); };
@@ -2154,7 +2281,7 @@ app.on('web-contents-created', (_event, contents) => {
               }
             }
           } catch (e) {
-            try { console.warn('[openswarm:shim] error:', e && e.message); } catch (_) {}
+            try { console.warn('[freeswarm:shim] error:', e && e.message); } catch (_) {}
           }
         })();
       `).catch(() => {});
@@ -2230,7 +2357,7 @@ app.on('window-all-closed', () => {
   // that is taskkill /F, which skips uvicorn's graceful stop_all) orphans
   // those children, and an orphaned vite node.exe keeps a lock on its own
   // image at resources\node\x64\node.exe, blocking the next NSIS upgrade
-  // with "OpenSwarm cannot be closed".
+  // with "FreeSwarm cannot be closed".
   app.quit();
 });
 
@@ -2351,9 +2478,9 @@ ipcMain.on('splash:action', (_event, action) => {
 
 // Log every IPC handle entry so the trace shows which main-process call the renderer was making in the seconds before death.
 // The CDP channels fire once PER accessibility-tree node (hundreds per page read), pure noise that buries the useful trace,
-// so skip those by default; OPENSWARM_DIAG_IPC=1 brings them back when you genuinely need the firehose.
+// so skip those by default; FREESWARM_DIAG_IPC=1 brings them back when you genuinely need the firehose.
 const _NOISY_IPC = new Set(['send-cdp-command', 'cdp-cache-get', 'cdp-cache-set', 'cdp-routes-get', 'cdp-child-sessions-get']);
-const _DIAG_IPC_ALL = process.env.OPENSWARM_DIAG_IPC === '1';
+const _DIAG_IPC_ALL = process.env.FREESWARM_DIAG_IPC === '1';
 const _origHandle = ipcMain.handle.bind(ipcMain);
 ipcMain.handle = (channel, handler) => {
   return _origHandle(channel, async (...args) => {
@@ -2368,7 +2495,7 @@ ipcMain.handle = (channel, handler) => {
 };
 
 ipcMain.handle('get-backend-port', () => backendPort);
-// Sync mirrors so preload.js can expose window.openswarm synchronously (no await), closing the race where React renders before the async exposure resolves and window.openswarm is briefly undefined. backendPort is assigned in app.whenReady before any BrowserWindow is created, so it is always set by the time preload runs.
+// Sync mirrors so preload.js can expose window.freeswarm synchronously (no await), closing the race where React renders before the async exposure resolves and window.freeswarm is briefly undefined. backendPort is assigned in app.whenReady before any BrowserWindow is created, so it is always set by the time preload runs.
 ipcMain.on('get-backend-port-sync', (event) => { event.returnValue = backendPort; });
 ipcMain.on('get-webview-preload-path-sync', (event) => {
   event.returnValue = `file://${path.join(__dirname, 'webview-preload.js')}`;
@@ -2401,6 +2528,98 @@ ipcMain.handle('get-webview-preload-path', () => {
   return `file://${path.join(__dirname, 'webview-preload.js')}`;
 });
 
+// Phase 2 keychain: OS-secure storage for secrets (API keys, tokens).
+// Uses Electron's safeStorage (Keychain/DPAPI/libsecret) for encryption.
+// On Linux headless (no Secret Service), falls back to plaintext-on-disk with warning flag.
+const { safeStorage } = require('electron');
+const _secretStoragePath = path.join(app.getPath('userData'), 'secrets');
+
+ipcMain.handle('secret:set', async (_event, key, plaintext) => {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) {
+      // Linux headless or other platform without encryption support.
+      // Fall back to plaintext (bad!) but write a warning flag.
+      if (!fs.existsSync(_secretStoragePath)) fs.mkdirSync(_secretStoragePath, { recursive: true });
+      const warningPath = path.join(_secretStoragePath, '.plaintext-fallback-warning');
+      fs.writeFileSync(warningPath, `NO OS KEYCHAIN AVAILABLE. Secrets stored plaintext. Date: ${new Date().toISOString()}`, 'utf-8');
+      const filePath = path.join(_secretStoragePath, `${key}.plaintext`);
+      fs.writeFileSync(filePath, plaintext, 'utf-8');
+      return { ok: true, encrypted: false, warning: 'plaintext fallback' };
+    }
+    if (!fs.existsSync(_secretStoragePath)) fs.mkdirSync(_secretStoragePath, { recursive: true });
+    const encrypted = safeStorage.encryptString(plaintext);
+    const filePath = path.join(_secretStoragePath, `${key}.bin`);
+    fs.writeFileSync(filePath, encrypted);
+    return { ok: true, encrypted: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('secret:get', async (_event, key) => {
+  try {
+    let filePath = path.join(_secretStoragePath, `${key}.bin`);
+    if (!fs.existsSync(filePath)) {
+      // Try plaintext fallback (dev/headless).
+      filePath = path.join(_secretStoragePath, `${key}.plaintext`);
+      if (!fs.existsSync(filePath)) return { ok: false, value: null };
+      return { ok: true, value: fs.readFileSync(filePath, 'utf-8') };
+    }
+    const encrypted = fs.readFileSync(filePath);
+    const plaintext = safeStorage.decryptString(encrypted);
+    return { ok: true, value: plaintext };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('secret:delete', async (_event, key) => {
+  try {
+    let filePath = path.join(_secretStoragePath, `${key}.bin`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return { ok: true };
+    }
+    filePath = path.join(_secretStoragePath, `${key}.plaintext`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      return { ok: true };
+    }
+    return { ok: true }; // Already gone is fine.
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('secret:list', async (_event) => {
+  try {
+    if (!fs.existsSync(_secretStoragePath)) return { ok: true, keys: [] };
+    const files = fs.readdirSync(_secretStoragePath);
+    const keys = files
+      .filter(f => f.endsWith('.bin') || f.endsWith('.plaintext'))
+      .map(f => f.replace(/\.(bin|plaintext)$/, ''));
+    return { ok: true, keys };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// Phase 2 auth: generate a one-time sign-in nonce (proves this install initiated the flow).
+const _signInNonces = new Map(); // nonce -> { generated_at_ms }
+ipcMain.handle('auth:begin-signin', async (_event) => {
+  const { randomUUID } = require('crypto');
+  const nonce = randomUUID();
+  _signInNonces.set(nonce, { generated_at_ms: Date.now() });
+  // Clean up expired nonces (older than 5 min) every time.
+  const now = Date.now();
+  for (const [n, data] of _signInNonces.entries()) {
+    if (now - data.generated_at_ms > 5 * 60 * 1000) {
+      _signInNonces.delete(n);
+    }
+  }
+  return { ok: true, nonce };
+});
+
 ipcMain.handle('get-update-status', () => cachedUpdateStatus);
 
 // One-shot recovery info: if the crash-watchdog relaunched us, returns the
@@ -2411,7 +2630,7 @@ let _cachedRecoveryInfo = undefined;
 ipcMain.handle('get-crash-recovery-info', () => {
   if (process.platform !== 'darwin') return null;
   if (_cachedRecoveryInfo !== undefined) return _cachedRecoveryInfo;
-  const markerPath = path.join(os.homedir(), 'Library', 'Application Support', 'openswarm', 'crash-recovery.json');
+  const markerPath = path.join(os.homedir(), 'Library', 'Application Support', 'freeswarm', 'crash-recovery.json');
   try {
     if (!fs.existsSync(markerPath)) { _cachedRecoveryInfo = null; return null; }
     const raw = fs.readFileSync(markerPath, 'utf-8');
@@ -2504,7 +2723,7 @@ async function installDownloadedUpdate() {
     isInstallingUpdate = false;
     try { fs.unlinkSync(CRASH_WATCHDOG_UPDATING_LOCK); } catch (_) {}
     if (BrowserWindow.getAllWindows().length > 0) {
-      sendToRenderer('update-error', 'Update could not be installed. Please download the latest from openswarm.com.');
+      sendToRenderer('update-error', 'Update could not be installed. Please download the latest from freeswarm.myndlabs.tech.');
     } else if (backendPort && !isCreatingMainWindow) {
       try { recreateMainWindow(); } catch (_) {}
     }
@@ -2554,7 +2773,7 @@ ipcMain.handle('get-install-state', () => {
 // ---------------------------------------------------------------------------
 // Maintains a per-webContents AX index cache (numeric index → backendNodeId)
 // and serializes CDP commands per target so concurrent calls don't interleave.
-// The renderer calls window.openswarm.sendCdpCommand(wcId, method, params),
+// The renderer calls window.freeswarm.sendCdpCommand(wcId, method, params),
 // which routes through this handler to webContents.debugger.sendCommand().
 
 const cdpAxIndexCache = new Map(); // wcId -> map of index -> {backendNodeId, sessionId}

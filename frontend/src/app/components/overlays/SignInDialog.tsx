@@ -1,155 +1,110 @@
-// Optional sign-in dialog opened from Settings; Google OAuth handoff or email magic-link (6-digit code).
+// Optional sign-in dialog opened from Settings; Google OAuth or GitHub OAuth handoff.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Box,
   Typography,
   Modal,
   Button,
-  TextField,
-  CircularProgress,
   IconButton,
-  Link,
+  CircularProgress,
 } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
-import EmailIcon from '@mui/icons-material/Email';
 import CloseIcon from '@mui/icons-material/Close';
 import { useAppDispatch, useAppSelector } from '@/shared/hooks';
-import { activateSignin, fetchSettings } from '@/shared/state/settingsSlice';
+import { fetchSettings } from '@/shared/state/settingsSlice';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
-import { OPENSWARM_DEFAULT_PROXY_URL } from '@/shared/config';
+import { API_BASE, FREESWARM_DEFAULT_PROXY_URL } from '@/shared/config';
 import { report } from '@/shared/serviceClient';
+import DeviceCodePanel from './DeviceCodePanel';
 
-type Stage = 'choose' | 'email_form' | 'code_form';
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const GitHubIcon: React.FC = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
+  </svg>
+);
 
 export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.Element {
   const tokens = useClaudeTokens();
   const dispatch = useAppDispatch();
   const proxyUrl = useAppSelector(
-    (s) => s.settings.data.openswarm_proxy_url || OPENSWARM_DEFAULT_PROXY_URL,
+    (s) => s.settings.data.freeswarm_proxy_url || FREESWARM_DEFAULT_PROXY_URL,
   );
   const installId = useAppSelector((s) => s.settings.data.installation_id ?? '');
+  // Signed-in once a user_id lands in settings (set by the backend's
+  // signin-activate after the OAuth handoff completes out-of-band).
+  const userId = useAppSelector((s) => s.settings.data.user_id ?? null);
+  const userEmail = useAppSelector((s) => s.settings.data.user_email ?? null);
 
-  const [stage, setStage] = useState<Stage>('choose');
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [errMsg, setErrMsg] = useState<string | null>(null);
+  // 'idle' until the user picks a provider; 'waiting' once the OAuth browser is
+  // opened and we're polling for the handoff; 'code' for the device-code path;
+  // 'done' when a signed-in user appears, held briefly before auto-closing.
+  const [phase, setPhase] = useState<'idle' | 'waiting' | 'code' | 'done'>('idle');
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Google's handoff page POSTs the bearer to the local backend out-of-band; poll so the dialog notices.
+  // OAuth handoff page POSTs the bearer to the local backend out-of-band; poll so the dialog notices.
   useEffect(() => {
     const id = setInterval(() => { dispatch(fetchSettings()); }, 2000);
     return () => clearInterval(id);
   }, [dispatch]);
 
+  // When a user_id appears during the OAuth handoff, flip to the success state.
+  // (The device-code path sets 'done' itself via DeviceCodePanel's onApproved.)
+  useEffect(() => {
+    if (userId && phase === 'waiting') {
+      report('signin', 'completed');
+      setPhase('done');
+    }
+  }, [userId, phase]);
+
+  // Any path that reaches 'done' holds the confirmation briefly, then closes, so
+  // the user sees they're signed in instead of an abrupt vanish.
+  useEffect(() => {
+    if (phase !== 'done') return;
+    closeTimerRef.current = setTimeout(() => onClose(), 1400);
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, [phase, onClose]);
+
   const cloudBase = proxyUrl.replace(/\/$/, '');
 
-  const onGoogle = () => {
-    report('signin', 'google_clicked');
-    const localPort = (window as any).__OPENSWARM_PORT__ || 8324;
-    const params = new URLSearchParams({
-      install_id: installId,
-      local_port: String(localPort),
-    });
-    const startUrl = `${cloudBase}/api/auth/google/start?${params.toString()}`;
-    const api = (window as any).openswarm;
-    if (api?.openExternal) {
-      api.openExternal(startUrl);
-    } else {
-      window.open(startUrl, '_blank');
-    }
-  };
-
-  const onSubmitEmail = async () => {
-    setErrMsg(null);
-    if (!EMAIL_REGEX.test(email.trim())) {
-      setErrMsg('Enter a valid email address.');
-      return;
-    }
-    setBusy(true);
-
-    // 404/"Failed to fetch" = cloud build lacks magic-link routes; surface a friendly hint.
-    const EMAIL_UNAVAILABLE_MSG =
-      "Email sign-in isn't available on this build yet. Please use Continue with Google for now, or update OpenSwarm.";
-
+  // Mint a single-use install nonce before opening the browser. The cloud carries
+  // it through OAuth and echoes it back to the local backend's signin-activate,
+  // which validates it so a stray POST can't re-identify this install (Gap A).
+  const beginNonce = async (): Promise<string> => {
     try {
-      report('signin', 'email_start_submitted');
-      let startRes: Response;
-      try {
-        startRes = await fetch(`${cloudBase}/api/auth/email/start`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim() }),
-        });
-      } catch (err) {
-        report('signin', 'email_endpoint_unreachable', { phase: 'start', err: String(err) });
-        setErrMsg(EMAIL_UNAVAILABLE_MSG);
-        return;
-      }
-      if (startRes.status === 404) {
-        report('signin', 'email_endpoint_not_deployed');
-        setErrMsg(EMAIL_UNAVAILABLE_MSG);
-        return;
-      }
-      if (!startRes.ok) {
-        const text = await startRes.text().catch(() => '');
-        report('signin', 'email_start_failed', { status: startRes.status });
-        setErrMsg(text || "Couldn't send the code. Try again.");
-        return;
-      }
-      setStage('code_form');
-    } finally {
-      setBusy(false);
+      const res = await fetch(`${API_BASE}/auth/begin-signin`, { method: 'POST' });
+      if (res.ok) return (await res.json()).nonce ?? '';
+    } catch {
+      /* nonce is best-effort; the backend tolerates its absence during migration */
     }
+    return '';
   };
 
-  const onSubmitCode = async () => {
-    setErrMsg(null);
-    if (!/^\d{6}$/.test(code)) {
-      setErrMsg('Enter the 6-digit code from your email.');
-      return;
-    }
-    setBusy(true);
-    try {
-      report('signin', 'email_verify_submitted');
-      const localPort = (window as any).__OPENSWARM_PORT__ || 8324;
-      const res = await fetch(`${cloudBase}/api/auth/email/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim(),
-          code,
-          install_id: installId,
-          local_port: localPort,
-        }),
-      });
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(text || `HTTP ${res.status}`);
-      }
-      const data = (await res.json()) as { bearer?: string; user_id?: string; user_email?: string };
-      if (!data.bearer) throw new Error('Server did not return a bearer.');
-      // Hand bearer to local backend like Google's handoff page; the settings refetch flips the account card, which unmounts us.
-      await dispatch(
-        activateSignin({
-          token: data.bearer,
-          email: data.user_email,
-          signin_method: 'email',
-        }),
-      ).unwrap();
-    } catch (err) {
-      setErrMsg((err as Error).message || 'Verification failed.');
-    } finally {
-      setBusy(false);
-    }
+  const openOAuth = async (path: string, eventName: string) => {
+    report('signin', eventName);
+    const api = (window as any).freeswarm;
+    const url = `${cloudBase}${path}`;
+    if (api?.openExternal) api.openExternal(url);
+    else window.open(url, '_blank');
+    setPhase('waiting');
   };
 
-  const onResendCode = async () => {
-    setStage('email_form');
-    setCode('');
-    setErrMsg(null);
+  const onGoogle = async () => {
+    const localPort = (window as any).__FREESWARM_PORT__ || 8324;
+    const nonce = await beginNonce();
+    const params = new URLSearchParams({ install_id: installId, local_port: String(localPort), redirect_to: '/app' });
+    if (nonce) params.set('signin_nonce', nonce);
+    void openOAuth(`/api/auth/google/start?${params.toString()}`, 'google_clicked');
+  };
+
+  const onGitHub = async () => {
+    const localPort = (window as any).__FREESWARM_PORT__ || 8324;
+    const nonce = await beginNonce();
+    const params = new URLSearchParams({ install_id: installId, local_port: String(localPort), redirect_to: '/app' });
+    if (nonce) params.set('signin_nonce', nonce);
+    void openOAuth(`/api/auth/github?${params.toString()}`, 'github_clicked');
   };
 
   return (
@@ -183,90 +138,56 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
         >
           <CloseIcon sx={{ fontSize: 18 }} />
         </IconButton>
-        {stage === 'code_form' ? (
+
+        {phase === 'done' ? (
           <>
+            <Box
+              sx={{
+                width: 56, height: 56, borderRadius: '50%', mx: 'auto', mb: 2,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                backgroundColor: `${tokens.accent.primary}1a`,
+                color: tokens.accent.primary, fontSize: 28,
+              }}
+            >
+              &#10003;
+            </Box>
             <Typography
               variant="h5"
               sx={{ fontFamily: '"Charter", Georgia, serif', fontWeight: 500, mb: 1 }}
             >
-              Check your inbox
+              You're signed in
             </Typography>
-            <Typography
-              variant="body2"
-              sx={{ color: tokens.text.muted, mb: 3, lineHeight: 1.5 }}
-            >
-              We emailed a 6-digit code to{' '}
-              <Box component="span" sx={{ color: tokens.text.primary, fontWeight: 500 }}>
-                {email}
-              </Box>
-              .
+            <Typography variant="body2" sx={{ color: tokens.text.muted, lineHeight: 1.5 }}>
+              {userEmail ? `Signed in as ${userEmail}` : 'Your account is connected.'}
             </Typography>
-            <TextField
-              fullWidth
-              autoFocus
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              inputProps={{
-                inputMode: 'numeric',
-                maxLength: 6,
-                style: {
-                  textAlign: 'center',
-                  letterSpacing: '0.4em',
-                  fontFamily: 'ui-monospace, monospace',
-                  fontSize: 22,
-                  fontWeight: 600,
-                },
-              }}
-              placeholder="••••••"
-              disabled={busy}
-              sx={{ mb: 2 }}
-            />
-            {errMsg && (
-              <Typography
-                sx={{ color: tokens.status.error, fontSize: 13, mb: 1.5 }}
-              >
-                {errMsg}
-              </Typography>
-            )}
-            <Button
-              fullWidth
-              variant="contained"
-              size="large"
-              onClick={onSubmitCode}
-              disabled={busy || code.length !== 6}
-              sx={{
-                py: 1.4,
-                backgroundColor: tokens.accent.primary,
-                color: '#fff',
-                textTransform: 'none',
-                fontSize: 15,
-                fontWeight: 600,
-                '&:hover': { backgroundColor: tokens.accent.primary, opacity: 0.9 },
-              }}
-            >
-              {busy ? <CircularProgress size={18} sx={{ color: '#fff' }} /> : 'Verify →'}
-            </Button>
-            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center', gap: 2 }}>
-              <Link
-                component="button"
-                onClick={onResendCode}
-                sx={{ fontSize: 12, color: tokens.text.muted, textDecoration: 'none' }}
-              >
-                Resend code
-              </Link>
-              <Link
-                component="button"
-                onClick={() => {
-                  setStage('choose');
-                  setEmail('');
-                  setCode('');
-                  setErrMsg(null);
-                }}
-                sx={{ fontSize: 12, color: tokens.text.muted, textDecoration: 'none' }}
-              >
-                Use a different email
-              </Link>
+          </>
+        ) : phase === 'code' ? (
+          <DeviceCodePanel
+            onApproved={() => { report('signin', 'completed'); setPhase('done'); }}
+            onBack={() => setPhase('idle')}
+          />
+        ) : phase === 'waiting' ? (
+          <>
+            <Box sx={{ mt: 1, mb: 2.5, display: 'flex', justifyContent: 'center' }}>
+              <CircularProgress size={28} sx={{ color: tokens.accent.primary }} />
             </Box>
+            <Typography
+              variant="h5"
+              sx={{ fontFamily: '"Charter", Georgia, serif', fontWeight: 500, mb: 1 }}
+            >
+              Finish in your browser
+            </Typography>
+            <Typography variant="body2" sx={{ color: tokens.text.muted, mb: 3, lineHeight: 1.5 }}>
+              We opened a browser window to complete sign-in. Come back here once
+              you're done; this will update automatically.
+            </Typography>
+            <Button
+              variant="text"
+              onClick={() => setPhase('idle')}
+              sx={{ textTransform: 'none', fontSize: 13, color: tokens.text.muted }}
+            >
+              Use a different method
+            </Button>
           </>
         ) : (
           <>
@@ -274,7 +195,7 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
               variant="h5"
               sx={{ fontFamily: '"Charter", Georgia, serif', fontWeight: 500, mb: 1 }}
             >
-              Sign in to OpenSwarm
+              Sign in to FreeSwarm
             </Typography>
             <Typography
               variant="body2"
@@ -291,6 +212,7 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
               onClick={onGoogle}
               sx={{
                 py: 1.4,
+                mb: 1.5,
                 backgroundColor: tokens.text.primary,
                 color: tokens.text.inverse,
                 textTransform: 'none',
@@ -302,96 +224,32 @@ export default function SignInDialog({ onClose }: { onClose: () => void }): JSX.
               Continue with Google
             </Button>
 
-            <Box
+            <Button
+              fullWidth
+              variant="outlined"
+              size="large"
+              startIcon={<GitHubIcon />}
+              onClick={onGitHub}
               sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.5,
-                my: 2.5,
-                color: tokens.text.muted,
-                fontSize: 12,
+                py: 1.4,
+                borderColor: tokens.border.medium,
+                color: tokens.text.primary,
+                textTransform: 'none',
+                fontSize: 15,
+                fontWeight: 500,
+                '&:hover': { borderColor: tokens.text.primary },
               }}
             >
-              <Box sx={{ flex: 1, height: 1, bgcolor: tokens.border.subtle }} />
-              or
-              <Box sx={{ flex: 1, height: 1, bgcolor: tokens.border.subtle }} />
-            </Box>
+              Continue with GitHub
+            </Button>
 
-            {stage === 'choose' ? (
-              <Button
-                fullWidth
-                variant="outlined"
-                size="large"
-                startIcon={<EmailIcon />}
-                onClick={() => setStage('email_form')}
-                sx={{
-                  py: 1.4,
-                  borderColor: tokens.border.medium,
-                  color: tokens.text.primary,
-                  textTransform: 'none',
-                  fontSize: 15,
-                  fontWeight: 500,
-                  '&:hover': { borderColor: tokens.text.primary },
-                }}
-              >
-                Continue with email
-              </Button>
-            ) : (
-              <Box sx={{ textAlign: 'left' }}>
-                <TextField
-                  fullWidth
-                  autoFocus
-                  type="email"
-                  label="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !busy) onSubmitEmail();
-                  }}
-                  disabled={busy}
-                  helperText="We'll email you a 6-digit code to sign in."
-                  sx={{ mb: 1.5 }}
-                  size="small"
-                />
-                {errMsg && (
-                  <Typography
-                    sx={{ color: tokens.status.error, fontSize: 13, mb: 1.2 }}
-                  >
-                    {errMsg}
-                  </Typography>
-                )}
-                <Button
-                  fullWidth
-                  variant="contained"
-                  size="large"
-                  onClick={onSubmitEmail}
-                  disabled={busy}
-                  sx={{
-                    py: 1.3,
-                    backgroundColor: tokens.accent.primary,
-                    color: '#fff',
-                    textTransform: 'none',
-                    fontSize: 14.5,
-                    fontWeight: 600,
-                    '&:hover': { backgroundColor: tokens.accent.primary, opacity: 0.9 },
-                  }}
-                >
-                  {busy ? <CircularProgress size={18} sx={{ color: '#fff' }} /> : 'Send code →'}
-                </Button>
-                <Box sx={{ mt: 1.5, textAlign: 'center' }}>
-                  <Link
-                    component="button"
-                    onClick={() => {
-                      setStage('choose');
-                      setErrMsg(null);
-                    }}
-                    sx={{ fontSize: 12, color: tokens.text.muted, textDecoration: 'none' }}
-                  >
-                    ← Back
-                  </Link>
-                </Box>
-              </Box>
-            )}
+            <Button
+              variant="text"
+              onClick={() => { report('signin', 'code_clicked'); setPhase('code'); }}
+              sx={{ mt: 1.5, textTransform: 'none', fontSize: 13, color: tokens.text.muted }}
+            >
+              Can't open a browser here? Sign in with a code
+            </Button>
           </>
         )}
       </Box>

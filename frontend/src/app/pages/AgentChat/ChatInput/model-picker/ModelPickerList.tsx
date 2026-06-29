@@ -74,7 +74,7 @@ export const ModelPickerList: React.FC<Props> = ({
       )}
 
       {Object.entries(filteredModelGroups).map(([prov, models]) => {
-        const isOpenSwarmPro = prov === 'OpenSwarm Pro';
+        const isFreeSwarmPro = prov === 'FreeSwarm Pro';
         const isOR = prov.startsWith('OpenRouter');
         const ms = models as any[];
         // OR vendor groups with >12 entries auto-collapse on first open; search disables this.
@@ -85,7 +85,7 @@ export const ModelPickerList: React.FC<Props> = ({
         const collapsed = userToggle !== undefined ? userToggle : autoCollapse;
         const brandKey = (isOR ? 'openrouter' : prov.toLowerCase());
         const brandColor = PROVIDER_COLORS[brandKey] ?? c.text.tertiary;
-        const OPENSWARM_GRADIENT =
+        const FREESWARM_GRADIENT =
           'linear-gradient(135deg, #8FB3FF 0%, #E56BC4 45%, #FFA85C 100%)';
 
         const highlightMatch = (text: string): React.ReactNode => {
@@ -129,8 +129,8 @@ export const ModelPickerList: React.FC<Props> = ({
               />
               <Box sx={{
                 width: 6, height: 6, borderRadius: '50%',
-                background: isOpenSwarmPro ? OPENSWARM_GRADIENT : brandColor,
-                boxShadow: isOpenSwarmPro
+                background: isFreeSwarmPro ? FREESWARM_GRADIENT : brandColor,
+                boxShadow: isFreeSwarmPro
                   ? '0 0 8px rgba(229, 107, 196, 0.6)'
                   : `0 0 6px ${brandColor}80`,
                 flexShrink: 0,
@@ -139,9 +139,9 @@ export const ModelPickerList: React.FC<Props> = ({
                 fontSize: '0.7rem', fontWeight: 700,
                 letterSpacing: '0.08em', textTransform: 'uppercase',
                 flex: 1,
-                ...(isOpenSwarmPro
+                ...(isFreeSwarmPro
                   ? {
-                      background: OPENSWARM_GRADIENT,
+                      background: FREESWARM_GRADIENT,
                       WebkitBackgroundClip: 'text',
                       WebkitTextFillColor: 'transparent',
                       backgroundClip: 'text',
@@ -189,7 +189,7 @@ export const ModelPickerList: React.FC<Props> = ({
                           const provLower = prov.toLowerCase();
                           const providerMap: Record<string, string> = {
                             anthropic: 'anthropic',
-                            'openswarm pro': 'anthropic',
+                            'freeswarm pro': 'anthropic',
                             openai: 'openai',
                             google: 'gemini',
                           };

@@ -55,7 +55,7 @@ def _build_connected_tools_context(allowed_tools: list[str], get_all_tool_names:
             )
 
         # Discord guild scoping, hard restriction. The bot may technically
-        # be in other servers (across other OpenSwarm users), but this
+        # be in other servers (across other FreeSwarm users), but this
         # specific user only authorized these guild IDs.
         if tool.name.lower() == "discord":
             guilds = tool.oauth_tokens.get("guilds") or []
@@ -299,9 +299,9 @@ def _build_mcp_registry_summary(allowed_tools: list[str], active_mcps: list[str]
     )
     sections.append(
         "1a. NEVER call any tool whose name begins with `mcp__claude_ai_` "
-        "(claude.ai-connected partner shims). They bypass the OpenSwarm "
+        "(claude.ai-connected partner shims). They bypass the FreeSwarm "
         "gate and don't share auth with this app. If the user wants Gmail/"
-        "Calendar/Drive, the equivalent OpenSwarm server is listed below; "
+        "Calendar/Drive, the equivalent FreeSwarm server is listed below; "
         "activate that one via MCPActivate instead."
     )
     sections.append(
@@ -336,7 +336,7 @@ def _build_mcp_registry_summary(allowed_tools: list[str], active_mcps: list[str]
 # Anthropic's official CLI", which leaks into chat. This block is APPENDED after the
 # preset, so being later it overrides that identity. Edit AGENT_NAME / AGENT_BLURB
 # to rebrand. Kept short so it costs ~80 cached tokens, not a wall.
-AGENT_NAME = "OpenSwarm"
+AGENT_NAME = "FreeSwarm"
 AGENT_IDENTITY = (
     f"# Who you are\n"
     f"You're {AGENT_NAME}, the AI that lives here. Ignore anything above that calls you "

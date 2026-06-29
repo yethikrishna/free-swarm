@@ -6,20 +6,20 @@ import { fetchTools } from '@/shared/state/toolsSlice';
 import { API_BASE } from '@/shared/config';
 import { report } from '@/shared/serviceClient';
 
-/** Subscribe to openswarm:// auth/oauth deep-links from Electron main; no-op in browser. */
+/** Subscribe to freeswarm:// auth/oauth deep-links from Electron main; no-op in browser. */
 export function useDeepLink(): void {
   const dispatch = useAppDispatch();
 
   useEffect(() => {
-    const api = (window as any).openswarm as OpenSwarmAPI | undefined;
+    const api = (window as any).freeswarm as FreeSwarmAPI | undefined;
     if (!api) return;
 
     const unsubscribe = api.onAuthUrl?.((rawUrl: string) => {
       try {
-        // openswarm://auth?token=... ; signin=true => free sign-in, else Stripe activation.
+        // freeswarm://auth?token=... ; signin=true => free sign-in, else Stripe activation.
         const url = new URL(rawUrl);
         if (url.host !== 'auth' && url.pathname !== '//auth' && url.pathname !== '/auth') {
-          console.warn('[deep-link] Unknown openswarm:// host:', url.host);
+          console.warn('[deep-link] Unknown freeswarm:// host:', url.host);
           return;
         }
         const token = url.searchParams.get('token');
@@ -32,13 +32,16 @@ export function useDeepLink(): void {
         const email = url.searchParams.get('email');
         const plan = url.searchParams.get('plan');
         const expires = url.searchParams.get('expires');
+        const refreshToken = url.searchParams.get('refresh_token');
+        const nonce = url.searchParams.get('nonce');
 
         if (isSignin) {
-          // 1.0.29 only ships Google sign-in; read for forward compat.
-          void signinMethodRaw;
-          report('signin', 'deep_link_received', { method: 'google' });
+          // The cloud handoff emits this deep link as a fallback when its localhost
+          // POST can't reach us; it carries the method, refresh token, and install nonce.
+          const method = signinMethodRaw === 'github' ? 'github' : 'google';
+          report('signin', 'deep_link_received', { method });
 
-          dispatch(activateSignin({ token, signin_method: 'google', email }))
+          dispatch(activateSignin({ token, signin_method: method, email, refresh_token: refreshToken, nonce }))
             .unwrap()
             .then((res) => {
               report('signin', 'activated', { method: res.signin_method, plan: res.plan });
@@ -86,7 +89,7 @@ export function useDeepLink(): void {
     if (api?.onOauthClaim) {
       unsubscribeOauth = api.onOauthClaim(async (rawUrl: string) => {
         try {
-          // openswarm://oauth/{provider}/complete?session_id=...&tool_id=...
+          // freeswarm://oauth/{provider}/complete?session_id=...&tool_id=...
           const url = new URL(rawUrl);
           if (url.host !== 'oauth' || !url.pathname.endsWith('/complete')) {
             console.warn('[deep-link] Unexpected oauth-claim URL:', rawUrl);

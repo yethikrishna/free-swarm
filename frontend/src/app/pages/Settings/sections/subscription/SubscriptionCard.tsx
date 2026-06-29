@@ -1,15 +1,26 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
+import MultiAccountManager, { type MultiAccountManagerHandle } from './MultiAccountManager';
 import type { SubscriptionProvider } from './subscriptionProviders';
 
-const SubscriptionCard: React.FC<{ provider: SubscriptionProvider; connected: boolean; onConnect: () => void; onDisconnect: () => void; connecting: boolean; userCode?: string; disconnecting?: boolean }> = ({ provider, connected, onConnect, onDisconnect, connecting, userCode, disconnecting }) => {
+const SubscriptionCard: React.FC<{ provider: SubscriptionProvider; connected: boolean; onConnect: () => void; onDisconnect: () => void; connecting: boolean; userCode?: string; disconnecting?: boolean; onAccountsChange?: () => void }> = ({ provider, connected, onConnect, onDisconnect, connecting, userCode, disconnecting, onAccountsChange }) => {
+  const [showAccountManager, setShowAccountManager] = useState(false);
   const c = useClaudeTokens();
   const isPreview = (provider as any).preview;
   const dotColor = connected ? c.status.success : connecting ? c.accent.primary : c.border.medium;
+  const managerRef = useRef<MultiAccountManagerHandle>(null);
+  const wasConnecting = useRef(false);
+
+  useEffect(() => {
+    if (wasConnecting.current && !connecting) {
+      managerRef.current?.refresh();
+    }
+    wasConnecting.current = connecting;
+  }, [connecting]);
 
   return (
     <Box sx={{
@@ -77,6 +88,58 @@ const SubscriptionCard: React.FC<{ provider: SubscriptionProvider; connected: bo
           </Button>
         )}
       </Box>
+
+      {connected && (
+        <Box sx={{ mt: 1, pt: 1, borderTop: `1px solid ${c.border.subtle}`, display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Button
+            size="small"
+            onClick={() => setShowAccountManager(!showAccountManager)}
+            sx={{
+              textTransform: 'none',
+              fontSize: '0.7rem',
+              color: c.text.muted,
+              '&:hover': { color: c.accent.primary },
+              flex: 1,
+            }}
+          >
+            {showAccountManager ? 'Hide accounts' : 'Manage accounts'}
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={connecting}
+            onClick={() => {
+              // Reveal the manager so the newly authorized account is visible when it lands.
+              setShowAccountManager(true);
+              onConnect?.();
+            }}
+            sx={{
+              textTransform: 'none',
+              fontSize: '0.7rem',
+              py: 0.25,
+              px: 1,
+              color: c.text.primary,
+              borderColor: c.border.medium,
+              '&:hover': { borderColor: c.accent.primary, bgcolor: `${c.accent.primary}0a` },
+              flexShrink: 0,
+            }}
+          >
+            {connecting ? 'Adding...' : '+ Add'}
+          </Button>
+        </Box>
+      )}
+
+      {connected && showAccountManager && (
+        <Box sx={{ mt: 1 }}>
+          <MultiAccountManager
+            ref={managerRef}
+            provider={provider.id}
+            onAccountsChange={() => {
+              if (onAccountsChange) onAccountsChange();
+            }}
+          />
+        </Box>
+      )}
     </Box>
   );
 };

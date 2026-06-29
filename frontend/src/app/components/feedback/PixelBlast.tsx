@@ -37,7 +37,7 @@ let edge = 0.3;
 function initSingleton(): void {
   if (sharedCanvas) return;
   const canvas = document.createElement('canvas');
-  canvas.setAttribute('aria-label', 'OpenSwarm idle background');
+  canvas.setAttribute('aria-label', 'FreeSwarm idle background');
   canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
   sharedCanvas = canvas;
 

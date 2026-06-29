@@ -3,13 +3,13 @@ import { parseMcpToolName } from '@/shared/mcpToolMeta';
 export function isBrowserAgentTool(name: string): boolean {
   if (name === 'CreateBrowserAgent' || name === 'BrowserAgent' || name === 'BrowserAgents') return true;
   const mcp = parseMcpToolName(name);
-  return mcp.isMcp && mcp.serverSlug === 'openswarm-browser-agent';
+  return mcp.isMcp && mcp.serverSlug === 'freeswarm-browser-agent';
 }
 
 export function isInvokeAgentTool(name: string): boolean {
   if (name === 'InvokeAgent') return true;
   const mcp = parseMcpToolName(name);
-  return mcp.isMcp && mcp.serverSlug === 'openswarm-invoke-agent';
+  return mcp.isMcp && mcp.serverSlug === 'freeswarm-invoke-agent';
 }
 
 export function isCreateAgentTool(name: string): boolean {

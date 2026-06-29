@@ -34,7 +34,7 @@ async def settings_lifespan():
             sync_gemini_api_key,
             sync_openai_api_key,
             sync_openrouter_api_key,
-            sync_openswarm_pro_as_claude,
+            sync_freeswarm_pro_as_claude,
             sync_custom_providers,
         )
         s = load_settings()
@@ -46,7 +46,7 @@ async def settings_lifespan():
                 getattr(s, "google_api_key", None),
                 getattr(s, "openai_api_key", None),
                 getattr(s, "openrouter_api_key", None),
-                getattr(s, "connection_mode", None) in ("openswarm-pro", "free-trial"),
+                getattr(s, "connection_mode", None) in ("freeswarm-pro", "free-trial"),
                 bool(getattr(s, "custom_providers", None) or []),
             ])
             if needs_router:
@@ -67,13 +67,13 @@ async def settings_lifespan():
             # for an active pro/free-trial bearer, else REMOVE it. Without the else, disconnecting
             # Pro left a zombie managed Claude connection in 9Router, so the backend kept seeing a
             # model and the free trial refused to arm ("disconnect Pro -> nothing happens"). Only
-            # the OpenSwarm-managed Pro node is touched; a user's own Claude sub (priority 0) is safe.
-            if getattr(s, "connection_mode", None) in ("openswarm-pro", "free-trial"):
+            # the FreeSwarm-managed Pro node is touched; a user's own Claude sub (priority 0) is safe.
+            if getattr(s, "connection_mode", None) in ("freeswarm-pro", "free-trial"):
                 from backend.apps.settings.credentials import proxy_auth
                 bearer, base = proxy_auth(s)
             else:
                 bearer, base = None, None
-            await sync_openswarm_pro_as_claude(bearer, base)
+            await sync_freeswarm_pro_as_claude(bearer, base)
             await sync_custom_providers(getattr(s, "custom_providers", None) or [])
 
         _asyncio.create_task(_boot_router_then_sync())
@@ -128,11 +128,11 @@ async def get_settings():
 # a full-object PUT from a stale renderer snapshot must never revert or forge them.
 SERVER_OWNED_FIELDS = (
     "connection_mode",
-    "openswarm_bearer_token",
-    "openswarm_proxy_url",
-    "openswarm_subscription_plan",
-    "openswarm_subscription_expires",
-    "openswarm_usage_cached",
+    "freeswarm_bearer_token",
+    "freeswarm_proxy_url",
+    "freeswarm_subscription_plan",
+    "freeswarm_subscription_expires",
+    "freeswarm_usage_cached",
     "free_trial_token",
     "free_trial_remaining",
     "free_trial_runs_limit",
@@ -153,6 +153,14 @@ async def update_settings(body: AppSettings):
     for k in SERVER_OWNED_FIELDS:
         setattr(body, k, getattr(old, k, None))
 
+    # Keychain-managed keys never persist to disk. Any provider key already held in
+    # the in-memory keychain store is forced blank here so a stale full-form PUT
+    # (which still carries the old on-disk value, or a sentinel) can't re-add it.
+    from backend.apps.settings.secret_store import has as _secret_has, SECRET_FIELDS as _SECRET_FIELDS
+    for k in _SECRET_FIELDS:
+        if _secret_has(k):
+            setattr(body, k, None)
+
     # If the user connects their own model while the free trial is armed, hand
     # the wheel back to their provider. Without this, connection_mode (server-
     # owned, so the loop above just restored it to "free-trial") would keep them
@@ -172,7 +180,7 @@ async def update_settings(body: AppSettings):
 
     secret_keys = {"anthropic_api_key", "openai_api_key", "google_api_key", "openrouter_api_key",
                    "claude_subscription_token", "openai_subscription_token", "gemini_subscription_token",
-                   "openswarm_bearer_token", "free_trial_token", "installation_id"}
+                   "freeswarm_bearer_token", "free_trial_token", "installation_id"}
     safe = {k: v for k, v in body.model_dump().items() if k not in secret_keys}
     _sync(safe)
 
@@ -271,6 +279,84 @@ async def update_settings(body: AppSettings):
         ))
 
     return {"ok": True, "settings": body.model_dump()}
+
+
+class SecretsPushPayload(BaseModel):
+    # Provider key fields sourced from the OS keychain; only SECRET_FIELDS are honored.
+    secrets: dict[str, Optional[str]]
+
+
+@settings.router.post("/secrets/push")
+async def push_secrets_endpoint(body: SecretsPushPayload):
+    """Load API keys from the renderer's OS keychain into the in-memory store.
+
+    Called on boot and whenever the user changes a key. Keys live in RAM only;
+    they're rebuilt from the keychain each launch so plaintext keys don't need
+    to persist in settings.json. Additive: until this is called, credential
+    resolution falls back to settings.json exactly as before.
+
+    Any field that lands in the keychain store is also blanked on disk here, so a
+    key the user has secured in the OS keychain never lingers in plaintext
+    settings.json (covers both the boot migration and a freshly entered key).
+    """
+    from backend.apps.settings.secret_store import push_secrets, present_map, SECRET_FIELDS
+    push_secrets(body.secrets)
+
+    # Blank any now-keychained field on disk (non-empty pushes only; a falsy push
+    # is a delete, which the regular settings flow already clears).
+    keyed_on_disk = [f for f in SECRET_FIELDS if body.secrets.get(f)]
+    if keyed_on_disk:
+        current = load_settings()
+        changed = False
+        for f in keyed_on_disk:
+            if getattr(current, f, None):
+                setattr(current, f, None)
+                changed = True
+        if changed:
+            await save_settings_async(current)
+    # Mirror keychain-backed provider keys into 9Router so its lanes stay in sync.
+    try:
+        from backend.apps.settings.secret_store import get_secret
+        from backend.apps.nine_router import (
+            ensure_running as _9r_ensure,
+            is_running as _9r_running,
+            sync_gemini_api_key,
+            sync_openai_api_key,
+            sync_openrouter_api_key,
+        )
+
+        async def _sync_router_keys():
+            try:
+                if not _9r_running():
+                    await _9r_ensure()
+                if get_secret("google_api_key"):
+                    await sync_gemini_api_key(get_secret("google_api_key"))
+                if get_secret("openai_api_key"):
+                    await sync_openai_api_key(get_secret("openai_api_key"))
+                if get_secret("openrouter_api_key"):
+                    await sync_openrouter_api_key(get_secret("openrouter_api_key"))
+            except Exception as e:
+                logger.warning(f"Secret-store 9router sync failed: {e}")
+
+        asyncio.create_task(_sync_router_keys())
+    except Exception:
+        pass
+    return {"ok": True, "present": present_map()}
+
+
+@settings.router.post("/secrets/clear")
+async def clear_secrets_endpoint():
+    """Drop all in-memory secrets (sign-out / lock)."""
+    from backend.apps.settings.secret_store import clear_secrets
+    clear_secrets()
+    return {"ok": True}
+
+
+@settings.router.get("/secrets/present")
+async def secrets_present_endpoint():
+    """Report which keychain-backed secrets are currently loaded (UI presence UX)."""
+    from backend.apps.settings.secret_store import present_map
+    return {"present": present_map()}
 
 
 class AppThemeOverridePayload(BaseModel):

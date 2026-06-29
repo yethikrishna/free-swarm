@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 
-const STORAGE_KEY = 'openswarm_last_dashboard_id';
-const WINDOW_KEY = '__openswarm_last_dashboard_id';
+const STORAGE_KEY = 'freeswarm_last_dashboard_id';
+const WINDOW_KEY = '__freeswarm_last_dashboard_id';
 
 /** Sticky last-visited dashboard id so Dashboard stays mounted across non-dashboard nav. */
 export function useLastDashboardId(): [string | null, (id: string | null) => void] {

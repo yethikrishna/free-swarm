@@ -19,7 +19,7 @@ exports.default = async function afterPack(context) {
 
   let routerDir;
   if (electronPlatformName === 'darwin') {
-    const appName = packager.appInfo.productFilename; // "OpenSwarm"
+    const appName = packager.appInfo.productFilename; // "FreeSwarm"
     routerDir = path.join(appOutDir, `${appName}.app`, 'Contents', 'Resources', 'router');
   } else {
     routerDir = path.join(appOutDir, 'resources', 'router');

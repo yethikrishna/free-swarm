@@ -8,13 +8,13 @@ interface FocusPayload {
   ts: number;
 }
 
-interface OpenSwarmAPI {
+interface FreeSwarmAPI {
   onWindowFocus?: (cb: (payload: FocusPayload) => void) => () => void;
 }
 
 export function useWindowFocus(): void {
   useEffect(() => {
-    const api = (window as unknown as { openswarm?: OpenSwarmAPI }).openswarm;
+    const api = (window as unknown as { freeswarm?: FreeSwarmAPI }).freeswarm;
     if (!api?.onWindowFocus) return;
 
     let lastBlurTs: number | null = null;

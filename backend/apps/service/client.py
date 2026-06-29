@@ -1,7 +1,7 @@
 """Operational state forwarder.
 
 Single public surface: `submit(kind, payload)`. The desktop hands off
-opaque payload dicts; the cloud at api.openswarm.com is responsible for
+opaque payload dicts; the cloud at api.freeswarm.myndlabs.tech is responsible for
 parsing and routing them. The desktop has no schema knowledge.
 
 Three `kind` values are accepted; they're the routing primitive the
@@ -34,7 +34,7 @@ from backend.apps.service.version import APP_VERSION
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_BASE = "https://api.openswarm.com"
+_DEFAULT_BASE = "https://api.freeswarm.myndlabs.tech"
 _PATH_BY_KIND = {
     "state": "/api/service/state",
     "session": "/api/service/sync",
@@ -58,7 +58,7 @@ def _spool_path() -> str:
         from backend.config.paths import SETTINGS_DIR
         return os.path.join(SETTINGS_DIR, "service_spool.db")
     except Exception:
-        return os.path.expanduser("~/.openswarm/data/service_spool.db")
+        return os.path.expanduser("~/.freeswarm/data/service_spool.db")
 
 
 def set_test_sink(fn: Optional[Any]) -> None:
@@ -115,6 +115,11 @@ def set_user_id(uid: Optional[str]) -> None:
 def _is_enabled(kind: str) -> bool:
     """Honour user opt-out. Diagnostic always flows (errors block usability);
     state + session honour the toggle."""
+    # Local builds never log; nothing leaves the device regardless of kind.
+    # A test sink is an explicit capture hook, so it bypasses the mode gate.
+    from backend.config.mode import analytics_enabled
+    if not analytics_enabled() and _test_sink is None:
+        return False
     if kind == "diagnostic":
         return True
     try:
@@ -148,7 +153,7 @@ def _envelope() -> dict:
     # which sometimes returns abbreviations (PDT, CDT) or localized names
     # ("Romance (zomertijd)") that don't round-trip through tzdata.
     try:
-        ianatz = os.environ.get("OPENSWARM_TIMEZONE", "").strip()
+        ianatz = os.environ.get("FREESWARM_TIMEZONE", "").strip()
         if not ianatz:
             try:
                 from tzlocal import get_localzone_name  # type: ignore
@@ -169,7 +174,7 @@ def _envelope() -> dict:
     # locale.getdefaultlocale() because that's deprecated, often empty, and
     # returns inconsistent OS-specific values across macOS/Windows/Linux.
     try:
-        loc = os.environ.get("OPENSWARM_LOCALE", "").strip()
+        loc = os.environ.get("FREESWARM_LOCALE", "").strip()
         if loc:
             env["locale"] = loc
     except Exception:
@@ -178,16 +183,16 @@ def _envelope() -> dict:
     # How this build was packaged. Set by the platform-specific build script
     # (electron-builder afterPack hooks for dmg / exe / appimage / deb / rpm).
     # Defaults to "dev" when running from `bash run.sh` in a checked-out repo.
-    env["install_method"] = os.environ.get("OPENSWARM_INSTALL_METHOD", "dev")
+    env["install_method"] = os.environ.get("FREESWARM_INSTALL_METHOD", "dev")
     return env
 
 
 def _base_url() -> str:
     try:
         from backend.apps.settings.store import load_settings
-        from backend.apps.settings.credentials import OPENSWARM_DEFAULT_PROXY_URL
+        from backend.apps.settings.credentials import FREESWARM_DEFAULT_PROXY_URL
         s = load_settings()
-        return (getattr(s, "openswarm_proxy_url", None) or OPENSWARM_DEFAULT_PROXY_URL).rstrip("/")
+        return (getattr(s, "freeswarm_proxy_url", None) or FREESWARM_DEFAULT_PROXY_URL).rstrip("/")
     except Exception:
         return _DEFAULT_BASE
 
@@ -237,6 +242,11 @@ async def _post_or_spool(path: str, body: dict, kind: str) -> None:
 
 
 async def drain_spool(batch_size: int = 50) -> int:
+    # Local builds never replay the spool; egress stays off entirely.
+    # A test sink bypasses the gate so drain tests still exercise the path.
+    from backend.config.mode import analytics_enabled
+    if not analytics_enabled() and _test_sink is None:
+        return 0
     async with _drain_lock:
         entries = buffer.drain(_spool_path(), batch_size=batch_size)
         if not entries:
@@ -313,7 +323,7 @@ _DEFAULT_SYNC_PATH = "/api/service/sync"
 def submit(kind: str, payload: dict) -> None:
     """Routes through sync(). The cloud demuxes by payload shape (state /
     sync / diagnostic / event), so kind here is informational; the routing
-    happens server-side in openswarm-cloud/src/routes/service/ingest.ts.
+    happens server-side in freeswarm-cloud/src/routes/service/ingest.ts.
     New call sites should use sync() directly with a well-shaped payload."""
     sync(payload)
 

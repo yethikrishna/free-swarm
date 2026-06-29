@@ -212,7 +212,7 @@ async def seed_orchestration_demo(dashboard_id: str):
     Step 6 ("Have an agent control other agents") needs a pre-existing
     agent for the user to attach to a new orchestrator. We seed a single
     completed-looking session that pretends to have done research on
-    OpenSwarm, with messages mentioning what it found. The user then
+    FreeSwarm, with messages mentioning what it found. The user then
     drags it into a new agent and asks for a PDF report; which
     delegates back to this seeded agent.
     """
@@ -223,7 +223,7 @@ async def seed_orchestration_demo(dashboard_id: str):
 
     session_data = {
         "id": session_id,
-        "name": "OpenSwarm research",
+        "name": "FreeSwarm research",
         "status": "completed",
         "provider": "anthropic",
         "model": "sonnet",
@@ -241,7 +241,7 @@ async def seed_orchestration_demo(dashboard_id: str):
             {
                 "id": uuid4().hex,
                 "role": "user",
-                "content": "Research OpenSwarm and summarize what it does, who uses it, and how its built.",
+                "content": "Research FreeSwarm and summarize what it does, who uses it, and how its built.",
                 "timestamp": now.isoformat(),
                 "branch_id": "main",
                 "parent_id": None,
@@ -251,8 +251,8 @@ async def seed_orchestration_demo(dashboard_id: str):
                 "id": uuid4().hex,
                 "role": "assistant",
                 "content": (
-                    "Here's what I found on OpenSwarm:\n\n"
-                    "**What it is.** OpenSwarm is a desktop AI workspace built around\n"
+                    "Here's what I found on FreeSwarm:\n\n"
+                    "**What it is.** FreeSwarm is a desktop AI workspace built around\n"
                     "agents that can read and write files, run commands, browse the web,\n"
                     "and orchestrate other agents. It's distributed as an Electron app\n"
                     "with a React frontend, a Python backend, and a Hono cloud service.\n\n"

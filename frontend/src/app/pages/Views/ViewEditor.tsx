@@ -417,7 +417,7 @@ const ViewEditor: React.FC<Props> = ({ output }) => {
     // Provider map mirrors ChatInput.tsx grouping.
     const PROVIDER_MAP: Record<string, string> = {
       anthropic: 'anthropic',
-      'openswarm pro': 'anthropic',
+      'freeswarm pro': 'anthropic',
       openai: 'openai',
       google: 'gemini',
       xai: 'openrouter',

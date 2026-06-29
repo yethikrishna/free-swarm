@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Any, Literal
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are a personal AI assistant running inside OpenSwarm.\n\n"
+    "You are a personal AI assistant running inside FreeSwarm.\n\n"
     "## Core Behavior\n"
     "Act, don't ask. When a tool can accomplish the task, call it immediately; "
     "do not describe what you would do, do not ask for confirmation, just execute. "
@@ -67,8 +67,11 @@ class AppSettings(BaseModel):
     installation_id: Optional[str] = None
     first_opened_at: Optional[str] = None
     connection_mode: str = "own_key"
-    openswarm_bearer_token: Optional[str] = None
-    openswarm_proxy_url: Optional[str] = None
+    freeswarm_bearer_token: Optional[str] = None
+    # Phase 1 auth: 30d refresh token paired with the 15m access bearer above.
+    # Used to silently re-mint the access token on 401 instead of forcing re-login.
+    freeswarm_refresh_token: Optional[str] = None
+    freeswarm_proxy_url: Optional[str] = None
     # Zero-config free trial: server-funded runs for a brand-new user with no
     # key and no subscription. connection_mode flips to "free-trial" while armed;
     # the token + remaining count are server-owned (minted by the cloud, sticky
@@ -76,16 +79,18 @@ class AppSettings(BaseModel):
     free_trial_token: Optional[str] = None
     free_trial_remaining: Optional[int] = None
     free_trial_runs_limit: Optional[int] = None
-    openswarm_subscription_plan: Optional[str] = None
-    openswarm_subscription_expires: Optional[str] = None
-    openswarm_usage_cached: Optional[dict] = None
+    freeswarm_subscription_plan: Optional[str] = None
+    freeswarm_subscription_expires: Optional[str] = None
+    freeswarm_usage_cached: Optional[dict] = None
     # Server-validated identity from /api/auth/signin-activate; user_email above is the self-reported onboarding value.
     user_id: Optional[str] = None
-    signin_method: Optional[Literal["google", "stripe", "email"]] = None
-    # Runtime preflight (electron/preflight.js). Default-on; users opt out via this flag, env var OPENSWARM_DISABLE_PREFLIGHT=1, or the cloud-side cohort rollout knocking preflight_rollout_pct down.
+    signin_method: Optional[Literal["google", "github", "stripe", "email"]] = None
+    # Runtime preflight (electron/preflight.js). Default-on; users opt out via this flag, env var FREESWARM_DISABLE_PREFLIGHT=1, or the cloud-side cohort rollout knocking preflight_rollout_pct down.
     preflight_enabled: bool = True
     # 0-100; the cohort gate compares (hash(installation_id) % 100) < pct. 100 = everyone, 0 = nobody, used as the kill switch if a staged rollout finds a false-positive spike.
     preflight_rollout_pct: int = 100
+    # Track extended thinking token usage from 9Router; used for cost/perf analysis.
+    track_reasoning_tokens: bool = False
 
 
 class CustomProvider(BaseModel):

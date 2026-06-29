@@ -63,7 +63,7 @@ def get_auth_token() -> str:
 class _TokenScrubFilter(logging.Filter):
     """Logging filter that redacts the install token from log records (defense in depth)."""
 
-    _PLACEHOLDER = "<REDACTED:openswarm-token>"
+    _PLACEHOLDER = "<REDACTED:freeswarm-token>"
 
     @staticmethod
     def _args_might_contain_token(args) -> bool:
@@ -183,7 +183,7 @@ _AUTH_EXEMPT_EXACT = {
     # google-workspace-mcp subprocess we spawn. It doesn't (and can't
     # easily) carry the install bearer in google-auth's refresh post.
     # Localhost binding is the gate, and the route does nothing the
-    # public api.openswarm.com/api/oauth/google/refresh doesn't already
+    # public api.freeswarm.myndlabs.tech/api/oauth/google/refresh doesn't already
     # do for any internet caller, so no new attack surface.
     "/api/tools/google-oauth-token",
     # Dev-only token handoff for the split-port frontend (no Electron preload
@@ -225,7 +225,7 @@ def extract_bearer(header_value: str | None) -> str:
 
 
 def request_matches_token(request_headers: dict, query_params: dict | None = None) -> bool:
-    """Validate that an HTTP/WS request carries our token (Bearer, x-openswarm-token, or ?token=); constant-time compare."""
+    """Validate that an HTTP/WS request carries our token (Bearer, x-freeswarm-token, or ?token=); constant-time compare."""
     if not _TOKEN:
         # Backend not initialized: fail closed. Only test fixtures that bypass main hit this.
         return False
@@ -237,12 +237,12 @@ def request_matches_token(request_headers: dict, query_params: dict | None = Non
     if bearer:
         candidates.append(bearer)
 
-    openswarm_header = (
-        request_headers.get("x-openswarm-token")
-        or request_headers.get("X-OpenSwarm-Token")
+    freeswarm_header = (
+        request_headers.get("x-freeswarm-token")
+        or request_headers.get("X-FreeSwarm-Token")
     )
-    if openswarm_header:
-        candidates.append(openswarm_header.strip())
+    if freeswarm_header:
+        candidates.append(freeswarm_header.strip())
 
     if query_params:
         qp_token = query_params.get("token")
@@ -271,7 +271,7 @@ def is_origin_allowed(origin: str | None) -> bool:
         return True
     if origin in _ORIGIN_ALLOWLIST_DEV:
         return True
-    # Packaged Electron file:// includes paths like file:///Applications/OpenSwarm.app/...; match by prefix.
+    # Packaged Electron file:// includes paths like file:///Applications/FreeSwarm.app/...; match by prefix.
     if origin.startswith("file://"):
         return True
     if origin.startswith("http://localhost:") or origin.startswith("http://127.0.0.1:"):

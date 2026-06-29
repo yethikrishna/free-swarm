@@ -16,19 +16,19 @@ def test_proxy_auth_for_each_mode():
     assert proxy_auth(AppSettings()) == (None, None)
 
     pro = AppSettings(
-        connection_mode="openswarm-pro",
-        openswarm_bearer_token="bear",
-        openswarm_proxy_url="https://api.openswarm.com",
+        connection_mode="freeswarm-pro",
+        freeswarm_bearer_token="bear",
+        freeswarm_proxy_url="https://api.freeswarm.myndlabs.tech",
     )
-    assert proxy_auth(pro) == ("bear", "https://api.openswarm.com")
+    assert proxy_auth(pro) == ("bear", "https://api.freeswarm.myndlabs.tech")
 
     free = AppSettings(
         connection_mode="free-trial",
         free_trial_token="ftk",
-        openswarm_proxy_url="https://api.openswarm.com",
+        freeswarm_proxy_url="https://api.freeswarm.myndlabs.tech",
     )
     # Free-trial carries the /free segment so the same SDK lands on the metered route.
-    assert proxy_auth(free) == ("ftk", "https://api.openswarm.com/free")
+    assert proxy_auth(free) == ("ftk", "https://api.freeswarm.myndlabs.tech/free")
 
 
 def test_free_trial_resolves_to_a_bare_anthropic_id():
@@ -42,7 +42,7 @@ def test_free_trial_resolves_to_a_bare_anthropic_id():
 
 def test_exhaustion_is_classified_and_not_retried():
     assert _is_free_trial_exhausted(Exception("error type free_trial_exhausted"))
-    assert _is_free_trial_exhausted(Exception("You've used your free OpenSwarm runs"))
+    assert _is_free_trial_exhausted(Exception("You've used your free FreeSwarm runs"))
     assert not _is_free_trial_exhausted(Exception("overloaded, try again"))
     # Must NOT look transient, or the agent loop would retry a spent trial forever.
     assert not _is_transient_capacity_error(Exception("free_trial_exhausted"))
@@ -53,5 +53,5 @@ def test_has_own_model_never_shadows_a_real_provider():
     assert not _has_own_model(AppSettings())
     assert _has_own_model(AppSettings(anthropic_api_key="sk-ant-x"))
     assert _has_own_model(
-        AppSettings(connection_mode="openswarm-pro", openswarm_bearer_token="b")
+        AppSettings(connection_mode="freeswarm-pro", freeswarm_bearer_token="b")
     )

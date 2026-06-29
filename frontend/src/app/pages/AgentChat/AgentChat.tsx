@@ -4,6 +4,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
+import Collapse from '@mui/material/Collapse';
 import TextField from '@mui/material/TextField';
 import ClickAwayListener from '@mui/material/ClickAwayListener';
 import CloseIcon from '@mui/icons-material/Close';
@@ -15,10 +16,15 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import CheckIcon from '@mui/icons-material/Check';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import IosShareIcon from '@mui/icons-material/IosShare';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
+import SessionTelemetry from '@/app/components/telemetry/SessionTelemetry';
+import ThoughtTree from '@/app/components/telemetry/ThoughtTree';
+import TraceTimeline from '@/app/components/telemetry/TraceTimeline';
 import { useAppDispatch, useAppSelector } from '@/shared/hooks';
 import { friendlyStatusLabel } from '@/shared/statusLabel';
 import { openSettingsModal } from '@/shared/state/settingsSlice';
-import { API_BASE, getAuthToken } from '@/shared/config';
+import { API_BASE, getAuthToken, FREESWARM_DEFAULT_PROXY_URL } from '@/shared/config';
 import {
   sendMessage as sendMessageThunk,
   launchAndSendFirstMessage,
@@ -307,6 +313,11 @@ const AgentChat: React.FC<AgentChatProps> = ({ sessionId: sessionIdProp, onClose
   const [heightVersion, setHeightVersion] = useState(0);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showResumeBubble, setShowResumeBubble] = useState(false);
+  // F3 share: idle -> busy -> done|signin|err. Drives the header Share button's
+  // tooltip + icon; auto-resets to idle a couple seconds after a terminal state.
+  const [shareState, setShareState] = useState<'idle' | 'busy' | 'done' | 'signin' | 'err'>('idle');
+  // P3/P7: collapsible live-telemetry + chain-of-thought panel under the header.
+  const [showInsights, setShowInsights] = useState(false);
   const [awaitingResponse, setAwaitingResponse] = useState(false);
   const [preSendActivityLabel, setPreSendActivityLabel] = useState<string | null>(null);
   const [activatingMcp, setActivatingMcp] = useState<string | null>(null);
@@ -1388,7 +1399,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ sessionId: sessionIdProp, onClose
                     // BUILTIN_MODELS registry):
                     //   - `*-api` → pinned Anthropic API key (METERED)
                     //   - `*-cc` → pinned Claude Pro/Max via 9Router (sub)
-                    //   - plain sonnet/opus/haiku + openswarm-pro mode → Pro proxy (sub)
+                    //   - plain sonnet/opus/haiku + freeswarm-pro mode → Pro proxy (sub)
                     //   - plain sonnet/opus/haiku + own_key mode → API key (METERED)
                     //   - gpt-5.4* / gpt-5.3* → ChatGPT Plus/Pro via 9Router (sub)
                     //   - gemini-*  → Gemini Advanced via 9Router (sub)
@@ -1403,8 +1414,8 @@ const AgentChat: React.FC<AgentChatProps> = ({ sessionId: sessionIdProp, onClose
                     }
                     const isCcRoute = m.endsWith('-cc');
                     const isPlainAnthropic = m === 'sonnet' || m === 'opus' || m === 'haiku';
-                    const isProRoute = isPlainAnthropic && connectionMode === 'openswarm-pro';
-                    const isOwnKeyAnthropic = isPlainAnthropic && connectionMode !== 'openswarm-pro';
+                    const isProRoute = isPlainAnthropic && connectionMode === 'freeswarm-pro';
+                    const isOwnKeyAnthropic = isPlainAnthropic && connectionMode !== 'freeswarm-pro';
                     const isOpenAISub = m.startsWith('gpt-5') || m.startsWith('gpt-4') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4');
                     const isGeminiSub = m.startsWith('gemini-');
                     const isSubscriptionRouted = isCcRoute || isProRoute || isOpenAISub || isGeminiSub;
@@ -1446,6 +1457,69 @@ const AgentChat: React.FC<AgentChatProps> = ({ sessionId: sessionIdProp, onClose
               )}
             </Box>
             {!isDraft && id && (
+              <Tooltip title={showInsights ? 'Hide insights' : 'Live cost, context & reasoning'}>
+                <IconButton
+                  size="small"
+                  onClick={() => setShowInsights((v) => !v)}
+                  sx={{
+                    color: showInsights ? c.accent.primary : c.text.tertiary,
+                    '&:hover': { color: c.text.primary },
+                  }}
+                >
+                  <InsightsOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            {!isDraft && id && (
+              <Tooltip
+                title={
+                  shareState === 'busy' ? 'Creating link...'
+                  : shareState === 'done' ? 'Link copied'
+                  : shareState === 'signin' ? 'Sign in to your account to share'
+                  : shareState === 'err' ? 'Could not create link'
+                  : 'Share a read-only link to this transcript'
+                }
+              >
+                <IconButton
+                  size="small"
+                  disabled={shareState === 'busy'}
+                  onClick={async () => {
+                    if (!id) return;
+                    setShareState('busy');
+                    try {
+                      const tok = (() => { try { return getAuthToken(); } catch { return ''; } })();
+                      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+                      if (tok) headers['Authorization'] = `Bearer ${tok}`;
+                      const r = await fetch(`${API_BASE}/automation/share`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ session_id: id }),
+                      });
+                      if (r.status === 401) { setShareState('signin'); return; }
+                      if (!r.ok) { setShareState('err'); return; }
+                      const data = await r.json();
+                      const token = data?.token;
+                      if (!token) { setShareState('err'); return; }
+                      const url = `${FREESWARM_DEFAULT_PROXY_URL}/api/share/view?token=${encodeURIComponent(token)}`;
+                      try { await navigator.clipboard.writeText(url); } catch { /* clipboard blocked; link still made */ }
+                      setShareState('done');
+                    } catch {
+                      setShareState('err');
+                    } finally {
+                      // Settle back to idle so the next click reads fresh.
+                      setTimeout(() => setShareState('idle'), 2500);
+                    }
+                  }}
+                  sx={{
+                    color: shareState === 'done' ? c.accent.primary : c.text.tertiary,
+                    '&:hover': { color: c.text.primary },
+                  }}
+                >
+                  {shareState === 'done' ? <CheckIcon fontSize="small" /> : <IosShareIcon fontSize="small" />}
+                </IconButton>
+              </Tooltip>
+            )}
+            {!isDraft && id && (
               <Tooltip title="Reset history">
                 <IconButton
                   size="small"
@@ -1479,6 +1553,20 @@ const AgentChat: React.FC<AgentChatProps> = ({ sessionId: sessionIdProp, onClose
               </IconButton>
             )}
           </Box>
+        )}
+
+        {!isDraft && id && (
+          <Collapse in={showInsights} timeout={200} unmountOnExit>
+            <Box sx={{ px: 2, pt: 1, pb: 1.5, maxHeight: 320, overflow: 'auto' }}>
+              <SessionTelemetry sessionId={id} />
+              <Box sx={{ mt: 1 }}>
+                <TraceTimeline sessionId={id} />
+              </Box>
+              <Box sx={{ mt: 1 }}>
+                <ThoughtTree sessionId={id} />
+              </Box>
+            </Box>
+          </Collapse>
         )}
 
         <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
@@ -1648,7 +1736,7 @@ const AgentChat: React.FC<AgentChatProps> = ({ sessionId: sessionIdProp, onClose
             )}
             {session.context_overflow && (() => {
               const reason = session.context_overflow.reason;
-              const isAuth = reason === 'openswarm_pro_auth_expired' || reason === 'anthropic_auth_invalid' || reason === 'auth_error';
+              const isAuth = reason === 'freeswarm_pro_auth_expired' || reason === 'anthropic_auth_invalid' || reason === 'auth_error';
               const title = isAuth ? 'Sign-in required' : 'Context full';
               const primaryLabel = isAuth ? 'Open Settings' : 'Start a fresh chat';
               const onPrimary = () => {

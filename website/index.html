@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreeSwarm Router - Enterprise AI Subscription Management</title>
+    <meta name="description" content="Route requests across multiple AI subscriptions. Smart fallback, cost optimization, and unified model access. Works with Claude, ChatGPT, Gemini.">
+    <meta name="keywords" content="AI routing, Claude, ChatGPT, Gemini, subscription management, multi-account, AI proxy">
+    <meta property="og:title" content="FreeSwarm Router - Enterprise AI Routing">
+    <meta property="og:description" content="Manage multiple AI subscriptions with intelligent routing and fallback.">
+    <meta property="og:image" content="https://freeswarm.ai/og-image.png">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            color: #1a1a1a;
+            line-height: 1.6;
+            background: white;
+        }
+
+        a { color: #1a1a1a; text-decoration: none; }
+        a:hover { opacity: 0.7; }
+
+        button { cursor: pointer; border: none; border-radius: 8px; font-size: 1em; transition: all 0.3s; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.15); }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+
+        /* Navigation */
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: white;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .nav-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .nav-link {
+            color: #666;
+            font-size: 0.95em;
+            transition: color 0.3s;
+        }
+
+        .nav-link:hover {
+            color: #1a1a1a;
+        }
+
+        .btn-launch {
+            background: #1a1a1a;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+
+        .btn-launch:hover {
+            background: #333;
+        }
+
+        /* Header / Hero */
+        header {
+            background: white;
+            padding: 5rem 1.5rem;
+        }
+
+        .hero {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: center;
+        }
+
+        header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            line-height: 1.3;
+            margin-bottom: 1.5rem;
+            color: #1a1a1a;
+        }
+
+        .tagline {
+            font-size: 1.125rem;
+            color: #666;
+            line-height: 1.8;
+            margin-bottom: 2rem;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-primary {
+            background: #1a1a1a;
+            color: white;
+            padding: 1rem 2rem;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            font-size: 1em;
+        }
+
+        .btn-primary:hover {
+            background: #333;
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #1a1a1a;
+            padding: 1rem 2rem;
+            font-weight: 600;
+            border-radius: 0.5rem;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .hero-video {
+            background: #f0f0f0;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            aspect-ratio: 16 / 9;
+        }
+
+        /* Divider */
+        .divider {
+            height: 1px;
+            background: #f0f0f0;
+            margin: 3rem 0;
+        }
+
+        /* Features Section */
+        .features {
+            padding: 5rem 1.5rem;
+            background: white;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 3rem;
+            color: #1a1a1a;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 0.75rem;
+            border: 1px solid #f0f0f0;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+        }
+
+        .feature-icon {
+            color: #667eea;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .feature-card h3 {
+            font-size: 1.125rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: #1a1a1a;
+        }
+
+        .feature-card p {
+            color: #666;
+            line-height: 1.8;
+            font-size: 0.95rem;
+        }
+
+        /* Download Section */
+        .downloads {
+            padding: 5rem 1.5rem;
+            background: #f9f9f9;
+        }
+
+        .download-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 2rem auto;
+            max-width: 1000px;
+        }
+
+        .download-btn {
+            background: #1a1a1a;
+            color: white;
+            padding: 1.125rem 1.875rem;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            font-size: 0.95em;
+            transition: background 0.3s;
+        }
+
+        .download-btn:hover {
+            background: #333;
+        }
+
+        .download-btn.secondary {
+            background: #666;
+            color: white;
+        }
+
+        .download-btn.secondary:hover {
+            background: #444;
+        }
+
+        .system-label {
+            display: block;
+            font-size: 0.75rem;
+            opacity: 0.7;
+            margin-bottom: 0.5rem;
+            color: #999;
+        }
+
+        #download-status {
+            margin-top: 2rem;
+            font-size: 1rem;
+            text-align: center;
+            color: #666;
+            min-height: 30px;
+        }
+
+        /* Routing Strategies */
+        .strategies {
+            padding: 100px 20px;
+            background: #f9f9f9;
+        }
+
+        .strategy-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            margin-top: 50px;
+        }
+
+        .strategy {
+            background: white;
+            padding: 30px;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+        }
+
+        .strategy h4 {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+
+        .strategy p {
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        /* Testimonials / Use Cases */
+        .usecases {
+            padding: 100px 20px;
+            background: white;
+        }
+
+        .usecase-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+            margin-top: 50px;
+        }
+
+        .usecase {
+            padding: 30px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border: 2px solid #efefef;
+        }
+
+        .usecase-icon {
+            color: #667eea;
+            margin-bottom: 15px;
+            display: inline-block;
+        }
+
+        .usecase h4 {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            color: #1a1a1a;
+        }
+
+        .usecase p {
+            color: #666;
+            line-height: 1.8;
+        }
+
+        /* Pricing (Future) */
+        .pricing {
+            padding: 100px 20px;
+            background: #f9f9f9;
+            display: none; /* Hide for v1.0.0 */
+        }
+
+        /* Footer */
+        footer {
+            background: #1a1a1a;
+            color: white;
+            padding: 60px 20px;
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .footer-section h4 {
+            margin-bottom: 20px;
+            font-size: 1.1em;
+        }
+
+        .footer-section a {
+            display: block;
+            margin-bottom: 10px;
+            color: #aaa;
+            transition: color 0.3s;
+        }
+
+        .footer-section a:hover {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .footer-bottom {
+            border-top: 1px solid #333;
+            padding-top: 30px;
+            text-align: center;
+            color: #aaa;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            header h1 { font-size: 2.5em; }
+            .tagline { font-size: 1.1em; }
+            .section-title { font-size: 2em; }
+            .cta-buttons { flex-direction: column; }
+            .btn-primary, .btn-secondary { width: 100%; }
+        }
+
+        /* Loading state */
+        .loading {
+            display: inline-block;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-content">
+            <div class="nav-brand">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M7 18c-.5 1.5-.5 3 0 4.5M17 6c.5-1.5.5-3 0-4.5M12 2v20M2 12h20"/>
+                </svg>
+                FreeSwarm Router
+            </div>
+            <div class="nav-buttons">
+                <a href="https://freeswarm.myndlabs.tech" class="nav-link">Back to FreeSwarm</a>
+                <a href="https://github.com/yethikrishna/free-swarm" class="nav-link">GitHub</a>
+                <button class="btn-launch" onclick="document.getElementById('downloads').scrollIntoView({behavior: 'smooth'})">Download</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Header / Hero -->
+    <header>
+        <div class="hero">
+            <div>
+                <h1>Enterprise AI Subscription Management</h1>
+                <p class="tagline">
+                    Route requests across multiple AI subscriptions with intelligent fallback,
+                    cost optimization, and unified model access. Works with Claude, ChatGPT, and Gemini.
+                </p>
+                <div class="cta-buttons">
+                    <button class="btn-primary" onclick="downloadForPlatform()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                        </svg>
+                        Download Now
+                    </button>
+                    <button class="btn-secondary" onclick="location.href='#features'">
+                        Learn More
+                    </button>
+                </div>
+            </div>
+            <div class="hero-video">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300'%3E%3Crect fill='%23f0f0f0' width='400' height='300'/%3E%3Ctext x='50%25' y='50%25' font-size='24' text-anchor='middle' dy='.3em' fill='%23999'%3EFreeSwarm Router Demo%3C/text%3E%3C/svg%3E" alt="FreeSwarm Router" style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+        </div>
+    </header>
+
+    <div class="divider"></div>
+
+    <!-- Features -->
+    <section class="features" id="features">
+        <div class="container">
+            <h2 class="section-title">Why FreeSwarm Router?</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                        <circle cx="9" cy="21" r="1"></circle>
+                        <circle cx="20" cy="21" r="1"></circle>
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                    </svg>
+                    <h3>Multi-Account Routing</h3>
+                    <p>Add Claude, ChatGPT, and Gemini subscriptions. Automatic fallback when one account is exhausted.</p>
+                </div>
+
+                <div class="feature-card">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                    <h3>Cost Optimization</h3>
+                    <p>Route to the cheapest available provider. Real-time price comparison across all your accounts.</p>
+                </div>
+
+                <div class="feature-card">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                        <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polyline>
+                    </svg>
+                    <h3>6 Routing Strategies</h3>
+                    <p>fill-first, round-robin, priority, cost-aware, health, and load-balance. Choose what works best.</p>
+                </div>
+
+                <div class="feature-card">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                    <h3>Smart Model Discovery</h3>
+                    <p>20+ hardcoded models + live API discovery. Automatic updates with intelligent caching.</p>
+                </div>
+
+                <div class="feature-card">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                        <line x1="12" y1="2" x2="12" y2="22"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                    <h3>Analytics & Monitoring</h3>
+                    <p>Prometheus metrics, request tracking, latency analysis, and provider health monitoring.</p>
+                </div>
+
+                <div class="feature-card">
+                    <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
+                    <h3>Local First & Secure</h3>
+                    <p>All data stays local and encrypted. Works offline. No cloud dependency except OAuth.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Routing Strategies -->
+    <section class="strategies">
+        <div class="container">
+            <h2 class="section-title">Intelligent Routing Strategies</h2>
+            <div class="strategy-grid">
+                <div class="strategy">
+                    <h4>fill-first</h4>
+                    <p>Default strategy. Use primary account first, fallback when exhausted. Fastest option.</p>
+                </div>
+                <div class="strategy">
+                    <h4>round-robin</h4>
+                    <p>Distribute requests evenly across all accounts. Prevents quota exhaustion.</p>
+                </div>
+                <div class="strategy">
+                    <h4>priority</h4>
+                    <p>Score-based selection. Prefer recently-used, healthy accounts with fewer errors.</p>
+                </div>
+                <div class="strategy">
+                    <h4>cost-aware</h4>
+                    <p>Route to cheapest provider. Perfect for cost optimization at scale.</p>
+                </div>
+                <div class="strategy">
+                    <h4>health</h4>
+                    <p>Avoid failing accounts. Select healthiest provider based on error history.</p>
+                </div>
+                <div class="strategy">
+                    <h4>load-balance</h4>
+                    <p>Fair distribution. Pick least-used account every time.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Use Cases -->
+    <section class="usecases">
+        <div class="container">
+            <h2 class="section-title">Use Cases</h2>
+            <div class="usecase-grid">
+                <div class="usecase">
+                    <div class="usecase-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="32" height="32">
+                            <rect x="2" y="2" width="20" height="20" rx="2"></rect>
+                            <path d="M7 14v-3M12 14v-5M17 14v-2"></path>
+                        </svg>
+                    </div>
+                    <h4>Enterprise Teams</h4>
+                    <p>Manage multiple subscriptions across team. Automatic routing ensures high availability. Perfect for production AI systems.</p>
+                </div>
+                <div class="usecase">
+                    <div class="usecase-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="32" height="32">
+                            <line x1="12" y1="1" x2="12" y2="23"></line>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                        </svg>
+                    </div>
+                    <h4>Cost-Conscious Builders</h4>
+                    <p>Switch between providers to minimize costs. Cost-aware routing selects cheapest option. Track spending with built-in analytics.</p>
+                </div>
+                <div class="usecase">
+                    <div class="usecase-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="32" height="32">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                            <line x1="11" y1="8" x2="11" y2="14"></line>
+                            <line x1="8" y1="11" x2="14" y2="11"></line>
+                        </svg>
+                    </div>
+                    <h4>Researchers & Developers</h4>
+                    <p>Test across models simultaneously. Compare performance and cost. Flexible routing for experimentation.</p>
+                </div>
+                <div class="usecase">
+                    <div class="usecase-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="32" height="32">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                            <path d="M12 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
+                        </svg>
+                    </div>
+                    <h4>Reliability Engineers</h4>
+                    <p>Provider-agnostic routing. Fallback to backup subscriptions. Health monitoring ensures production uptime.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download -->
+    <section class="downloads" id="downloads">
+        <div class="container">
+            <h2 class="section-title">Download FreeSwarm Router</h2>
+            <p style="text-align: center; font-size: 1.1em; color: #666; margin-bottom: 30px;">
+                Free, open-source. Runs locally. Each bundle ships its own Node.js runtime,
+                so there is nothing else to install. Extract and run the start script.
+            </p>
+
+            <div class="download-grid">
+                <button class="download-btn" onclick="downloadForPlatform('mac-arm64')">
+                    <span class="system-label">macOS Apple Silicon</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6M12 3v10M8 9l4-4 4 4"/>
+                    </svg>
+                    Download (.tar.gz)
+                </button>
+                <button class="download-btn" onclick="downloadForPlatform('mac-x64')">
+                    <span class="system-label">macOS Intel</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6M12 3v10M8 9l4-4 4 4"/>
+                    </svg>
+                    Download (.tar.gz)
+                </button>
+                <button class="download-btn" onclick="downloadForPlatform('win-x64')">
+                    <span class="system-label">Windows 10+</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6M12 3v10M8 9l4-4 4 4"/>
+                    </svg>
+                    Download (.zip)
+                </button>
+                <button class="download-btn" onclick="downloadForPlatform('linux-x64')">
+                    <span class="system-label">Linux x64</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6M12 3v10M8 9l4-4 4 4"/>
+                    </svg>
+                    Download (.tar.gz)
+                </button>
+                <button class="download-btn" onclick="downloadForPlatform('linux-arm64')">
+                    <span class="system-label">Linux arm64</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6M12 3v10M8 9l4-4 4 4"/>
+                    </svg>
+                    Download (.tar.gz)
+                </button>
+                <button class="download-btn secondary" onclick="window.location='https://github.com/yethikrishna/free-swarm/releases'">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline; margin-right: 8px; vertical-align: -2px;">
+                        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                        <circle cx="8" cy="8" r="1"></circle>
+                    </svg>
+                    All Versions & Releases
+                </button>
+            </div>
+
+            <p style="text-align: center; font-size: 1em; color: #666; margin-top: 28px;">
+                Prefer the command line? If you have Node.js 18+:
+                <code style="background:#f0f0f0; padding: 3px 8px; border-radius: 4px;">npx freeswarm-router</code>
+                &nbsp;·&nbsp; Or run it in <a href="https://github.com/yethikrishna/free-swarm/blob/HEAD/router/DOCKER.md">Docker</a>.
+            </p>
+
+            <div id="download-status"></div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-section">
+                    <h4>Product</h4>
+                    <a href="https://github.com/yethikrishna/free-swarm">GitHub Repository</a>
+                    <a href="https://github.com/yethikrishna/free-swarm/releases">Releases</a>
+                    <a href="https://github.com/yethikrishna/free-swarm/issues">Issues & Feedback</a>
+                    <a href="https://github.com/yethikrishna/free-swarm/discussions">Discussions</a>
+                </div>
+
+                <div class="footer-section">
+                    <h4>Documentation</h4>
+                    <a href="https://github.com/yethikrishna/free-swarm/blob/HEAD/INSTALLATION_ROUTER.md">Getting Started</a>
+                    <a href="https://github.com/yethikrishna/free-swarm/blob/HEAD/docs/ROUTER_CUSTOMIZATION.md">Customization</a>
+                    <a href="https://github.com/yethikrishna/free-swarm/blob/HEAD/docs/PACKAGED_BUILD_TESTING.md">Testing Guide</a>
+                    <a href="https://github.com/yethikrishna/free-swarm/blob/HEAD/FINAL_PRODUCTION_SUMMARY.md">Full Documentation</a>
+                </div>
+
+                <div class="footer-section">
+                    <h4>Community</h4>
+                    <a href="https://github.com/yethikrishna/free-swarm">Star on GitHub</a>
+                    <a href="https://github.com/yethikrishna/free-swarm/fork">Fork & Contribute</a>
+                    <a href="https://github.com/yethikrishna/free-swarm/issues">Report Bugs</a>
+                    <a href="https://github.com/yethikrishna/free-swarm/discussions">Ask Questions</a>
+                </div>
+            </div>
+
+            <div class="footer-bottom">
+                <p>&copy; 2026 FreeSwarm. Open source. Enterprise-grade AI routing.</p>
+                <p style="margin-top: 10px; font-size: 0.9em;">
+                    Version 1.0.0 | Released June 2026 | <a href="https://github.com/yethikrishna/free-swarm/blob/HEAD/LICENSE" style="color: #1a1a1a;">MIT License</a>
+                </p>
+                <p style="margin-top: 15px; font-size: 0.9em; color: #999;">
+                    Part of <a href="https://freeswarm.myndlabs.tech" style="color: #1a1a1a; font-weight: 600;">FreeSwarm</a> • Open-source AI agent orchestrator
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        /**
+         * Platform Detection & Download
+         */
+        function getPlatform(userAgent) {
+            if (userAgent.includes('Mac')) {
+                // Detect ARM64 vs x64
+                if (userAgent.includes('arm64') || userAgent.includes('ARM64')) {
+                    return 'mac-arm64';
+                }
+                // Most Macs are x64, but can also check CPU architecture
+                return 'mac-x64';
+            }
+            if (userAgent.includes('Windows')) return 'win-x64';
+            // Default Linux to x64 (most common); arm64 users use the explicit button.
+            if (userAgent.includes('Linux')) return 'linux-x64';
+            return null;
+        }
+
+        function downloadForPlatform(platform) {
+            const statusDiv = document.getElementById('download-status');
+
+            // If platform not specified, detect automatically
+            if (!platform) {
+                const userAgent = navigator.userAgent;
+                const detected = getPlatform(userAgent);
+
+                if (!detected) {
+                    statusDiv.innerHTML = '⚠ Unable to detect your platform. <a href="https://github.com/yethikrishna/free-swarm/releases">Download from GitHub</a>';
+                    return;
+                }
+
+                platform = detected;
+                statusDiv.innerHTML = `<span class="loading">●</span> Detected ${platform}, preparing download...`;
+            }
+
+            // Fetch the latest Router release. The repo also ships the desktop
+            // app on v* tags, so /releases/latest (newest by date) is wrong —
+            // pick the most recent release whose tag starts with "router-v".
+            fetch('https://api.github.com/repos/yethikrishna/free-swarm/releases?per_page=30')
+                .then(r => r.json())
+                .then(releases => {
+                    const release = Array.isArray(releases)
+                        ? releases.find(r => r.tag_name && r.tag_name.startsWith('router-v'))
+                        : null;
+                    if (!release) {
+                        statusDiv.innerHTML = '⚠ No Router release found yet. <a href="https://github.com/yethikrishna/free-swarm/releases">View all releases</a>';
+                        return;
+                    }
+                    const version = release.tag_name.replace('router-v', '');
+
+                    // Per-platform self-contained bundles produced by
+                    // scripts/package-router.sh (see .github/workflows/release-router.yml).
+                    const downloadMap = {
+                        'mac-arm64': `freeswarm-router-v${version}-macos-arm64.tar.gz`,
+                        'mac-x64': `freeswarm-router-v${version}-macos-x64.tar.gz`,
+                        'win-x64': `freeswarm-router-v${version}-win-x64.zip`,
+                        'linux-x64': `freeswarm-router-v${version}-linux-x64.tar.gz`,
+                        'linux-arm64': `freeswarm-router-v${version}-linux-arm64.tar.gz`,
+                    };
+
+                    if (!downloadMap[platform]) {
+                        statusDiv.innerHTML = '⚠ Your platform is not yet supported. <a href="https://github.com/yethikrishna/free-swarm/releases">View all releases</a>';
+                        return;
+                    }
+
+                    const fileName = downloadMap[platform];
+                    const asset = (release.assets || []).find(a => a.name === fileName);
+
+                    if (!asset) {
+                        statusDiv.innerHTML = `⚠ ${fileName} not found in release. <a href="${release.html_url}">View release</a> · or <code>npx freeswarm-router</code>`;
+                        return;
+                    }
+
+                    statusDiv.innerHTML = `✓ Downloading ${fileName}...`;
+                    window.location = asset.browser_download_url;
+                })
+                .catch(err => {
+                    statusDiv.innerHTML = `⚠ Error fetching release: ${err.message}. <a href="https://github.com/yethikrishna/free-swarm/releases">Download from GitHub</a>`;
+                });
+        }
+
+        // Optional: Auto-download on page load for specific platforms
+        // Uncomment to enable:
+        // window.addEventListener('load', () => {
+        //     const userAgent = navigator.userAgent;
+        //     if (userAgent.includes('Mac') || userAgent.includes('Windows')) {
+        //         downloadForPlatform();
+        //     }
+        // });
+    </script>
+</body>
+</html>

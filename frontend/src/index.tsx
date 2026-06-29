@@ -2,21 +2,53 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import Main from './app/Main';
 import ErrorBoundary from './app/components/feedback/ErrorBoundary';
-import { ensureAuthToken } from './shared/config';
+import { ensureAuthToken, IS_WEB } from './shared/config';
 import { runStartupMigrations } from './shared/migrations';
 
-// Must run before ensureAuthToken reads localStorage; v1.0.31 migration force-clears auth+onboarding so the stale token doesn't survive.
-runStartupMigrations();
-
-// 3s timeout so a missing Electron bridge (plain-browser dev) doesn't hang; 401 in that case is intentional.
+// Route /account to the web account portal (sign-in, plan info, OAuth landing).
+// All other paths render the canvas app; on the web this shows the UI in
+// "connecting" state since there is no local backend.
 async function bootstrap() {
+  const root = document.getElementById('root')!;
+  const path = window.location.pathname;
+  const isAccountPath = path === '/account' || path.startsWith('/account/');
+
+  if (isAccountPath) {
+    const { default: WebApp } = await import('./web/WebApp');
+    createRoot(root).render(
+      <ErrorBoundary scope="root">
+        <WebApp />
+      </ErrorBoundary>
+    );
+    return;
+  }
+
+  // On the hosted web build, OAuth redirects back to /app?token=...; capture it into
+  // cloud-token storage before the canvas mounts so Settings can read the sign-in, then clean the URL.
+  if (IS_WEB) {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
+    if (urlToken) {
+      const { setCloudToken, setCloudRefreshToken } = await import('./shared/cloud');
+      setCloudToken(urlToken);
+      // The handoff also passes a 30d refresh token so the 15m access token can
+      // be silently re-minted instead of bouncing the user to sign-in.
+      const urlRefresh = params.get('refresh_token');
+      if (urlRefresh) setCloudRefreshToken(urlRefresh);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }
+
+  // Must run before ensureAuthToken reads localStorage; v1.0.31 migration force-clears auth+onboarding so the stale token doesn't survive.
+  if (!IS_WEB) runStartupMigrations();
+
+  // 3s timeout so a missing Electron bridge (plain-browser dev) doesn't hang; 401 in that case is intentional.
   try {
     await Promise.race([
       ensureAuthToken(),
       new Promise(resolve => setTimeout(resolve, 3000)),
     ]);
   } catch {}
-  const root = document.getElementById('root')!;
   createRoot(root).render(
     <ErrorBoundary scope="root">
       <Main />

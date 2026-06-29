@@ -37,7 +37,7 @@ def anthropic_web_search_is_reliable(*, uses_direct_anthropic_api: bool,
       - `uses_direct_anthropic_api`: the session is pinned to a direct Anthropic
         api-route model (base_url = api.anthropic.com with the user's own key),
         so the haiku call hits Anthropic directly and works.
-      - `is_pro`: OpenSwarm Pro, entitled to the managed `anthropic` pool that
+      - `is_pro`: FreeSwarm Pro, entitled to the managed `anthropic` pool that
         9Router's `anthropic/*` route resolves to.
 
     A bare `anthropic_api_key` in settings is NOT sufficient: a SUBSCRIPTION-route

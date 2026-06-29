@@ -37,9 +37,9 @@ function autodetectRoot(repoRoot) {
   const dist = path.join(repoRoot, 'electron', 'dist');
   const candidates = [
     path.join(dist, 'win-unpacked', 'resources'),
-    path.join(dist, 'mac-arm64', 'OpenSwarm.app', 'Contents', 'Resources'),
-    path.join(dist, 'mac', 'OpenSwarm.app', 'Contents', 'Resources'),
-    path.join(dist, 'mac-universal', 'OpenSwarm.app', 'Contents', 'Resources'),
+    path.join(dist, 'mac-arm64', 'FreeSwarm.app', 'Contents', 'Resources'),
+    path.join(dist, 'mac', 'FreeSwarm.app', 'Contents', 'Resources'),
+    path.join(dist, 'mac-universal', 'FreeSwarm.app', 'Contents', 'Resources'),
     path.join(repoRoot, 'electron', 'build-staging'),
     path.join(repoRoot, 'build-staging'),
   ];

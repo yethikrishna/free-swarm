@@ -15,7 +15,7 @@ export function useChatInputModel(model: string) {
 
   const allModelOptions = useMemo(() => {
     if (!modelsLoaded || Object.keys(modelsByProvider).length === 0) {
-      const key = connectionMode === 'openswarm-pro' ? 'OpenSwarm Pro' : 'Anthropic';
+      const key = connectionMode === 'freeswarm-pro' ? 'FreeSwarm Pro' : 'Anthropic';
       return { flat: FALLBACK_MODELS.map(m => ({ ...m, provider: key })), grouped: { [key]: FALLBACK_MODELS } };
     }
     const flat: Array<any> = [];

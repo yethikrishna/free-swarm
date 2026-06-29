@@ -10,10 +10,10 @@ import os
 
 def _read_app_version() -> str:
     # Preferred: Electron's main process injects this when spawning the
-    # backend (see electron/main.js; OPENSWARM_APP_VERSION). Always reliable
+    # backend (see electron/main.js; FREESWARM_APP_VERSION). Always reliable
     # in packaged builds because it comes from app.getVersion() rather than
     # path-based file resolution.
-    env_v = os.environ.get("OPENSWARM_APP_VERSION", "").strip()
+    env_v = os.environ.get("FREESWARM_APP_VERSION", "").strip()
     if env_v:
         return env_v
     # Fallback: read electron/package.json via relative path. Works in

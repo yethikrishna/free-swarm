@@ -94,11 +94,11 @@ const HANDLE_DEFS: { dir: ResizeDir; sx: Record<string, any> }[] = [
 // - survives the crash. A leftover marker at the next launch means that mount never
 // reached dom-ready, so we count it and stand down to the safe iframe this launch;
 // after WIN_WV_MAX such crashes we stay on the iframe for good. A clean dom-ready
-// clears the marker and the counter. Escape hatch: openswarm_win_webview_off='1'
-// forces the iframe; clear openswarm_win_webview_crashes to retry after a lockout.
-const WIN_WV_OFF = 'openswarm_win_webview_off';
-const WIN_WV_PENDING = 'openswarm_win_webview_pending';
-const WIN_WV_CRASHES = 'openswarm_win_webview_crashes';
+// clears the marker and the counter. Escape hatch: freeswarm_win_webview_off='1'
+// forces the iframe; clear freeswarm_win_webview_crashes to retry after a lockout.
+const WIN_WV_OFF = 'freeswarm_win_webview_off';
+const WIN_WV_PENDING = 'freeswarm_win_webview_pending';
+const WIN_WV_CRASHES = 'freeswarm_win_webview_crashes';
 const WIN_WV_MAX = 2;
 
 function windowsWebviewEnabled(): boolean {
@@ -144,12 +144,12 @@ const isElectron = navigator.userAgent.includes('Electron') && (!isWindows || wi
 
 const chromeUserAgent = navigator.userAgent
   .replace(/\s*Electron\/\S+/, '')
-  .replace(/\s*OpenSwarm\/\S+/, '');
+  .replace(/\s*FreeSwarm\/\S+/, '');
 
 // Sync exposure set at preload boot; async API fallback for older builds.
 const webviewPreloadPath: string | undefined = isElectron
-  ? ((window as any).__OPENSWARM_WEBVIEW_PRELOAD__
-      || (window as any).openswarm?.getWebviewPreloadPath?.())
+  ? ((window as any).__FREESWARM_WEBVIEW_PRELOAD__
+      || (window as any).freeswarm?.getWebviewPreloadPath?.())
   : undefined;
 
 
@@ -335,7 +335,7 @@ const BrowserCard: React.FC<Props> = ({
           const docX = wvRect.left + (payload.clientX ?? 0);
           const docY = wvRect.top + (payload.clientY ?? 0);
           window.dispatchEvent(
-            new CustomEvent('openswarm:canvas-wheel-zoom', {
+            new CustomEvent('freeswarm:canvas-wheel-zoom', {
               detail: {
                 deltaY: payload.deltaY ?? 0,
                 deltaMode: payload.deltaMode ?? 0,
@@ -1267,7 +1267,7 @@ const BrowserCard: React.FC<Props> = ({
           </DialogTitle>
           <DialogContent sx={{ pb: 1 }}>
             <Typography sx={{ fontSize: '0.85rem', color: c.text.secondary, lineHeight: 1.5 }}>
-              Sorry, OpenSwarm doesn't support passkeys. Please sign in with a password or another method.
+              Sorry, FreeSwarm doesn't support passkeys. Please sign in with a password or another method.
             </Typography>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>

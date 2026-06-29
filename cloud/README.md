@@ -1,0 +1,76 @@
+# freeswarm-cloud
+
+The stateless cloud service both FreeSwarm apps already call at
+`https://api.freeswarm.myndlabs.tech`. Handles **auth, subscription, billing,
+and usage ingest**. Vercel serverless functions + Neon Postgres.
+
+It does **not** run agents, fusion, or the 9router. Those are long-running /
+WebSocket workloads that cannot run on Vercel serverless: they live on-device
+(local app) and, if ever hosted for the web app, on a persistent server.
+
+## Why this exists separately
+
+The desktop backend (`/backend`) is a *thin client* for accounts: its
+`auth/router.py` and `subscription/router.py` proxy to this service. The web
+`/app` calls it directly from the browser. This repo is the other side of that
+contract.
+
+## Endpoints (contract the desktop already expects)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET  | `/api/health` | Liveness + DB/auth config check |
+| GET  | `/api/me` | Bearer -> `{ user_id, email, plan, status, expires, usage }` |
+| POST | `/api/auth/signin-activate` | `{ token, signin_method, email }` -> profile + plan |
+| POST | `/api/auth/dev-login` | `{ email }` -> `{ token }` (dev only, `ALLOW_DEV_LOGIN=1`) |
+| GET  | `/api/auth/google` | OAuth start + callback (gated on `GOOGLE_*`) |
+| GET  | `/api/auth/github` | OAuth start + callback (gated on `GITHUB_*`) |
+| POST | `/api/auth/refresh` | `{ refresh_token, aud }` -> `{ access_token }` (15m re-mint) |
+| POST | `/api/auth/device/code` | `{ aud, install_id }` -> `{ device_code, user_code, verification_uri, ... }` (RFC 8628 start) |
+| POST | `/api/auth/device/token` | `{ device_code }` -> `{ status, access_token?, refresh_token?, ... }` (poll) |
+| POST | `/api/auth/device/approve` | Bearer + `{ user_code, action }` -> bind/deny the device |
+| GET  | `/api/auth/device/info` | `?user_code=` -> `{ status }` (coarse, pre-auth) |
+| POST | `/api/subscription/sync` | Bearer -> `{ plan, current_period_end, status, synced }` |
+| POST | `/api/billing/portal` | Bearer -> `{ url }` (gated on `STRIPE_SECRET_KEY`) |
+| POST | `/api/billing/webhook` | Stripe webhook (gated on `STRIPE_WEBHOOK_SECRET`) |
+| POST | `/api/service/sync` | Usage ingest (web mode), idempotent |
+| GET/POST | `/api/sessions`, `/api/sessions/revoke` | F1 list active device sessions / sign one out |
+| GET/POST | `/api/teams`, `/api/teams/members` | F2/F8 teams + RBAC membership (invite/role/remove) |
+| GET/POST/DELETE + GET | `/api/share`, `/api/share/get` | F3 share links (create/list/revoke; public resolve) |
+| POST/GET | `/api/cost/ingest`, `/api/cost/summary` | F4 cost ingest + aggregation (by day/model) |
+| GET/POST | `/api/audit` | F6 activity-log query (keyset) + ingest |
+| GET/POST/DELETE | `/api/keys`, `/api/webhooks` | F9 API keys + webhooks management |
+| GET/POST | `/api/totp` | F11 2FA TOTP enroll/verify/disable |
+| GET/PUT | `/api/org/settings` | F12 custom branding |
+| GET/POST/DELETE | `/api/notifications` | F13 Slack/email notification channels |
+
+Working today: health, dev-login, signin-activate, me, subscription/sync,
+service/sync, Google OAuth (if GOOGLE_* env vars set), GitHub OAuth (if GITHUB_* env vars set),
+Stripe billing + webhook (if STRIPE_* env vars set).
+
+## Deploy
+
+1. **Neon**: create a free Postgres project, copy the pooled connection string.
+   Apply the schema: `psql "$DATABASE_URL" -f db/schema.sql`
+2. **Vercel**: new project with **Root Directory = `cloud`**. Add the env vars
+   from `.env.example` (at minimum `DATABASE_URL` and `AUTH_SECRET`).
+3. Point the domain `api.freeswarm.myndlabs.tech` at this Vercel project.
+4. Verify: `curl https://api.freeswarm.myndlabs.tech/api/health` -> `status: ok`.
+
+## Local test (no OAuth/Stripe needed)
+
+```bash
+export DATABASE_URL=...        # a Neon branch
+export AUTH_SECRET=$(openssl rand -hex 32)
+export ALLOW_DEV_LOGIN=1
+psql "$DATABASE_URL" -f db/schema.sql
+vercel dev
+# mint a token, then call the contract:
+curl -XPOST localhost:3000/api/auth/dev-login -d '{"email":"you@x.com"}' -H 'content-type: application/json'
+curl localhost:3000/api/me -H "Authorization: Bearer <token>"
+```
+
+## Env
+
+See `.env.example`. `DATABASE_URL` + `AUTH_SECRET` are required; everything else
+unlocks an optional path (Google sign-in, Stripe billing, dev login).

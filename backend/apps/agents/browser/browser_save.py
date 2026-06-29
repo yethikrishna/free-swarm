@@ -17,7 +17,7 @@ _SUBDIR = "browser-data"  # never the workspace root, so we can't clobber projec
 
 def _dest_dir(cwd: str | None, session_id: str) -> str:
     base = cwd if (cwd and os.path.isdir(cwd)) else os.path.join(
-        os.path.expanduser("~"), ".openswarm", "workspaces", session_id or "browser")
+        os.path.expanduser("~"), ".freeswarm", "workspaces", session_id or "browser")
     dest = os.path.join(base, _SUBDIR)
     os.makedirs(dest, exist_ok=True)
     return dest

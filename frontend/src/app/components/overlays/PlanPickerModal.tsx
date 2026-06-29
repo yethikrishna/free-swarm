@@ -7,7 +7,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import PlanPicker from './PlanPicker';
 import type {
-  OpenSwarmPlan,
+  FreeSwarmPlan,
   CheckoutSource,
 } from '@/shared/subscription/checkout';
 
@@ -17,9 +17,9 @@ interface Props {
   title: string;
   subtitle?: string;
   source: CheckoutSource;
-  defaultPlan?: OpenSwarmPlan;
-  currentPlan?: OpenSwarmPlan;
-  onSubscribed?: (plan: OpenSwarmPlan) => void;
+  defaultPlan?: FreeSwarmPlan;
+  currentPlan?: FreeSwarmPlan;
+  onSubscribed?: (plan: FreeSwarmPlan) => void;
 }
 
 /** Centered modal around the compact PlanPicker; keeps pricing out of the page flow until asked for. */

@@ -7,13 +7,13 @@ import sys
 import urllib.error
 import urllib.request
 
-BACKEND_PORT = os.environ.get("OPENSWARM_PORT", "8324")
-BACKEND_AUTH = os.environ.get("OPENSWARM_AUTH_TOKEN", "")
+BACKEND_PORT = os.environ.get("FREESWARM_PORT", "8324")
+BACKEND_AUTH = os.environ.get("FREESWARM_AUTH_TOKEN", "")
 SEARCH_URL = f"http://127.0.0.1:{BACKEND_PORT}/api/web/search"
 FETCH_URL = f"http://127.0.0.1:{BACKEND_PORT}/api/web/fetch"
 
 # Primary-provider hint from agent_manager; backend picks the native search tool (googleSearch/web_search_preview) so searches use the user's existing budget.
-PRIMARY_HINT = os.environ.get("OPENSWARM_PRIMARY_API", "") or None
+PRIMARY_HINT = os.environ.get("FREESWARM_PRIMARY_API", "") or None
 
 TOOLS = [
     {
@@ -157,7 +157,7 @@ def main():
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
                 "serverInfo": {
-                    "name": "openswarm-web",
+                    "name": "freeswarm-web",
                     "version": "1.0.0",
                 },
             })

@@ -36,7 +36,7 @@ export function useCardDrag({
   // exactly once per real pan/zoom delta. Edge-pan mutates pan via
   // canvasActions.setState below, so the dispatch lives in the same hook.
   useEffect(() => {
-    window.dispatchEvent(new Event('openswarm:canvas-pan-changed'));
+    window.dispatchEvent(new Event('freeswarm:canvas-pan-changed'));
   }, [panX, panY, zoom]);
 
   // ---- Edge panning during card drag ----

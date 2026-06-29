@@ -30,6 +30,7 @@ const Modes = React.lazy(() => import('./pages/Modes/Modes'));
 const Views = React.lazy(() => import('./pages/Views/Views'));
 const Customization = React.lazy(() => import('./pages/Customization/Customization'));
 const Analytics = React.lazy(() => import('./pages/Analytics/Analytics'));
+const Automation = React.lazy(() => import('./pages/Automation/Automation'));
 const OnboardingRoot = React.lazy(() =>
   import('./components/Onboarding').then((m) => ({ default: m.OnboardingRoot })),
 );
@@ -50,7 +51,7 @@ if (typeof window !== 'undefined') {
     } catch { /* never let the handler itself throw */ }
   });
 
-  (window as any).__openswarmPrefetchRoute = (path: string) => {
+  (window as any).__freeswarmPrefetchRoute = (path: string) => {
     switch (path) {
       case '/skills': void import('./pages/Skills/Skills'); return;
       case '/actions':
@@ -249,9 +250,33 @@ const SettingsLoader: React.FC<{ children: React.ReactNode }> = ({ children }) =
     if (loaded) setThemeMode(theme as 'light' | 'dark');
   }, [loaded, theme, setThemeMode]);
 
+  // Migrate any plaintext API keys still on disk into the OS keychain, then load
+  // all keychain keys into the backend's in-memory secret store (desktop only;
+  // no-op on web). One-shot per launch. Best-effort: the settings.json fallback
+  // covers the case where the keychain is empty/unavailable.
+  const settingsData = useAppSelector((s) => s.settings.data);
   useEffect(() => {
     if (!loaded) return;
-    (window as any).openswarm?.setAllowPrerelease?.(allowExperimentalUpdates);
+    let cancelled = false;
+    (async () => {
+      try {
+        const { migrateSettingsKeysToKeychain, loadKeychainSecretsToBackend } = await import('@/shared/keychain');
+        if (cancelled) return;
+        await migrateSettingsKeysToKeychain(settingsData as unknown as Record<string, unknown>);
+        if (cancelled) return;
+        await loadKeychainSecretsToBackend();
+      } catch {
+        /* keychain bridge absent (web) or backend cold: settings.json still works */
+      }
+    })();
+    return () => { cancelled = true; };
+    // Run once when settings first load; migration is idempotent and self-gating.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    (window as any).freeswarm?.setAllowPrerelease?.(allowExperimentalUpdates);
   }, [loaded, allowExperimentalUpdates]);
   // Hold paint until settings land so the user's theme renders first; Electron's ready-to-show relies on this.
   if (!loaded) return null;
@@ -262,16 +287,16 @@ const DEFAULT_MODEL_PRIORITY: string[] = [
   'Anthropic',
   'OpenAI',
   'Google',
-  'OpenSwarm Pro',
-  'OpenSwarm',
+  'FreeSwarm Pro',
+  'FreeSwarm',
 ];
 
 const DEFAULT_MODEL_PICKS: Record<string, string[]> = {
   Anthropic: ['sonnet-cc', 'sonnet'],
   OpenAI: ['gpt-5.4-mini', 'gpt-5.4'],
   Google: ['gemini-2.5-flash', 'gemini-3-flash', 'gemini-2.5-pro'],
-  'OpenSwarm Pro': ['sonnet', 'opus'],
-  OpenSwarm: ['gpt-5-mini', 'claude-haiku-4.5', 'gpt-4.1'],
+  'FreeSwarm Pro': ['sonnet', 'opus'],
+  FreeSwarm: ['gpt-5-mini', 'claude-haiku-4.5', 'gpt-4.1'],
 };
 
 function pickFallbackModel(
@@ -356,7 +381,7 @@ const CrashRecoveryChip: React.FC = () => {
   const [show, setShow] = React.useState(false);
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
-    const api = (window as any).openswarm as OpenSwarmAPI | undefined;
+    const api = (window as any).freeswarm as FreeSwarmAPI | undefined;
     if (!api?.getCrashRecoveryInfo) return;
     api.getCrashRecoveryInfo().then((info) => {
       if (info) { setMounted(true); setShow(true); }
@@ -391,11 +416,62 @@ const CrashRecoveryChip: React.FC = () => {
   );
 };
 
+/** Listens for backend process recovery (from the runtime watchdog) and re-establishes
+ *  connections. Shows a brief "reconnecting" state, then re-fetches settings + models
+ *  to warm up the API connection. */
+const BackendRecoveryListener: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const dispatch = useAppDispatch();
+  const [show, setShow] = React.useState(false);
+
+  React.useEffect(() => {
+    const api = (window as any).freeswarm as FreeSwarmAPI | undefined;
+    if (!api?.onBackendRecovered) return;
+
+    const unsubscribe = api.onBackendRecovered?.(() => {
+      setShow(true);
+      dispatch(fetchSettings());
+      dispatch(fetchModels());
+      setTimeout(() => setShow(false), 3000);
+    });
+    return unsubscribe;
+  }, [dispatch]);
+
+  return (
+    <>
+      {children}
+      <Fade in={show} timeout={{ enter: 200, exit: 220 }} unmountOnExit>
+        <Box sx={{
+          position: 'fixed', bottom: 16, right: 16, zIndex: 1500,
+          display: 'flex', alignItems: 'center', gap: 1,
+          bgcolor: 'background.paper',
+          border: '1px solid', borderColor: 'divider',
+          boxShadow: 3, borderRadius: '10px',
+          px: 1.75, py: 1, fontSize: '0.85rem',
+          maxWidth: 360,
+        }}>
+          <Box component="span" sx={{
+            width: 8, height: 8, borderRadius: '50%',
+            bgcolor: 'info.main',
+            animation: 'pulse 1.5s ease-in-out infinite',
+            '@keyframes pulse': {
+              '0%, 100%': { opacity: 1 },
+              '50%': { opacity: 0.5 },
+            },
+          }} />
+          <Box component="span">
+            Backend reconnecting...
+          </Box>
+        </Box>
+      </Fade>
+    </>
+  );
+};
+
 const UpdateListener: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const dispatch = useAppDispatch();
 
   useEffect(() => {
-    const api = (window as any).openswarm as OpenSwarmAPI | undefined;
+    const api = (window as any).freeswarm as FreeSwarmAPI | undefined;
     if (!api?.getAppVersion) return;
 
     api.getAppVersion().then((v: string) => dispatch(setAppVersion(v)));
@@ -416,9 +492,9 @@ const UpdateListener: React.FC<{ children: React.ReactNode }> = ({ children }) =
     });
 
     const cleanups = [
-      api.onUpdateAvailable?.((info: OpenSwarmUpdateInfo) => dispatch(setUpdateAvailable(info.version))),
+      api.onUpdateAvailable?.((info: FreeSwarmUpdateInfo) => dispatch(setUpdateAvailable(info.version))),
       api.onUpdateNotAvailable?.(() => dispatch(setUpdateNotAvailable())),
-      api.onDownloadProgress?.((p: OpenSwarmDownloadProgress) => dispatch(setDownloading(p.percent))),
+      api.onDownloadProgress?.((p: FreeSwarmDownloadProgress) => dispatch(setDownloading(p.percent))),
       api.onUpdateDownloaded?.(() => dispatch(setUpdateDownloaded())),
       api.onUpdateError?.((msg: string) => dispatch(setUpdateError(msg))),
     ];
@@ -466,6 +542,7 @@ const ThemedApp: React.FC = () => {
         <RouteTrackerMount />
         <SettingsLoader>
             <DefaultModelGuard>
+            <BackendRecoveryListener>
             <UpdateListener>
               <CrashRecoveryChip />
               <DeepLinkListener>
@@ -483,6 +560,7 @@ const ThemedApp: React.FC = () => {
                         <Route path="/apps" element={<Views />} />
                         <Route path="/apps/:id" element={<Views />} />
                         <Route path="/analytics" element={<Analytics />} />
+                        <Route path="/automation" element={<Automation />} />
                       </Route>
                     </Routes>
                   </Suspense>
@@ -494,6 +572,7 @@ const ThemedApp: React.FC = () => {
                 </OnboardingErrorGuard>
               </DeepLinkListener>
             </UpdateListener>
+            </BackendRecoveryListener>
             </DefaultModelGuard>
           </SettingsLoader>
       </HashRouter>

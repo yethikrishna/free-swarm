@@ -154,7 +154,7 @@ class WorkspaceSeedRequest(BaseModel):
     files: Optional[dict[str, str]] = None
     meta: Optional[dict[str, Any]] = None
     # "webapp_template" (default) → seed the vendored
-    # openswarm-ai/webapp-template snapshot (React + Vite + TS frontend
+    # yethikrishna/webapp-template snapshot (React + Vite + TS frontend
     # with optional FastAPI backend), allocate a free FRONTEND_PORT,
     # leave BACKEND_PORT=NONE. Runtime spawns `bash run.sh`; preview
     # pane points at `http://localhost:{FRONTEND_PORT}/`.

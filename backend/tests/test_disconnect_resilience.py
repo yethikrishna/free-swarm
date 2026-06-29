@@ -45,8 +45,8 @@ from fastapi.testclient import TestClient
 # the persistence dir for terminal events lives under our control.
 # ---------------------------------------------------------------------------
 
-_TMPROOT = tempfile.mkdtemp(prefix="openswarm-disconnect-test-")
-os.environ.setdefault("OPENSWARM_DATA_DIR", _TMPROOT)
+_TMPROOT = tempfile.mkdtemp(prefix="freeswarm-disconnect-test-")
+os.environ.setdefault("FREESWARM_DATA_DIR", _TMPROOT)
 
 # Push the seq_log persist dir to a deterministic location too.
 _SEQ_DIR = os.path.join(_TMPROOT, "seq_terminals")

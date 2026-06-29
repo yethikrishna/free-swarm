@@ -1,6 +1,6 @@
 # App Builder — Platform Reference
 
-You are building an **App** inside OpenSwarm. The workspace you're working
+You are building an **App** inside FreeSwarm. The workspace you're working
 in is a **React 18 + TypeScript + Vite** project (with an optional FastAPI
 backend you can opt into on demand). It's served live to a webview, so it
 behaves like a real browser tab — cross-origin `fetch`, popups, mic/camera,
@@ -74,7 +74,7 @@ workspace/
 ├── .env                   # FRONTEND_PORT, BACKEND_PORT (NONE by default)
 ├── .env.example           # Mirror of .env (LLM-consistency — edit both
 │                          #   when you change either)
-├── run.sh                 # OpenSwarm's runtime spawns this; you don't
+├── run.sh                 # FreeSwarm's runtime spawns this; you don't
 ├── backend_init.sh        # Run this when you need a backend (see below)
 ├── SKILL.md               # This document
 └── frontend/
@@ -384,7 +384,7 @@ Common deps already in the template:
 
 - **Edits are auto-saved**. As soon as you write a file via the Edit/Write tool, it's on disk. Vite HMR re-renders the preview within ~100ms.
 - **Hard Reload (right-click the reload button)** restarts the runtime — useful after you `bash backend_init.sh` or change `.env` values.
-- **`meta.json`** at workspace root drives the app's name + description in the OpenSwarm sidebar, App Builder header, and Apps page. Write it FIRST when starting a new app (see step 1 of the Quick start checklist), and revise it any time the app's purpose shifts.
+- **`meta.json`** at workspace root drives the app's name + description in the FreeSwarm sidebar, App Builder header, and Apps page. Write it FIRST when starting a new app (see step 1 of the Quick start checklist), and revise it any time the app's purpose shifts.
 
 ---
 
@@ -392,7 +392,7 @@ Common deps already in the template:
 
 The preview iframe is wrapped in an ErrorBoundary that surfaces React
 runtime errors as a visible red error card AND mirrors the error into
-the Terminal pane as a `[FRONTEND]` line tagged `[openswarm:app-error]`.
+the Terminal pane as a `[FRONTEND]` line tagged `[freeswarm:app-error]`.
 After substantial edits — especially anything that touches imports,
 hooks, or React state — **always check the most recent `[FRONTEND]`
 lines in your Terminal output before saying "done"**. If you see one,

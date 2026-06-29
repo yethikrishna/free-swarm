@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from backend.config.Apps import SubApp
-from backend.apps.settings.credentials import OPENSWARM_DEFAULT_PROXY_URL
+from backend.apps.settings.credentials import FREESWARM_DEFAULT_PROXY_URL
 from backend.apps.settings.settings import SETTINGS_FILE, load_settings, save_settings_async
 
 logger = logging.getLogger(__name__)
@@ -31,8 +31,8 @@ def _proxy_url() -> str:
     """Cloud router base URL. Overridable per-user via settings, falling back
     to the module-default. No trailing slash."""
     settings_obj = load_settings()
-    url = (getattr(settings_obj, "openswarm_proxy_url", None)
-           or OPENSWARM_DEFAULT_PROXY_URL)
+    url = (getattr(settings_obj, "freeswarm_proxy_url", None)
+           or FREESWARM_DEFAULT_PROXY_URL)
     return url.rstrip("/")
 
 
@@ -47,8 +47,40 @@ async def _sync_pro_routing(settings_obj) -> None:
         logger.debug("pro routing sync skipped: %s", e)
 
 
+async def _try_refresh_bearer(settings_obj) -> Optional[str]:
+    """Exchange the stored 30d refresh token for a fresh 15m access bearer.
+
+    Returns the new access token on success (and persists it + re-syncs pro
+    routing), or None when there is no refresh token or the cloud rejects it.
+    Lets a routine 15-minute access-token expiry self-heal instead of forcing
+    a paying user to sign in again. Best-effort: network failures return None,
+    leaving the caller to keep the cached state."""
+    refresh = getattr(settings_obj, "freeswarm_refresh_token", None)
+    if not refresh:
+        return None
+    proxy = _proxy_url()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(
+                f"{proxy}/api/auth/refresh",
+                json={"refresh_token": refresh, "aud": "desktop"},
+            )
+    except httpx.HTTPError as e:
+        logger.debug("bearer refresh network error: %s", e)
+        return None
+    if r.status_code != 200:
+        return None
+    access_token = r.json().get("access_token")
+    if not access_token:
+        return None
+    settings_obj.freeswarm_bearer_token = access_token
+    await save_settings_async(settings_obj)
+    await _sync_pro_routing(settings_obj)
+    return access_token
+
+
 async def _clear_subscription(settings_obj, *, drop_bearer: bool = True) -> None:
-    """Revert to own_key mode and drop OpenSwarm Pro routing state.
+    """Revert to own_key mode and drop FreeSwarm Pro routing state.
 
     `drop_bearer=True` (the default) is the original behavior, used when the
     cloud reports the bearer as revoked (401) or the subscription as past its
@@ -57,15 +89,15 @@ async def _clear_subscription(settings_obj, *, drop_bearer: bool = True) -> None
     `drop_bearer=False` is used by the explicit user-initiated /disconnect
     endpoint: the bearer still authenticates the user's account at api.me
     (Settings/AccountCard, future profile endpoints), they just don't want
-    /v1/messages routed through OpenSwarm Pro anymore. Without this branch
+    /v1/messages routed through FreeSwarm Pro anymore. Without this branch
     the AccountCard would say "signed in as alice@..." while the backend
     bearer was gone, surfacing as 401s on every cloud call."""
     settings_obj.connection_mode = "own_key"
     if drop_bearer:
-        settings_obj.openswarm_bearer_token = None
-    settings_obj.openswarm_subscription_plan = None
-    settings_obj.openswarm_subscription_expires = None
-    settings_obj.openswarm_usage_cached = None
+        settings_obj.freeswarm_bearer_token = None
+    settings_obj.freeswarm_subscription_plan = None
+    settings_obj.freeswarm_subscription_expires = None
+    settings_obj.freeswarm_usage_cached = None
     await save_settings_async(settings_obj)
     _sync_subscription_identity(settings_obj)
     await _sync_pro_routing(settings_obj)
@@ -81,15 +113,15 @@ def _sync_subscription_identity(settings_obj) -> None:
     except Exception:
         return
     mode = getattr(settings_obj, "connection_mode", "own_key")
-    is_paying = mode == "openswarm-pro" and bool(
-        getattr(settings_obj, "openswarm_bearer_token", None)
+    is_paying = mode == "freeswarm-pro" and bool(
+        getattr(settings_obj, "freeswarm_bearer_token", None)
     )
     props = {
         "connection_mode": mode,
-        "plan": getattr(settings_obj, "openswarm_subscription_plan", None) if is_paying else "free",
+        "plan": getattr(settings_obj, "freeswarm_subscription_plan", None) if is_paying else "free",
         "is_paying_customer": is_paying,
     }
-    expires = getattr(settings_obj, "openswarm_subscription_expires", None)
+    expires = getattr(settings_obj, "freeswarm_subscription_expires", None)
     if is_paying and expires:
         props["subscription_expires"] = expires
     try:
@@ -110,10 +142,10 @@ class ActivateRequest(BaseModel):
 
 @subscription.router.post("/activate")
 async def activate(body: ActivateRequest):
-    """Renderer calls this after catching an openswarm://auth deep link.
+    """Renderer calls this after catching an freeswarm://auth deep link.
 
     Validates the bearer by calling the cloud /api/me, then persists it to
-    settings. On success the desktop app flips into openswarm-pro mode for
+    settings. On success the desktop app flips into freeswarm-pro mode for
     subsequent Claude requests.
     """
     if not body.token or len(body.token) < 16:
@@ -143,32 +175,34 @@ async def activate(body: ActivateRequest):
     me = r.json()
 
     # Persist to settings. Prefer cloud-reported values; fall back to the
-    # deep-link's own fields if cloud is sparse.
+    # deep-link's own fields if cloud is sparse. Cloud can return either
+    # current_period_end (ms) or expires (ISO), so check both.
     settings_obj = load_settings()
-    settings_obj.connection_mode = "openswarm-pro"
-    settings_obj.openswarm_bearer_token = body.token
-    settings_obj.openswarm_proxy_url = proxy
-    settings_obj.openswarm_subscription_plan = (
+    settings_obj.connection_mode = "freeswarm-pro"
+    settings_obj.freeswarm_bearer_token = body.token
+    settings_obj.freeswarm_proxy_url = proxy
+    settings_obj.freeswarm_subscription_plan = (
         me.get("plan") or body.plan or "pro"
     )
     period_end = me.get("current_period_end")
     if isinstance(period_end, (int, float)):
-        # cloud returns unix ms
         from datetime import datetime, timezone
-        settings_obj.openswarm_subscription_expires = (
+        settings_obj.freeswarm_subscription_expires = (
             datetime.fromtimestamp(period_end / 1000, tz=timezone.utc).isoformat()
         )
+    elif isinstance(me.get("expires"), str):
+        settings_obj.freeswarm_subscription_expires = me.get("expires")
     elif body.expires:
-        settings_obj.openswarm_subscription_expires = body.expires
+        settings_obj.freeswarm_subscription_expires = body.expires
 
     usage = me.get("usage")
     if isinstance(usage, dict):
-        settings_obj.openswarm_usage_cached = usage
+        settings_obj.freeswarm_usage_cached = usage
 
     await save_settings_async(settings_obj)
     _sync_subscription_identity(settings_obj)
     await _sync_pro_routing(settings_obj)
-    return {"ok": True, "plan": settings_obj.openswarm_subscription_plan}
+    return {"ok": True, "plan": settings_obj.freeswarm_subscription_plan}
 
 
 # ---------------------------------------------------------------------------
@@ -180,12 +214,12 @@ async def status():
     """Consolidated view for the Settings card. Reads persisted plan/expires,
     polls cloud for live usage when a bearer is present."""
     settings_obj = load_settings()
-    bearer = getattr(settings_obj, "openswarm_bearer_token", None)
-    plan = getattr(settings_obj, "openswarm_subscription_plan", None)
-    expires = getattr(settings_obj, "openswarm_subscription_expires", None)
+    bearer = getattr(settings_obj, "freeswarm_bearer_token", None)
+    plan = getattr(settings_obj, "freeswarm_subscription_plan", None)
+    expires = getattr(settings_obj, "freeswarm_subscription_expires", None)
     mode = getattr(settings_obj, "connection_mode", "own_key")
 
-    if mode != "openswarm-pro" or not bearer:
+    if mode != "freeswarm-pro" or not bearer:
         return {
             "connected": False,
             "connection_mode": mode,
@@ -203,22 +237,34 @@ async def status():
                 f"{_proxy_url()}/api/me",
                 headers={"Authorization": f"Bearer {bearer}"},
             )
-        upstream_code = r.status_code
-        if r.status_code == 200:
-            me = r.json()
-            live_usage = me.get("usage")
-            live_status = me.get("status")
-            # Update cache for offline display.
-            if isinstance(live_usage, dict):
-                settings_obj.openswarm_usage_cached = live_usage
-                await save_settings_async(settings_obj)
+            upstream_code = r.status_code
+            # A 401 here is usually just the 15m access token expiring, not a
+            # revoked account. Try to silently re-mint from the 30d refresh
+            # token and retry once before giving up on the subscription.
+            if r.status_code == 401:
+                fresh = await _try_refresh_bearer(settings_obj)
+                if fresh:
+                    r = await client.get(
+                        f"{_proxy_url()}/api/me",
+                        headers={"Authorization": f"Bearer {fresh}"},
+                    )
+                    upstream_code = r.status_code
+            if r.status_code == 200:
+                me = r.json()
+                live_usage = me.get("usage")
+                live_status = me.get("status")
+                # Update cache for offline display.
+                if isinstance(live_usage, dict):
+                    settings_obj.freeswarm_usage_cached = live_usage
+                    await save_settings_async(settings_obj)
     except httpx.HTTPError as e:
         logger.debug("subscription/status live fetch failed: %s", e)
 
-    # Cloud says the bearer is gone (401) or the sub is past its grace
-    # period (402); drop local credentials so the desktop stops routing
-    # through a dead subscription. Settings UI sees connected=False and
-    # falls back to the Subscribe CTA; chat reverts to own_key routing.
+    # Cloud says the bearer is gone (401, even after a refresh attempt) or the
+    # sub is past its grace period (402); drop local credentials so the desktop
+    # stops routing through a dead subscription. Settings UI sees
+    # connected=False and falls back to the Subscribe CTA; chat reverts to
+    # own_key routing.
     if upstream_code in (401, 402):
         await _clear_subscription(settings_obj)
         return {
@@ -234,7 +280,7 @@ async def status():
         "plan": plan,
         "status": live_status or "active",
         "expires": expires,
-        "usage": live_usage or getattr(settings_obj, "openswarm_usage_cached", None),
+        "usage": live_usage or getattr(settings_obj, "freeswarm_usage_cached", None),
     }
 
 
@@ -249,7 +295,7 @@ async def sync():
     webhook processed by older code) doesn't leave a user wedged in a stale
     state forever.
 
-    No-op when not in openswarm-pro mode. Best-effort: network failures are
+    No-op when not in freeswarm-pro mode. Best-effort: network failures are
     swallowed; the caller still gets a 200 with whatever local state we
     already had."""
     # Lazy-import the service-sync helper so subscription/router doesn't pay the
@@ -257,10 +303,10 @@ async def sync():
     from backend.apps.service.client import sync as _sync
 
     settings_obj = load_settings()
-    bearer = getattr(settings_obj, "openswarm_bearer_token", None)
+    bearer = getattr(settings_obj, "freeswarm_bearer_token", None)
     mode = getattr(settings_obj, "connection_mode", "own_key")
 
-    if mode != "openswarm-pro" or not bearer:
+    if mode != "freeswarm-pro" or not bearer:
         _sync(settings_obj.model_dump())
         return {"ok": True, "synced": False, "connection_mode": mode}
 
@@ -301,10 +347,10 @@ async def sync():
     # Only touch local fields the cloud explicitly confirmed; don't paper
     # over missing keys with defaults that would downgrade an older record.
     if cloud_plan:
-        settings_obj.openswarm_subscription_plan = cloud_plan
+        settings_obj.freeswarm_subscription_plan = cloud_plan
     if isinstance(period_end_ms, (int, float)) and period_end_ms > 0:
         from datetime import datetime, timezone
-        settings_obj.openswarm_subscription_expires = (
+        settings_obj.freeswarm_subscription_expires = (
             datetime.fromtimestamp(period_end_ms / 1000, tz=timezone.utc).isoformat()
         )
     await save_settings_async(settings_obj)
@@ -315,7 +361,7 @@ async def sync():
         "synced": bool(data.get("synced")),
         "plan": cloud_plan,
         "status": data.get("status"),
-        "expires": settings_obj.openswarm_subscription_expires,
+        "expires": settings_obj.freeswarm_subscription_expires,
     }
 
 
@@ -328,7 +374,7 @@ async def portal():
     """Returns a Stripe Customer Portal URL. Renderer opens it in the
     system browser via shell.openExternal."""
     settings_obj = load_settings()
-    bearer = getattr(settings_obj, "openswarm_bearer_token", None)
+    bearer = getattr(settings_obj, "freeswarm_bearer_token", None)
     if not bearer:
         raise HTTPException(status_code=400, detail="Not subscribed")
 
@@ -371,7 +417,7 @@ async def free_trial_status():
 async def disconnect():
     """Reverts to own_key routing mode while keeping the user signed in.
     Does NOT cancel the Stripe subscription (use the portal for that) and
-    does NOT sign the user out of OpenSwarm (use /api/auth/signout for that).
+    does NOT sign the user out of FreeSwarm (use /api/auth/signout for that).
     Useful when a user wants to temporarily route through their own API key
     without losing their account state."""
     await _clear_subscription(load_settings(), drop_bearer=False)

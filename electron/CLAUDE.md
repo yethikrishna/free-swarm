@@ -31,7 +31,7 @@ The packaged DMG/EXE behaves differently from `bash run.sh` in ways that silentl
 - **9router:** the binary lives under `process.resourcesPath/9router/`, not downloaded at runtime. Spawn from the bundled path.
 - **Backend startup:** in dev, `run.sh` launches uvicorn directly. In prod, `main.js` spawns the bundled Python + backend. Bearer token must be on disk before the HTTP bind so the shell can read it.
 - **Auto-updater:** only fires in signed production builds. Staging/test builds must use a separate channel (via `electron-builder` `--config`) to avoid clobbering the stable feed.
-- **Deep links (`openswarm://`):** registered via `app.setAsDefaultProtocolClient`. OAuth and Stripe return flows depend on this; test on a packaged build, not the dev shell.
+- **Deep links (`freeswarm://`):** registered via `app.setAsDefaultProtocolClient`. OAuth and Stripe return flows depend on this; test on a packaged build, not the dev shell.
 - **Code signing:** macOS unsigned/un-notarized builds get Gatekeeper-blocked; Windows unsigned builds trigger SmartScreen. CI signs on `v*` tags only.
 - **Platform splits:** `process.platform`, path separators, line endings, and macOS-only flows (notarization, dock icon, menu bar) require explicit handling for both targets.
 

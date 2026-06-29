@@ -1,9 +1,9 @@
-# Master build script for the OpenSwarm desktop app on Windows.
+# Master build script for the FreeSwarm desktop app on Windows.
 #
 # Usage:
 #   pwsh scripts\build-app-win.ps1                Local dev build (unsigned)
 #   pwsh scripts\build-app-win.ps1 -Sign          Signed build (no publish)
-#   pwsh scripts\build-app-win.ps1 -Publish       Production build (sign + publish to GitHub Releases)
+#   pwsh scripts\build-app-win.ps1 -Publish       Publish to GitHub Releases (signed if Azure secrets present, else unsigned)
 #
 # Reads .env.windows (gitignored) for Azure Trusted Signing + GH_TOKEN if -Sign or -Publish.
 
@@ -13,7 +13,7 @@ param(
     [switch]$Publish,
     # Fast CI gate path: build only the unpacked win-unpacked\ dir (no NSIS
     # installer, no LZMA compression of the ~1GB tree - the slowest packaging
-    # phase). verify-all + Playwright drive the unpacked OpenSwarm.exe directly.
+    # phase). verify-all + Playwright drive the unpacked FreeSwarm.exe directly.
     [switch]$DirOnly,
     # Phase 7 A/B: build a Squirrel.Windows installer instead of the default
     # NSIS one, from the SAME staged tree / SAME commit. Opt-in only; NSIS stays
@@ -23,10 +23,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if ($Publish) { $Sign = $true }
+# Signing is decided after .env.windows is loaded (see below): -Publish signs
+# when Azure Trusted Signing secrets are present and publishes UNSIGNED when they
+# are not, so we can ship unsigned releases without configuring signing.
 # Override only the win target; everything else (signing hook, extraResources,
 # publish config) merges from electron/package.json's build block unchanged.
-$TargetOverride = if ($Squirrel) { @('--config.win.target=squirrel', '--config.squirrelWindows.iconUrl=https://raw.githubusercontent.com/openswarm-ai/openswarm/main/electron/build/icon.ico') } else { @() }
+$TargetOverride = if ($Squirrel) { @('--config.win.target=squirrel', '--config.squirrelWindows.iconUrl=https://raw.githubusercontent.com/yethikrishna/free-swarm/main/electron/build/icon.ico') } else { @() }
 
 $ScriptDir   = Split-Path -Parent $PSCommandPath
 $ProjectRoot = Split-Path -Parent $ScriptDir
@@ -48,28 +50,38 @@ if (Test-Path $EnvFile) {
     }
 }
 
+# Auto-enable signing on publish only when the Azure Trusted Signing secrets are
+# present (loaded above from the CI env or .env.windows). Without them we publish
+# an unsigned release. An explicit -Sign still forces signing and fails loudly in
+# the validation below if the secrets are missing.
+if ($Publish -and $env:AZURE_CLIENT_ID) { $Sign = $true }
+
 Write-Host "========================================"
-Write-Host "  OpenSwarm Desktop App Builder (Windows)"
-if     ($Publish) { Write-Host "  Mode: PRODUCTION (sign + publish to GitHub Releases)" }
-elseif ($Sign)    { Write-Host "  Mode: SIGNED (sign, no publish)" }
-else              { Write-Host "  Mode: LOCAL (unsigned)" }
+Write-Host "  FreeSwarm Desktop App Builder (Windows)"
+if     ($Publish -and $Sign) { Write-Host "  Mode: PRODUCTION (signed + publish to GitHub Releases)" }
+elseif ($Publish)            { Write-Host "  Mode: PRODUCTION (UNSIGNED + publish to GitHub Releases)" }
+elseif ($Sign)               { Write-Host "  Mode: SIGNED (sign, no publish)" }
+else                         { Write-Host "  Mode: LOCAL (unsigned)" }
 Write-Host "========================================"
 Write-Host ""
 
 # --- Required env validation ---
+$required = @()
 if ($Sign) {
-    $required = @(
+    $required += @(
         'AZURE_TENANT_ID','AZURE_CLIENT_ID','AZURE_CLIENT_SECRET',
         'AZURE_SIGNING_ENDPOINT','AZURE_SIGNING_ACCOUNT','AZURE_SIGNING_CERT_PROFILE'
     )
-    if ($Publish) { $required += 'GH_TOKEN' }
-    $missing = $required | Where-Object { -not [Environment]::GetEnvironmentVariable($_) }
-    if ($missing.Count -gt 0) {
-        Write-Host "ERROR: Missing required environment variables:" -ForegroundColor Red
-        $missing | ForEach-Object { Write-Host "  - $_" }
-        Write-Host "Copy .env.windows.example to .env.windows and fill in values."
-        exit 1
-    }
+}
+# Publishing (signed or unsigned) needs a token for electron-builder --publish
+# and the gh release upload of the stable-named alias.
+if ($Publish) { $required += 'GH_TOKEN' }
+$missing = $required | Where-Object { -not [Environment]::GetEnvironmentVariable($_) }
+if ($missing.Count -gt 0) {
+    Write-Host "ERROR: Missing required environment variables:" -ForegroundColor Red
+    $missing | ForEach-Object { Write-Host "  - $_" }
+    Write-Host "Copy .env.windows.example to .env.windows and fill in values."
+    exit 1
 }
 
 # --- Step 0: Bundled uv + uvx for Windows ---
@@ -255,7 +267,10 @@ try {
     # npm ci (not install): installs exactly what package-lock.json pins, never
     # silently mutates the lock, fails loudly on drift. Reproducible builds
     # (pillar 3) depend on the lock being boss.
-    & npm ci
+    # --include=dev: the CI workflow sets NODE_ENV=production, which makes npm ci
+    # omit devDependencies. The webpack/Next.js build tooling (html-webpack-plugin,
+    # babel-loader, electron-builder, etc.) all live in devDependencies, so force them in.
+    & npm ci --include=dev
     if ($LASTEXITCODE -ne 0) { throw "npm ci (frontend) failed" }
     & npm run build
     if ($LASTEXITCODE -ne 0) { throw "frontend build failed" }
@@ -266,13 +281,62 @@ if (-not (Test-Path (Join-Path $ProjectRoot 'frontend\dist\index.html'))) {
 Write-Host "Frontend build complete."
 Write-Host ""
 
-# --- Step 2: Python env ---
+# --- Step 2: Build Router fork ---
+Write-Host "[2/5] Building FreeSwarm Router fork..."
+Push-Location (Join-Path $ProjectRoot 'router')
+try {
+    & npm ci --include=dev
+    if ($LASTEXITCODE -ne 0) { throw "npm ci (router) failed" }
+
+    # Windows EPERM fix (the real root cause). The Next.js build globs the
+    # *home directory* (os.homedir() === %USERPROFILE%), not the build tree:
+    #   glob error EPERM scandir 'C:\Users\runneradmin\Application Data'
+    #   glob error EPERM scandir 'C:\Users\runneradmin\AppData\Local\Application Data'
+    # Those 'Application Data' entries are legacy Windows compatibility junctions
+    # that deny scandir by design, so the glob throws and the build aborts. The
+    # build tree itself is on D:\, so it's the home dir, not a parent walk, that
+    # gets scanned - which is why isolating the build path did nothing.
+    #
+    # Fix: point HOME/USERPROFILE at a fresh, junction-free directory for the
+    # duration of the build. os.homedir() then resolves to a clean empty dir
+    # with no 'Application Data' junctions, so the glob scans nothing and the
+    # build proceeds. npm ci already ran against the real profile above, so the
+    # redirect only affects `next build` (telemetry/cache write harmlessly into
+    # the temp home). Restored in finally so nothing downstream is affected.
+    $CleanHome = Join-Path $env:RUNNER_TEMP "fs-build-home-$([guid]::NewGuid())"
+    if (-not $env:RUNNER_TEMP) { $CleanHome = Join-Path ([System.IO.Path]::GetTempPath()) "fs-build-home-$([guid]::NewGuid())" }
+    New-Item -ItemType Directory -Force -Path $CleanHome | Out-Null
+    $PrevUserProfile = $env:USERPROFILE
+    $PrevHome        = $env:HOME
+    $env:USERPROFILE = $CleanHome
+    $env:HOME        = $CleanHome
+    try {
+        & npm run build
+        if ($LASTEXITCODE -ne 0) { throw "router build failed" }
+    } finally {
+        $env:USERPROFILE = $PrevUserProfile
+        $env:HOME        = $PrevHome
+        Remove-Item -Recurse -Force $CleanHome -ErrorAction SilentlyContinue
+    }
+} finally { Pop-Location }
+# Standalone server is at .next\standalone\router\server.js (nested, old monorepo
+# tracing root) OR .next\standalone\server.js (flat, tracing root pinned to router\
+# to avoid the Windows EPERM scandir crash). Accept either layout.
+$StandaloneRoot = Join-Path $ProjectRoot 'router\.next\standalone'
+if (-not (Test-Path (Join-Path $StandaloneRoot 'router\server.js')) -and `
+    -not (Test-Path (Join-Path $StandaloneRoot 'server.js'))) {
+    throw "Router build failed - no server.js in .next\standalone[\router]"
+}
+Write-Host "Router fork built."
+Write-Host ""
+
+# --- Step 3: Python env ---
 $PythonEnv = Join-Path $ProjectRoot 'electron\python-env'
 $PythonExe = Join-Path $PythonEnv 'python.exe'
 if ((Test-Path $PythonExe) -and -not $env:OPENSWARM_REBUILD_PYTHON) {
-    Write-Host "[2/5] Python environment already present at $PythonEnv (set `$env:OPENSWARM_REBUILD_PYTHON='1' to force rebuild)."
+    Write-Host "[3/5] Python environment already present at $PythonEnv (set `$env:OPENSWARM_REBUILD_PYTHON='1' to force rebuild)."
 } else {
-    Write-Host "[2/5] Building Python environment..."
+    Write-Host "[3/5] Building Python environment..."
     & (Join-Path $ScriptDir 'build-python-env-win.ps1')
     if ($LASTEXITCODE -ne 0) { throw "Python env build failed" }
 }
@@ -282,24 +346,37 @@ if (-not (Test-Path (Join-Path $ProjectRoot 'electron\python-env'))) {
 Write-Host "Python environment ready."
 Write-Host ""
 
-# --- Step 3: Fetch Router from npm ---
-# The 9router Next.js server is published as an npm package with a pre-built
-# standalone output. Stage it directly from npm instead of vendoring + rebuilding.
-Write-Host "[3/5] Fetching Router from npm..."
+# --- Step 4: Stage Router fork ---
+# The FreeSwarm Router fork (.next/standalone/router/) was built in step 2
+# and is now staged for packaging. For details see router/FREESWARM_FORK.md.
+Write-Host "[4/5] Staging FreeSwarm Router fork..."
 $Staging = Join-Path $ProjectRoot 'electron\build-staging'
 if (Test-Path $Staging) { Remove-Item -Recurse -Force $Staging }
 New-Item -ItemType Directory -Force -Path $Staging | Out-Null
 
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $ProjectRoot 'scripts\fetch-router.ps1') -Dest (Join-Path $Staging 'router')
-if ($LASTEXITCODE -ne 0) { throw "fetch-router.ps1 failed" }
+# Source the standalone tree from whichever layout the build produced
+# (nested router\ or flat — see the build check above).
+$RouterSrc = Join-Path $ProjectRoot 'router\.next\standalone\router'
+if (-not (Test-Path (Join-Path $RouterSrc 'server.js'))) {
+    $RouterSrc = Join-Path $ProjectRoot 'router\.next\standalone'
+}
+if (-not (Test-Path (Join-Path $RouterSrc 'server.js'))) {
+    throw "Router fork not built. Run step 2 to build router."
+}
 
-if (-not (Test-Path (Join-Path $Staging 'router\server.js'))) {
-    throw "Router fetch failed - server.js not found in staging"
+$RouterDest = Join-Path $Staging 'router'
+New-Item -ItemType Directory -Force -Path $RouterDest | Out-Null
+robocopy $RouterSrc $RouterDest /E /NJH /NJS /NDL /NFL /NP /MT:8 | Out-Null
+if ($LASTEXITCODE -ge 8) { throw "robocopy failed staging router (exit $LASTEXITCODE)" }
+$global:LASTEXITCODE = 0
+
+if (-not (Test-Path (Join-Path $RouterDest 'server.js'))) {
+    throw "Router staging failed - server.js not found in staging"
 }
 Write-Host "Router staged."
 Write-Host ""
 
-# --- Step 3b: Bundle a real Node.js binary so 9Router and MCP servers
+# --- Step 4b: Bundle a real Node.js binary so 9Router and MCP servers
 # don't fall back to ELECTRON_RUN_AS_NODE on user machines without system
 # node. Wins: (1) avoids the bouncing "exec" Dock icon (irrelevant on
 # Windows but matches the macOS build for consistency); (2) shrinks
@@ -307,7 +384,7 @@ Write-Host ""
 # which directly shrinks the splash window the user sees during boot.
 # Pinned to Node 20 LTS, NODE_MODULE_VERSION 115. 9router 0.3.60 has
 # no native bindings (sql.js, not better-sqlite3) so any Node 18+ works.
-Write-Host "[3b/5] Bundling Node.js runtime..."
+Write-Host "[4b/5] Bundling Node.js runtime..."
 $NodeVersion = 'v20.18.1'
 $NodeStageDir = Join-Path $Staging 'node\x64'
 New-Item -ItemType Directory -Force -Path $NodeStageDir | Out-Null
@@ -331,9 +408,9 @@ try {
 }
 Write-Host ""
 
-# --- Step 4: Snapshot source dirs into electron\build-staging\ ---
-# (Router was already staged in step 3; do not wipe or re-copy it here.)
-Write-Host "[4/5] Snapshotting source directories..."
+# --- Step 5: Snapshot source dirs into electron\build-staging\ ---
+# (Router was already staged in step 4; do not wipe or re-copy it here.)
+Write-Host "[5/5] Snapshotting source directories..."
 
 function Copy-Excluded($Source, $Dest, $Exclude) {
     # robocopy: built-in, fast, handles long paths.
@@ -363,26 +440,27 @@ if (Test-Path $EnvExampleSrc) {
     Copy-Item -Force $EnvExampleSrc $EnvExampleDst
     Write-Host "Restored webapp_template/.env.example (stripped by the .env.* exclude)"
 }
-# data: backend/config/paths.py points DATA_ROOT at %APPDATA%/OpenSwarm/data in
+# data: backend/config/paths.py points DATA_ROOT at %APPDATA%/FreeSwarm/data in
 # packaged mode and no code seeds from the bundle, so the entire shipped
 # backend/data/ tree was dead weight (and was leaking the dev machine's
 # auth.token + install_id + dev session artifacts).
 # uv-bin: source dir holds the binary so dev works; staged separately below
 # so extraResources can substitute ${arch} (matches the mac build).
 
-# Production .env: OAuth helper base URL + Google credentials. See
-# Google client_id/secret are no longer shipped: nothing reads them at runtime,
-# so we don't bake a secret into the .env.
-$ShipOauthBaseUrl = if ($env:OPENSWARM_OAUTH_BASE_URL_OVERRIDE) {
-    $env:OPENSWARM_OAUTH_BASE_URL_OVERRIDE
+# Production .env: just the OAuth helper base URL. Google client_id/secret are
+# no longer shipped: nothing reads them at runtime, so we don't bake a secret
+# into the .env. Must match build-app.sh: the backend reads FREESWARM_OAUTH_BASE_URL
+# (backend/apps/tools_lib/oauth_config.py).
+$ShipOauthBaseUrl = if ($env:FREESWARM_OAUTH_BASE_URL_OVERRIDE) {
+    $env:FREESWARM_OAUTH_BASE_URL_OVERRIDE
 } else {
-    'https://api.openswarm.com'
+    'https://api.freeswarm.myndlabs.tech'
 }
 $ShipEnvPath = Join-Path $Staging 'backend\.env'
 New-Item -ItemType Directory -Force -Path (Split-Path $ShipEnvPath -Parent) | Out-Null
 @(
     "# OAuth helper base URL.",
-    "OPENSWARM_OAUTH_BASE_URL=$ShipOauthBaseUrl"
+    "FREESWARM_OAUTH_BASE_URL=$ShipOauthBaseUrl"
 ) | Set-Content -Path $ShipEnvPath
 Write-Host "Staged production .env"
 
@@ -426,22 +504,28 @@ $BuildInfo = [ordered]@{
 $BuildInfo | ConvertTo-Json -Compress | Set-Content -Path (Join-Path $ProjectRoot 'electron\build-info.json') -Encoding utf8
 Write-Host "Stamped build-info.json: sha=$BuildShortSha channel=$BuildChannel"
 
-# --- Step 5: Package with electron-builder ---
-Write-Host "[5/5] Packaging with electron-builder..."
+# --- Step 6: Package with electron-builder ---
+# Note: step numbering updated from [1/5] to [1/6] since we added step 2 (router build)
+Write-Host "[6/6] Packaging with electron-builder..."
 Push-Location (Join-Path $ProjectRoot 'electron')
 try {
     # npm ci: lockfile-exact, no drift. See frontend note above.
-    & npm ci
+    & npm ci --include=dev
     if ($LASTEXITCODE -ne 0) { throw "npm ci (electron) failed" }
 
     if (-not $Sign) {
         $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+        # Unset empty signing env vars to prevent electron-builder from treating
+        # them as file paths in unsigned mode
+        if ([string]::IsNullOrEmpty($env:CSC_LINK)) { Remove-Item -Path Env:CSC_LINK -ErrorAction SilentlyContinue }
+        if ([string]::IsNullOrEmpty($env:CSC_KEY_PASSWORD)) { Remove-Item -Path Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue }
+        if ([string]::IsNullOrEmpty($env:CSC_FOR_PULL_REQUEST)) { Remove-Item -Path Env:CSC_FOR_PULL_REQUEST -ErrorAction SilentlyContinue }
     }
 
     if ($DirOnly) {
         # Unpacked-only build for the fast CI gate. afterPack (router node_modules)
         # and locale-pak filtering still run during the pack phase, so the produced
-        # win-unpacked\OpenSwarm.exe is fully functional; only the NSIS installer +
+        # win-unpacked\FreeSwarm.exe is fully functional; only the NSIS installer +
         # update feed are skipped (verify-update-feed skips cleanly when absent).
         & npx electron-builder --win --x64 --dir $TargetOverride --publish never
     } elseif ($Publish) {
@@ -454,7 +538,7 @@ try {
         try {
             $pkgJson = Get-Content -Raw (Join-Path $ProjectRoot 'electron\package.json') | ConvertFrom-Json
             $version = $pkgJson.version
-            $macYmlUrl = "https://github.com/openswarm-ai/openswarm/releases/download/v$version/latest-mac.yml"
+            $macYmlUrl = "https://github.com/yethikrishna/free-swarm/releases/download/v$version/latest-mac.yml"
             $null = Invoke-WebRequest -Uri $macYmlUrl -Method Head -UseBasicParsing -ErrorAction Stop -TimeoutSec 10
             Write-Host "  > Mac release v$version detected on GitHub (latest-mac.yml present). OK to proceed."
         } catch {
@@ -482,27 +566,27 @@ try {
 
 Remove-Item -Recurse -Force $Staging -ErrorAction SilentlyContinue
 
-# --- Step 5b: Stable-named installer alias for the website download button ---
+# --- Step 6b: Stable-named installer alias for the website download button ---
 # Squirrel names the local installer per `artifactName` (in
 # dist\squirrel-windows\) but RENAMES the published asset to
-# `openswarm-Setup-<version>.exe`, so the fixed openswarm.com download link
-# 404s without this stable-named copy. -Recurse because the .exe sits in the
+# `freeswarm-Setup-<version>.exe`, so the fixed freeswarm.myndlabs.tech download
+# link 404s without this stable-named copy. -Recurse because the .exe sits in the
 # squirrel-windows\ subdir, not the dist\ root. Byte copy keeps the signature;
 # invisible to the updater, which keys off RELEASES + .nupkg, not the filename.
 if ($Publish) {
-    Write-Host "[5b/5] Uploading stable-named installer alias (OpenSwarm-Setup-x64.exe)..."
+    Write-Host "[6b/6] Uploading stable-named installer alias (FreeSwarm-Setup-x64.exe)..."
     $version  = (Get-Content -Raw (Join-Path $ProjectRoot 'electron\package.json') | ConvertFrom-Json).version
     $DistDir  = Join-Path $ProjectRoot 'electron\dist'
     $SetupExe = Get-ChildItem -Path $DistDir -Recurse -Filter '*Setup*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $SetupExe) { throw "No Squirrel Setup .exe found under $DistDir to alias" }
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-        throw "gh CLI not found; cannot upload OpenSwarm-Setup-x64.exe alias (install gh or upload it manually)"
+        throw "gh CLI not found; cannot upload FreeSwarm-Setup-x64.exe alias (install gh or upload it manually)"
     }
-    $AliasExe = Join-Path $DistDir 'OpenSwarm-Setup-x64.exe'
+    $AliasExe = Join-Path $DistDir 'FreeSwarm-Setup-x64.exe'
     Copy-Item -Force $SetupExe.FullName $AliasExe
-    & gh release upload "v$version" $AliasExe --repo openswarm-ai/openswarm --clobber
-    if ($LASTEXITCODE -ne 0) { throw "gh release upload of OpenSwarm-Setup-x64.exe failed" }
-    Write-Host "Uploaded OpenSwarm-Setup-x64.exe to release v$version."
+    & gh release upload "v$version" $AliasExe --repo yethikrishna/free-swarm --clobber
+    if ($LASTEXITCODE -ne 0) { throw "gh release upload of FreeSwarm-Setup-x64.exe failed" }
+    Write-Host "Uploaded FreeSwarm-Setup-x64.exe to release v$version."
 }
 
 Write-Host ""

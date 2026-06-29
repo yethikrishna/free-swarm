@@ -47,11 +47,11 @@
     "python-env",
     "build-staging",
     "webapp_template_cache",
-    "openswarm-cloud",
+    "freeswarm-cloud",
     "uv-bin",
     "data",
     "public",
-    "openswarm_debug.egg-info"
+    "freeswarm_debug.egg-info"
   ],
   "exceptions": {
     "max-file-lines": [

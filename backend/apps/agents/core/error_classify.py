@@ -24,7 +24,7 @@ _TRANSIENT_CAPACITY_PATTERNS = re.compile(
 # user can't recover by waiting, so we surface it instead of looping.
 _NON_TRANSIENT_PATTERNS = re.compile(
     r"(?:usage\s+cap\s+exceeded"
-    r"|reached\s+your\s+OpenSwarm.*plan\s+limit"
+    r"|reached\s+your\s+FreeSwarm.*plan\s+limit"
     r"|no\s+active\s+subscription"
     r"|subscription\s+(?:canceled|past_due)"
     r"|invalid.*token"
@@ -63,7 +63,7 @@ def _is_free_trial_exhausted(exc: BaseException, extra_text: str = "") -> bool:
     if not combined:
         return False
     return bool(re.search(
-        r"free_trial_exhausted|used\s+your\s+free\s+(?:openswarm\s+)?runs",
+        r"free_trial_exhausted|used\s+your\s+free\s+(?:freeswarm\s+)?runs",
         combined,
         re.IGNORECASE,
     ))
@@ -74,7 +74,7 @@ def _is_auth_error(exc: BaseException, extra_text: str = "") -> bool:
 
     Used by the catch-all error path to surface a friendly "subscription
     expired / reconnect" card instead of dumping the raw 401 JSON. The most
-    common cause: the OpenSwarm Pro bearer or 9Router OAuth token has expired
+    common cause: the FreeSwarm Pro bearer or 9Router OAuth token has expired
     while the UI still shows the connection as 'connected'.
     """
     combined = f"{exc!s}\n{extra_text}".strip()
@@ -128,7 +128,7 @@ def _is_transient_capacity_error(exc: BaseException, extra_text: str = "") -> bo
         return False
     if _TRANSIENT_CAPACITY_PATTERNS.search(combined):
         return True
-    # Pool-exhaustion copy from the OpenSwarm proxy ("No pool capacity
+    # Pool-exhaustion copy from the FreeSwarm proxy ("No pool capacity
     # available. Try again shortly."), matches the capacity family too.
     if re.search(r"no\s+pool\s+capacity", combined, re.IGNORECASE):
         return True

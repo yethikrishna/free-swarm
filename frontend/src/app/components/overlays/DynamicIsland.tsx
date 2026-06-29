@@ -743,7 +743,7 @@ const CompactActionablePill: React.FC<{
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            color: isIntervention ? '#f59e0b' : c.text.tertiary,
+            color: isIntervention ? c.status.warning : c.text.tertiary,
             '& svg': { width: 12, height: 12 },
           }}
         >
@@ -753,7 +753,7 @@ const CompactActionablePill: React.FC<{
           sx={{
             fontSize: '0.68rem',
             fontWeight: 600,
-            color: isIntervention ? '#f59e0b' : c.text.secondary,
+            color: isIntervention ? c.status.warning : c.text.secondary,
             flex: 1,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -784,8 +784,8 @@ const CompactActionablePill: React.FC<{
               width: 18,
               height: 18,
               color: '#fff',
-              bgcolor: isIntervention ? '#f59e0b' : c.status.success,
-              '&:hover': { bgcolor: isIntervention ? '#d97706' : c.status.success, filter: isIntervention ? undefined : 'brightness(0.85)' },
+              bgcolor: isIntervention ? c.status.warning : c.status.success,
+              '&:hover': { bgcolor: isIntervention ? c.status.warning : c.status.success, filter: 'brightness(0.85)' },
             }}
           >
             <CheckIcon sx={{ fontSize: 11 }} />

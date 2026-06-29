@@ -268,11 +268,11 @@ if [[ "$(uname)" == "Darwin" ]]; then
   <key>CFBundleExecutable</key>
   <string>python3</string>
   <key>CFBundleIdentifier</key>
-  <string>com.clusterlabs.openswarm.python</string>
+  <string>com.clusterlabs.freeswarm.python</string>
   <key>CFBundleName</key>
-  <string>OpenSwarm Backend</string>
+  <string>FreeSwarm Backend</string>
   <key>CFBundleDisplayName</key>
-  <string>OpenSwarm Backend</string>
+  <string>FreeSwarm Backend</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

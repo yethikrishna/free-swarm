@@ -30,7 +30,7 @@ const SoftwareUpdateRow: React.FC<{ styles: SettingsStyles }> = ({ styles }) => 
       dispatch(setUpdateError('Update check timed out. Please try again.'));
     }, 15000);
     try {
-      await (window as any).openswarm?.checkForUpdates();
+      await (window as any).freeswarm?.checkForUpdates();
     } catch {
       /* error handled via IPC event listener */
     } finally {
@@ -40,7 +40,7 @@ const SoftwareUpdateRow: React.FC<{ styles: SettingsStyles }> = ({ styles }) => 
 
   const handleDownloadUpdate = async () => {
     try {
-      await (window as any).openswarm?.downloadUpdate();
+      await (window as any).freeswarm?.downloadUpdate();
     } catch {
       /* error handled via IPC event listener */
     }
@@ -49,7 +49,7 @@ const SoftwareUpdateRow: React.FC<{ styles: SettingsStyles }> = ({ styles }) => 
   const handleInstallUpdate = () => {
     if (installing) return;
     dispatch(setInstalling());
-    (window as any).openswarm?.installUpdate();
+    (window as any).freeswarm?.installUpdate();
   };
 
   return (
@@ -64,7 +64,7 @@ const SoftwareUpdateRow: React.FC<{ styles: SettingsStyles }> = ({ styles }) => 
             {updateStatus === 'downloading' && `Downloading update… ${Math.round(downloadPercent)}%`}
             {updateStatus === 'downloaded' && `Version ${availableVersion} is ready to install.`}
             {updateStatus === 'error' && (updateError || 'Update check failed.')}
-            {updateStatus === 'idle' && 'Check for new versions of OpenSwarm.'}
+            {updateStatus === 'idle' && 'Check for new versions of FreeSwarm.'}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, ml: 2 }}>

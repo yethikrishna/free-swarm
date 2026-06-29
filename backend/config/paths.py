@@ -5,15 +5,15 @@ import sys
 
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-_is_packaged = os.environ.get("OPENSWARM_PACKAGED") == "1"
+_is_packaged = os.environ.get("FREESWARM_PACKAGED") == "1"
 
 if _is_packaged:
     if sys.platform == "darwin":
-        _app_support = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "OpenSwarm")
+        _app_support = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "FreeSwarm")
     elif sys.platform == "win32":
-        _app_support = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "OpenSwarm")
+        _app_support = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "FreeSwarm")
     else:
-        _app_support = os.path.join(os.environ.get("XDG_DATA_HOME", os.path.join(os.path.expanduser("~"), ".local", "share")), "OpenSwarm")
+        _app_support = os.path.join(os.environ.get("XDG_DATA_HOME", os.path.join(os.path.expanduser("~"), ".local", "share")), "FreeSwarm")
     DATA_ROOT = os.path.join(_app_support, "data")
 else:
     DATA_ROOT = os.path.join(_BACKEND_DIR, "data")
@@ -27,6 +27,13 @@ OUTPUTS_DIR = os.path.join(DATA_ROOT, "outputs")
 OUTPUTS_WORKSPACE_DIR = os.path.join(DATA_ROOT, "outputs_workspace")
 SKILLS_WORKSPACE_DIR = os.path.join(DATA_ROOT, "skills_workspace")
 DASHBOARD_LAYOUT_DIR = os.path.join(DATA_ROOT, "dashboard_layout")
+AUTOMATION_DIR = os.path.join(DATA_ROOT, "automation")
+ROUTING_DIR = os.path.join(DATA_ROOT, "routing")
+MEMORY_DIR = os.path.join(DATA_ROOT, "memory")
+REPLAY_DIR = os.path.join(DATA_ROOT, "replay")
+COORDINATION_DIR = os.path.join(DATA_ROOT, "coordination")
+TESTING_DIR = os.path.join(DATA_ROOT, "testing")
+REWIND_DIR = os.path.join(DATA_ROOT, "rewind")
 BUILTIN_PERMISSIONS_PATH = os.path.join(DATA_ROOT, "builtin_permissions.json")
 TRUSTED_SENSITIVE_PATHS_PATH = os.path.join(DATA_ROOT, "trusted_sensitive_paths.json")
 

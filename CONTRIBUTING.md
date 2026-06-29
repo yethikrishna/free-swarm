@@ -1,6 +1,6 @@
-# Contributing to OpenSwarm
+# Contributing to FreeSwarm
 
-A guide for all OpenSwarm contributors.
+A guide for all FreeSwarm contributors.
 
 ## Branches
 

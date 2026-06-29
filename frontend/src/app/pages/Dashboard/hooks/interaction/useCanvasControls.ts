@@ -322,11 +322,11 @@ export function useCanvasControls(zoomSensitivity: number = 50, contentBounds?: 
       };
       scheduleWheelFlush();
     };
-    window.addEventListener('openswarm:canvas-wheel-zoom', onForwardedZoom);
+    window.addEventListener('freeswarm:canvas-wheel-zoom', onForwardedZoom);
 
     return () => {
       el.removeEventListener('wheel', onWheel);
-      window.removeEventListener('openswarm:canvas-wheel-zoom', onForwardedZoom);
+      window.removeEventListener('freeswarm:canvas-wheel-zoom', onForwardedZoom);
       if (wheelRafId != null) cancelAnimationFrame(wheelRafId);
       if (wheelIdleTimer != null) clearTimeout(wheelIdleTimer);
       // Don't leave the flag stuck on if the canvas unmounts mid-gesture.

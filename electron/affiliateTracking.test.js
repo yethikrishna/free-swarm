@@ -1,7 +1,7 @@
 // End-to-end tests for the desktop-side affiliate / referral handshake.
 //
 // We stand up an in-process HTTP server that implements the same contract
-// as openswarm-cloud's /api/install/{mint,bind,lookup} endpoints (in-memory
+// as freeswarm-cloud's /api/install/{mint,bind,lookup} endpoints (in-memory
 // state, no SQLite). The Electron module's polling code talks to this
 // server over real fetch over real loopback TCP, which is as realistic as
 // it gets without booting the actual cloud Hono app.
@@ -15,7 +15,7 @@
 //     welcome page by calling /api/install/bind from the test before the
 //     poll loop times out.
 //
-// Polling cadence is squeezed via env vars (OPENSWARM_AFFILIATE_POLL_*) so
+// Polling cadence is squeezed via env vars (FREESWARM_AFFILIATE_POLL_*) so
 // the suite finishes in milliseconds instead of seconds.
 
 const test = require("node:test");
@@ -28,8 +28,8 @@ const crypto = require("node:crypto");
 
 // Force the tracking module to use tight polling well before requiring it,
 // because the constants are read at module-load time.
-process.env.OPENSWARM_AFFILIATE_POLL_INTERVAL_MS = "20";
-process.env.OPENSWARM_AFFILIATE_POLL_MAX_ATTEMPTS = "30";
+process.env.FREESWARM_AFFILIATE_POLL_INTERVAL_MS = "20";
+process.env.FREESWARM_AFFILIATE_POLL_MAX_ATTEMPTS = "30";
 
 const affiliateTracking = require("./affiliateTracking");
 
@@ -136,7 +136,7 @@ function makeFakeShell() {
 // --- temp-dir helper -------------------------------------------------------
 
 function makeTempUserDataDir() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openswarm-affiliate-test-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "freeswarm-affiliate-test-"));
   return dir;
 }
 
@@ -183,8 +183,8 @@ test("first launch: opens welcome URL and binds ref via poll loop", async () => 
     const userDataDir = makeTempUserDataDir();
     const shell = makeFakeShell();
 
-    process.env.OPENSWARM_AFFILIATE_LANDING_URL = "https://landing.test";
-    process.env.OPENSWARM_AFFILIATE_CLOUD_URL = cloud.url;
+    process.env.FREESWARM_AFFILIATE_LANDING_URL = "https://landing.test";
+    process.env.FREESWARM_AFFILIATE_CLOUD_URL = cloud.url;
 
     // 1. Pre-mint a token at the cloud as if the user had clicked Download
     //    on the landing page.
@@ -241,7 +241,7 @@ test("returning launch: no-op when ref already bound", async () => {
   try {
     const userDataDir = makeTempUserDataDir();
     const shell = makeFakeShell();
-    process.env.OPENSWARM_AFFILIATE_CLOUD_URL = cloud.url;
+    process.env.FREESWARM_AFFILIATE_CLOUD_URL = cloud.url;
 
     // Seed install.json as if first launch already happened and a ref
     // was bound a few minutes ago.
@@ -276,7 +276,7 @@ test("returning launch within grace window: silent re-poll, no second browser po
   try {
     const userDataDir = makeTempUserDataDir();
     const shell = makeFakeShell();
-    process.env.OPENSWARM_AFFILIATE_CLOUD_URL = cloud.url;
+    process.env.FREESWARM_AFFILIATE_CLOUD_URL = cloud.url;
 
     // Pre-mint a token + seed install.json as if first launch happened
     // but the user never completed the welcome page handshake yet.
@@ -325,7 +325,7 @@ test("returning launch outside grace window: skipped entirely", async () => {
   try {
     const userDataDir = makeTempUserDataDir();
     const shell = makeFakeShell();
-    process.env.OPENSWARM_AFFILIATE_CLOUD_URL = cloud.url;
+    process.env.FREESWARM_AFFILIATE_CLOUD_URL = cloud.url;
 
     fs.writeFileSync(
       path.join(userDataDir, "install.json"),
@@ -355,14 +355,14 @@ test("returning launch outside grace window: skipped entirely", async () => {
   }
 });
 
-test("dev mode: skipped unless OPENSWARM_AFFILIATE_FORCE=1", async () => {
+test("dev mode: skipped unless FREESWARM_AFFILIATE_FORCE=1", async () => {
   const cloud = await makeMockCloud();
   try {
     const userDataDir = makeTempUserDataDir();
     const shell = makeFakeShell();
-    process.env.OPENSWARM_AFFILIATE_CLOUD_URL = cloud.url;
+    process.env.FREESWARM_AFFILIATE_CLOUD_URL = cloud.url;
 
-    delete process.env.OPENSWARM_AFFILIATE_FORCE;
+    delete process.env.FREESWARM_AFFILIATE_FORCE;
     await affiliateTracking.maybeRunFirstLaunchHandshake({
       shell,
       userDataDir,
@@ -372,7 +372,7 @@ test("dev mode: skipped unless OPENSWARM_AFFILIATE_FORCE=1", async () => {
     assert.equal(shell.opened.length, 0, "dev mode skips the handshake");
     assert.ok(!fs.existsSync(path.join(userDataDir, "install.json")), "no state file written");
 
-    process.env.OPENSWARM_AFFILIATE_FORCE = "1";
+    process.env.FREESWARM_AFFILIATE_FORCE = "1";
     try {
       await affiliateTracking.maybeRunFirstLaunchHandshake({
         shell,
@@ -382,7 +382,7 @@ test("dev mode: skipped unless OPENSWARM_AFFILIATE_FORCE=1", async () => {
       });
       assert.equal(shell.opened.length, 1, "force flag opts back in");
     } finally {
-      delete process.env.OPENSWARM_AFFILIATE_FORCE;
+      delete process.env.FREESWARM_AFFILIATE_FORCE;
     }
   } finally {
     await cloud.close();
@@ -416,7 +416,7 @@ test("poll loop respects max attempts and gives up", async () => {
   const userDataDir = makeTempUserDataDir();
   const shell = makeFakeShell();
   // Point at a port nothing's listening on.
-  process.env.OPENSWARM_AFFILIATE_CLOUD_URL = "http://127.0.0.1:1";
+  process.env.FREESWARM_AFFILIATE_CLOUD_URL = "http://127.0.0.1:1";
 
   await affiliateTracking.maybeRunFirstLaunchHandshake({
     shell,

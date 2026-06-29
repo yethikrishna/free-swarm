@@ -1,6 +1,6 @@
 // Affiliate / referral install tracking on the desktop side.
 //
-// On first launch the app opens https://openswarm.com/welcome?app_install_id=…
+// On first launch the app opens https://freeswarm.myndlabs.tech/welcome?app_install_id=…
 // in the user's default browser and polls the cloud's /api/install/lookup
 // endpoint until a referral binding shows up (or we time out). The browser
 // page is what actually performs the bind: it reads the install_token that
@@ -16,15 +16,15 @@
 //     attempts: 0                       // last polling attempt count, for debugging
 //   }
 //
-// Skipped entirely in dev unless OPENSWARM_AFFILIATE_FORCE=1 is set, so
+// Skipped entirely in dev unless FREESWARM_AFFILIATE_FORCE=1 is set, so
 // `bash run.sh` doesn't pop a browser tab on every restart.
 
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const DEFAULT_LANDING_URL = "https://openswarm.com";
-const DEFAULT_CLOUD_URL = "https://api.openswarm.com";
+const DEFAULT_LANDING_URL = "https://freeswarm.myndlabs.tech";
+const DEFAULT_CLOUD_URL = "https://api.freeswarm.myndlabs.tech";
 
 // Polling: 12 attempts, 5s apart = 60s window. Generous enough for the user
 // to actually click through the welcome page; small enough that a stuck
@@ -33,8 +33,8 @@ const DEFAULT_CLOUD_URL = "https://api.openswarm.com";
 //
 // Both knobs are overridable via env so tests can drive a 200ms × 5
 // poll window instead of 60s.
-const POLL_INTERVAL_MS = Number(process.env.OPENSWARM_AFFILIATE_POLL_INTERVAL_MS) || 5000;
-const POLL_MAX_ATTEMPTS = Number(process.env.OPENSWARM_AFFILIATE_POLL_MAX_ATTEMPTS) || 12;
+const POLL_INTERVAL_MS = Number(process.env.FREESWARM_AFFILIATE_POLL_INTERVAL_MS) || 5000;
+const POLL_MAX_ATTEMPTS = Number(process.env.FREESWARM_AFFILIATE_POLL_MAX_ATTEMPTS) || 12;
 
 function getStateFilePath(userDataDir) {
   return path.join(userDataDir, "install.json");
@@ -67,8 +67,8 @@ function writeState(userDataDir, state) {
 
 function urlsFromEnv() {
   return {
-    landingUrl: (process.env.OPENSWARM_AFFILIATE_LANDING_URL || DEFAULT_LANDING_URL).replace(/\/$/, ""),
-    cloudUrl: (process.env.OPENSWARM_AFFILIATE_CLOUD_URL || DEFAULT_CLOUD_URL).replace(/\/$/, ""),
+    landingUrl: (process.env.FREESWARM_AFFILIATE_LANDING_URL || DEFAULT_LANDING_URL).replace(/\/$/, ""),
+    cloudUrl: (process.env.FREESWARM_AFFILIATE_CLOUD_URL || DEFAULT_CLOUD_URL).replace(/\/$/, ""),
   };
 }
 
@@ -120,9 +120,9 @@ async function pollUntilBound({ cloudUrl, appInstallId, userDataDir }) {
 // module needing to require electron at the top (keeps it test-friendly).
 async function maybeRunFirstLaunchHandshake({ shell, userDataDir, isDev, isPackaged }) {
   // Skip in dev to avoid spawning a browser tab on every `bash run.sh`.
-  // OPENSWARM_AFFILIATE_FORCE=1 lets us actually exercise the flow against
+  // FREESWARM_AFFILIATE_FORCE=1 lets us actually exercise the flow against
   // a local landing page + local cloud during integration testing.
-  if (isDev && process.env.OPENSWARM_AFFILIATE_FORCE !== "1") {
+  if (isDev && process.env.FREESWARM_AFFILIATE_FORCE !== "1") {
     return;
   }
 

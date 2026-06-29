@@ -59,9 +59,9 @@ export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
 
 // Expose the store on window in dev. In production it stays hidden UNLESS the
-// renderer was launched with __OPENSWARM_E2E__ pre-set by a Playwright init
+// renderer was launched with __FREESWARM_E2E__ pre-set by a Playwright init
 // script, which is the only way the e2e visibility recorder can subscribe to
 // state diffs against the packaged build. Normal user runs never set the flag.
-if (typeof window !== 'undefined' && (process.env.NODE_ENV !== 'production' || (window as unknown as { __OPENSWARM_E2E__?: boolean }).__OPENSWARM_E2E__ === true)) {
-  (window as unknown as { __OPENSWARM_STORE__?: typeof store }).__OPENSWARM_STORE__ = store;
+if (typeof window !== 'undefined' && (process.env.NODE_ENV !== 'production' || (window as unknown as { __FREESWARM_E2E__?: boolean }).__FREESWARM_E2E__ === true)) {
+  (window as unknown as { __FREESWARM_STORE__?: typeof store }).__FREESWARM_STORE__ = store;
 }

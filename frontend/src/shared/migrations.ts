@@ -9,13 +9,13 @@ interface Migration {
 
 const MIGRATIONS: Migration[] = [
   {
-    key: 'openswarm.migrations.v131_force_relogin_and_reonboard',
+    key: 'freeswarm.migrations.v131_force_relogin_and_reonboard',
     description: '1.0.31: force re-login and re-walk onboarding, regardless of prior state',
     run: () => {
       try {
-        window.localStorage.removeItem('openswarm.auth.token');
-        window.localStorage.removeItem('openswarm.onboarding.v2');
-        window.localStorage.removeItem('openswarm_onboarding_seen');
+        window.localStorage.removeItem('freeswarm.auth.token');
+        window.localStorage.removeItem('freeswarm.onboarding.v2');
+        window.localStorage.removeItem('freeswarm_onboarding_seen');
       } catch {
         // localStorage can throw in private mode / quota-exceeded; non-fatal.
       }

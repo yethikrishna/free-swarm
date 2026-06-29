@@ -14,9 +14,9 @@ import path from 'path';
 // the cheaper mount-only smoke that runs alongside it.
 
 function backendLogPath(): string {
-  if (process.platform === 'win32') return path.join(process.env.APPDATA || '', 'OpenSwarm', 'data', 'backend.log');
-  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'OpenSwarm', 'data', 'backend.log');
-  return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'OpenSwarm', 'data', 'backend.log');
+  if (process.platform === 'win32') return path.join(process.env.APPDATA || '', 'FreeSwarm', 'data', 'backend.log');
+  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'FreeSwarm', 'data', 'backend.log');
+  return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'FreeSwarm', 'data', 'backend.log');
 }
 function rendererCrashes(): number {
   try { return (fs.readFileSync(backendLogPath(), 'utf8').match(/renderer process gone/g) || []).length; }
@@ -268,9 +268,9 @@ test.describe('combinatorial user flows', () => {
   test('dashboard toolbar: New Agent opens compose with contentEditable that accepts typing', async ({}, info) => {
     // Heavy surface: the New-Agent click hard-crashes the renderer (0xC0000005)
     // under Playwright-controlled Electron 40 on a clean build. Gated behind
-    // OPENSWARM_E2E_HEAVY=1; needs a real display / manual confirmation. See
+    // FREESWARM_E2E_HEAVY=1; needs a real display / manual confirmation. See
     // onboarding-completion.spec.ts for the full finding.
-    test.skip(process.env.OPENSWARM_E2E_HEAVY !== '1', 'heavy surface; set OPENSWARM_E2E_HEAVY=1 on a real display');
+    test.skip(process.env.FREESWARM_E2E_HEAVY !== '1', 'heavy surface; set FREESWARM_E2E_HEAVY=1 on a real display');
     const mark = errors.length;
     // Make sure we're on a dashboard (the toolbar lives there).
     await clickMust(page.locator('[data-onboarding="sidebar-dashboards"]'), 'sidebar dashboards');
@@ -289,8 +289,8 @@ test.describe('combinatorial user flows', () => {
 
   test('dashboard toolbar: Browser card mounts (webview path, not grey iframe)', async ({}, info) => {
     // Heavy surface: Electron <webview> does not attach under Playwright-controlled
-    // Electron 40 in automation. Gated behind OPENSWARM_E2E_HEAVY=1.
-    test.skip(process.env.OPENSWARM_E2E_HEAVY !== '1', 'heavy surface; set OPENSWARM_E2E_HEAVY=1 on a real display');
+    // Electron 40 in automation. Gated behind FREESWARM_E2E_HEAVY=1.
+    test.skip(process.env.FREESWARM_E2E_HEAVY !== '1', 'heavy surface; set FREESWARM_E2E_HEAVY=1 on a real display');
     const mark = errors.length;
     await clickMust(page.locator('[data-onboarding="browser-button"]'), 'toolbar Browser');
     // Wait for at least one <webview> to attach. A grey iframe = no webview = fail.

@@ -1,0 +1,104 @@
+name: Release Router
+
+# Builds + publishes the standalone FreeSwarm Router on router-v* tags.
+#
+# Two artifacts, one portable pure-JS payload (see scripts/package-router.sh):
+#   1. Per-platform self-contained bundles (bundled Node + start script),
+#      uploaded as release assets so the website download button has real
+#      files to point at instead of GitHub's raw source archives.
+#   2. An npm package (`npx freeswarm-router`), published when NPM_TOKEN is set.
+#
+# The desktop app's auto-update feeds (latest*.yml) do NOT apply to the router,
+# so promotion-gate.yml deliberately skips router-v* tags.
+
+on:
+  push:
+    tags:
+      - 'router-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Router tag to (re)build assets for (e.g. router-v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Job-level env so step `if:` conditions can read NPM_TOKEN. A step's own
+    # env block is not visible to that step's `if` (it's evaluated first), so
+    # the gate must live here.
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.18.1'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Resolve version from tag
+        id: ver
+        shell: bash
+        run: |
+          tag="${{ github.ref_name }}"
+          [ "${{ github.event_name }}" = "workflow_dispatch" ] && tag="${{ github.event.inputs.tag }}"
+          # router-v1.0.0 -> 1.0.0
+          ver="${tag#router-v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+          echo "Building router $ver (tag $tag)"
+
+      - name: Package router (bundles + npm payload)
+        shell: bash
+        run: |
+          bash scripts/package-router.sh --version "${{ steps.ver.outputs.ver }}"
+
+      - name: Upload bundles to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          tag="${{ steps.ver.outputs.tag }}"
+          repo="${{ github.repository }}"
+          # A pushed tag does NOT automatically create a GitHub Release, and
+          # workflow_dispatch runs have no release at all — so `gh release upload`
+          # would fail with "release not found". Create the release first if it's
+          # missing (also creates the git tag at this commit when absent), then
+          # upload with --clobber so re-runs replace stale assets cleanly.
+          if ! gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
+            echo "No release for $tag yet; creating it."
+            gh release create "$tag" \
+              --repo "$repo" \
+              --title "FreeSwarm Router $tag" \
+              --notes "Standalone FreeSwarm Router bundles for $tag." \
+              --target "$GITHUB_SHA"
+          fi
+          gh release upload "$tag" \
+            router/dist-release/bundles/*.tar.gz \
+            router/dist-release/bundles/*.zip \
+            --repo "$repo" --clobber
+
+      - name: Publish to npm
+        if: ${{ env.NPM_TOKEN != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          cd router/dist-release/npm
+          # --provenance would require id-token perms; skip for now. Idempotent:
+          # if this version is already on npm, don't fail the whole release.
+          npm publish --access public || {
+            echo "npm publish failed (version may already exist); continuing."
+          }
+
+      - name: Note when npm publish is skipped
+        if: ${{ env.NPM_TOKEN == '' }}
+        shell: bash
+        run: |
+          echo "NPM_TOKEN not set — skipped npm publish. Bundles were still uploaded."
+          echo "Add an NPM_TOKEN repo secret to enable \`npx freeswarm-router\`."

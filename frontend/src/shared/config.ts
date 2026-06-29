@@ -4,17 +4,25 @@ const _w = window as any;
 // bare 8324 guess is wrong on any machine where the backend landed on a fallback
 // port (e.g. 8324 was held by a leftover backend); see the self-heal below.
 const port =
-  _w.__OPENSWARM_PORT__ ||
-  (_w.openswarm && typeof _w.openswarm.getBackendPortLive === 'function'
-    ? _w.openswarm.getBackendPortLive()
+  _w.__FREESWARM_PORT__ ||
+  (_w.freeswarm && typeof _w.freeswarm.getBackendPortLive === 'function'
+    ? _w.freeswarm.getBackendPortLive()
     : 0) ||
   8324;
 const host = window.location.hostname || 'localhost';
 
 export const API_BASE = `http://${host}:${port}/api`;
 export const WS_BASE = `ws://${host}:${port}`;
-// Must match openswarm-cloud's PUBLIC_BASE_URL (fly.toml) and the Google OAuth redirect URI.
-export const OPENSWARM_DEFAULT_PROXY_URL = 'https://api.openswarm.com';
+// Must match freeswarm-cloud's PUBLIC_BASE_URL (fly.toml) and the Google OAuth redirect URI.
+export const FREESWARM_DEFAULT_PROXY_URL = 'https://api.freeswarm.myndlabs.tech';
+
+// Web vs desktop runtime mode. The desktop build injects an Electron bridge
+// (window.freeswarm); the webpack dev server runs on localhost. Anything else
+// (the hosted /app deployment) is the web build, where sign-in and subscription
+// gating get surfaced. Mirrors backend/config/mode.py.
+const _isElectron = !!_w.freeswarm;
+const _isLocalhost = ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
+export const IS_WEB = !_isElectron && !_isLocalhost;
 
 // Per-install token from Electron preload; cached after first resolve. Call refreshAuthToken() on 4401.
 let _authTokenCache: string = '';
@@ -25,7 +33,7 @@ export function getAuthToken(): string {
 }
 
 export async function refreshAuthToken(): Promise<string> {
-  const ow = (window as any).openswarm;
+  const ow = (window as any).freeswarm;
   if (ow && typeof ow.getAuthToken === 'function') {
     try {
       const tok = await ow.getAuthToken();
@@ -64,7 +72,7 @@ let _portHealTried = false;
 function _maybeHealBackendPort(): void {
   if (_portHealTried) return;
   try {
-    const ow = (window as any).openswarm;
+    const ow = (window as any).freeswarm;
     const live = ow && typeof ow.getBackendPortLive === 'function' ? ow.getBackendPortLive() : null;
     if (typeof live === 'number' && live > 0 && live !== port) {
       _portHealTried = true;
@@ -82,8 +90,8 @@ const _cachedFetches = new Map<string, { resp: Response; expiresAt: number }>();
 const _GET_CACHE_TTL_MS = 1000;
 
 function _installAuthFetchInterceptor() {
-  if ((window as any).__OPENSWARM_FETCH_PATCHED__) return;
-  (window as any).__OPENSWARM_FETCH_PATCHED__ = true;
+  if ((window as any).__FREESWARM_FETCH_PATCHED__) return;
+  (window as any).__FREESWARM_FETCH_PATCHED__ = true;
 
   const originalFetch = window.fetch.bind(window);
   window.fetch = async function patchedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {

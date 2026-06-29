@@ -4,7 +4,7 @@ import { API_BASE } from '@/shared/config';
 const SETTINGS_API = `${API_BASE}/settings`;
 
 export const DEFAULT_SYSTEM_PROMPT =
-  `You are a personal AI assistant running inside OpenSwarm.\n\n` +
+  `You are a personal AI assistant running inside FreeSwarm.\n\n` +
   `## Tool Priority\n` +
   `When a dedicated MCP tool exists for a task, use it directly. Do not use the browser for things MCP tools can handle.\n` +
   `Priority order:\n` +
@@ -25,6 +25,26 @@ export interface CustomProvider {
   base_url: string;
   api_key: string;
   models: Array<{ value: string; label: string; context_window?: number }>;
+}
+
+export interface ModelCombo {
+  id: string;
+  name: string;
+  description?: string;
+  model_ids: string[];
+  strategy?: 'fallback' | 'round-robin';
+}
+
+export interface ModelAlias {
+  modelId: string;
+  alias: string;
+  costPerMTok?: number;
+}
+
+export interface ModelPricingOverride {
+  modelId: string;
+  inputCostPerMTok?: number;
+  outputCostPerMTok?: number;
 }
 
 export interface SubscriptionUsage {
@@ -50,27 +70,31 @@ export interface AppSettings {
   google_api_key?: string | null;
   openrouter_api_key?: string | null;
   custom_providers?: CustomProvider[];
+  model_combos?: ModelCombo[];
+  model_aliases?: ModelAlias[];
+  model_pricing_overrides?: ModelPricingOverride[];
   browser_homepage: string;
   auto_select_mode_on_new_agent: boolean;
   expand_new_chats_in_dashboard: boolean;
   auto_reveal_sub_agents: boolean;
   dev_mode: boolean;
   allow_experimental_updates: boolean;
+  track_reasoning_tokens?: boolean;
   /** Managed subscription state; surfaces only when user has subscribed via cloud. */
-  connection_mode?: 'own_key' | 'openswarm-pro' | 'free-trial';
-  openswarm_bearer_token?: string | null;
-  openswarm_proxy_url?: string | null;
+  connection_mode?: 'own_key' | 'freeswarm-pro' | 'free-trial';
+  freeswarm_bearer_token?: string | null;
+  freeswarm_proxy_url?: string | null;
   /** Zero-config free trial: server-owned, set by the cloud mint. remaining drives the onboarding "runs low" nudge. */
   free_trial_token?: string | null;
   free_trial_remaining?: number | null;
   free_trial_runs_limit?: number | null;
-  openswarm_subscription_plan?: string | null;
-  openswarm_subscription_expires?: string | null;
-  openswarm_usage_cached?: SubscriptionUsage | null;
+  freeswarm_subscription_plan?: string | null;
+  freeswarm_subscription_expires?: string | null;
+  freeswarm_usage_cached?: SubscriptionUsage | null;
   /** Identity populated by /api/auth/signin-activate; Stripe checkout also fills these. */
   user_id?: string | null;
   user_email?: string | null;
-  signin_method?: 'google' | 'email' | 'stripe' | null;
+  signin_method?: 'google' | 'github' | 'email' | 'stripe' | null;
   /** Anonymous device id (first-run generated); stitches anon to authed PostHog Persons. */
   installation_id?: string | null;
 }
@@ -83,8 +107,10 @@ export interface ActivateSubscriptionPayload {
 
 export interface ActivateSigninPayload {
   token: string;
-  signin_method: 'google' | 'email';
+  signin_method: 'google' | 'github' | 'email';
   email?: string | null;
+  refresh_token?: string | null;
+  nonce?: string | null;
 }
 
 export interface BrowseResult {
@@ -177,7 +203,7 @@ export const browseDirectories = createAsyncThunk(
   }
 );
 
-/** POST /api/subscription/activate after catching openswarm://auth deep link; flips UI to Pro. */
+/** POST /api/subscription/activate after catching freeswarm://auth deep link; flips UI to Pro. */
 export const activateSubscription = createAsyncThunk(
   'settings/activateSubscription',
   async (payload: ActivateSubscriptionPayload, { dispatch }) => {
@@ -208,7 +234,7 @@ export const activateSignin = createAsyncThunk(
       user_id: string;
       email: string;
       plan: string;
-      signin_method: 'google' | 'email';
+      signin_method: 'google' | 'github' | 'email';
     };
   },
 );

@@ -8,6 +8,14 @@ The user will describe what they want, and you will generate:
    - Use: <script type="importmap">{"imports":{"react":"https://esm.sh/react@18","react-dom/client":"https://esm.sh/react-dom@18/client"}}</script>
    - Input data is at window.OUTPUT_INPUT (object), backend result at window.OUTPUT_BACKEND_RESULT.
 2. **input_schema**: A JSON Schema object defining the structured input.
+   - The run form renders one control per property and honors standard
+     constraint keywords, so use them to get the right control and
+     client-side validation: `enum` (dropdown), `type` boolean (toggle),
+     number/integer with `minimum`/`maximum`/`multipleOf`, string with
+     `format` (`email`, `url`, `date`, `date-time`, `time`, `password`,
+     `textarea`), `minLength`/`maxLength`/`pattern`, array with
+     `minItems`/`maxItems`, and `required` for mandatory fields. Add a
+     `description` to any non-obvious field; set `default` where sensible.
 3. **backend_code** (optional): Python code where input_data is a global dict and result is a global dict to assign to.
 4. **name**: A short name for the view.
 5. **description**: A one-sentence description.

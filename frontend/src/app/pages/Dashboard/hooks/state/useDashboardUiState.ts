@@ -24,7 +24,7 @@ export function useDashboardUiState(selection: Selection, cards: Record<string, 
   // ignores it but it would otherwise hang around forever.
   useEffect(() => {
     try {
-      localStorage.removeItem('openswarm_walkthrough_pending');
+      localStorage.removeItem('freeswarm_walkthrough_pending');
     } catch { /* ignore */ }
   }, []);
 

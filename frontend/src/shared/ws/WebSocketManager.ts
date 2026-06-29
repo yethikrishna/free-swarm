@@ -190,7 +190,7 @@ class WebSocketManager {
     // this is a single no-op branch on every subsequent token.
     if (!firstAgentResponseMarked) {
       firstAgentResponseMarked = true;
-      try { (window as any).openswarm?.markFirstAgentResponse?.(); } catch { /* not in Electron */ }
+      try { (window as any).freeswarm?.markFirstAgentResponse?.(); } catch { /* not in Electron */ }
     }
     store.dispatch(streamDelta({ sessionId, messageId, delta }));
   }

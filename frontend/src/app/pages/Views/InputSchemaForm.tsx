@@ -1,12 +1,12 @@
 import React from 'react';
 import Box from '@mui/material/Box';
-import TextField from '@mui/material/TextField';
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import InputLabel from '@mui/material/InputLabel';
 import FormControl from '@mui/material/FormControl';
+import FormHelperText from '@mui/material/FormHelperText';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Button from '@mui/material/Button';
@@ -14,25 +14,28 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import { getDefault, type SchemaNode } from '@/shared/inputSchemaDefaults';
+import { NumberField, StringField } from './inputSchemaFields';
 
 interface Props {
   schema: SchemaNode;
   value: any;
   onChange: (value: any) => void;
   label?: string;
+  required?: boolean;
   depth?: number;
 }
 
-const InputSchemaForm: React.FC<Props> = ({ schema, value, onChange, label, depth = 0 }) => {
+const InputSchemaForm: React.FC<Props> = ({ schema, value, onChange, label, required, depth = 0 }) => {
   const c = useClaudeTokens();
 
   if (schema.enum && schema.enum.length > 0) {
     return (
-      <FormControl fullWidth size="small" sx={{ mb: 1.5 }}>
+      <FormControl fullWidth size="small" required={required} sx={{ mb: 1.5 }}>
         {label && <InputLabel>{label}</InputLabel>}
         <Select
           value={value ?? ''}
           label={label}
+          displayEmpty
           onChange={(e) => onChange(e.target.value)}
           sx={{
             fontSize: '0.85rem',
@@ -44,9 +47,7 @@ const InputSchemaForm: React.FC<Props> = ({ schema, value, onChange, label, dept
           ))}
         </Select>
         {schema.description && (
-          <Typography sx={{ fontSize: '0.7rem', color: c.text.tertiary, mt: 0.25, ml: 0.5 }}>
-            {schema.description}
-          </Typography>
+          <FormHelperText sx={{ color: c.text.tertiary }}>{schema.description}</FormHelperText>
         )}
       </FormControl>
     );
@@ -79,45 +80,21 @@ const InputSchemaForm: React.FC<Props> = ({ schema, value, onChange, label, dept
   }
 
   if (schema.type === 'number' || schema.type === 'integer') {
-    return (
-      <TextField
-        fullWidth
-        size="small"
-        type="number"
-        label={label}
-        helperText={schema.description}
-        value={value ?? 0}
-        onChange={(e) => onChange(Number(e.target.value))}
-        sx={{
-          mb: 1.5,
-          '& .MuiOutlinedInput-root': { fontSize: '0.85rem' },
-          '& .MuiFormHelperText-root': { fontSize: '0.7rem' },
-        }}
-      />
-    );
+    return <NumberField schema={schema} value={value} onChange={onChange} label={label} required={required} />;
   }
 
   if (schema.type === 'string') {
-    return (
-      <TextField
-        fullWidth
-        size="small"
-        label={label}
-        helperText={schema.description}
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value)}
-        multiline={(value?.length ?? 0) > 80}
-        sx={{
-          mb: 1.5,
-          '& .MuiOutlinedInput-root': { fontSize: '0.85rem' },
-          '& .MuiFormHelperText-root': { fontSize: '0.7rem' },
-        }}
-      />
-    );
+    return <StringField schema={schema} value={value} onChange={onChange} label={label} required={required} />;
   }
 
   if (schema.type === 'array' && schema.items) {
     const items = Array.isArray(value) ? value : [];
+    const atMin = typeof schema.minItems === 'number' && items.length <= schema.minItems;
+    const atMax = typeof schema.maxItems === 'number' && items.length >= schema.maxItems;
+    const countHint = [
+      typeof schema.minItems === 'number' ? `min ${schema.minItems}` : '',
+      typeof schema.maxItems === 'number' ? `max ${schema.maxItems}` : '',
+    ].filter(Boolean).join(', ');
     return (
       <Box
         sx={{
@@ -130,7 +107,7 @@ const InputSchemaForm: React.FC<Props> = ({ schema, value, onChange, label, dept
           <Typography
             sx={{ fontSize: '0.8rem', fontWeight: 600, color: c.text.secondary, mb: 0.5 }}
           >
-            {label}
+            {label}{required ? ' *' : ''}{countHint ? ` (${countHint})` : ''}
           </Typography>
         )}
         {schema.description && (
@@ -155,11 +132,12 @@ const InputSchemaForm: React.FC<Props> = ({ schema, value, onChange, label, dept
             </Box>
             <IconButton
               size="small"
+              disabled={atMin}
               onClick={() => {
                 const updated = items.filter((_: any, idx: number) => idx !== i);
                 onChange(updated);
               }}
-              sx={{ color: c.status.error, mt: 0.5 }}
+              sx={{ color: atMin ? c.text.tertiary : c.status.error, mt: 0.5 }}
             >
               <RemoveCircleOutlineIcon sx={{ fontSize: 18 }} />
             </IconButton>
@@ -167,11 +145,12 @@ const InputSchemaForm: React.FC<Props> = ({ schema, value, onChange, label, dept
         ))}
         <Button
           size="small"
+          disabled={atMax}
           startIcon={<AddIcon sx={{ fontSize: 14 }} />}
           onClick={() => onChange([...items, getDefault(schema.items!)])}
           sx={{
             fontSize: '0.75rem',
-            color: c.accent.primary,
+            color: atMax ? c.text.tertiary : c.accent.primary,
             textTransform: 'none',
           }}
         >
@@ -195,7 +174,7 @@ const InputSchemaForm: React.FC<Props> = ({ schema, value, onChange, label, dept
           <Typography
             sx={{ fontSize: '0.8rem', fontWeight: 600, color: c.text.secondary, mb: 1 }}
           >
-            {label}
+            {label}{required ? ' *' : ''}
           </Typography>
         )}
         {schema.description && (
@@ -209,7 +188,8 @@ const InputSchemaForm: React.FC<Props> = ({ schema, value, onChange, label, dept
             schema={propSchema}
             value={obj[key]}
             onChange={(newVal) => onChange({ ...obj, [key]: newVal })}
-            label={key + (schema.required?.includes(key) ? ' *' : '')}
+            label={propSchema.title || key}
+            required={schema.required?.includes(key)}
             depth={depth + 1}
           />
         ))}
@@ -218,13 +198,12 @@ const InputSchemaForm: React.FC<Props> = ({ schema, value, onChange, label, dept
   }
 
   return (
-    <TextField
-      fullWidth
-      size="small"
-      label={label}
+    <StringField
+      schema={{ ...schema, type: 'string' }}
       value={typeof value === 'string' ? value : JSON.stringify(value ?? '')}
-      onChange={(e) => onChange(e.target.value)}
-      sx={{ mb: 1.5, '& .MuiOutlinedInput-root': { fontSize: '0.85rem' } }}
+      onChange={onChange}
+      label={label}
+      required={required}
     />
   );
 };

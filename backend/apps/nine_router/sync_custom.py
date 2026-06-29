@@ -3,7 +3,7 @@
 9Router exposes arbitrary OpenAI-compatible endpoints via "provider nodes"
 (POST /api/provider-nodes, type="openai-compatible"). A model_id of
 <prefix>/<model> routes to that node's baseUrl. This module mirrors the
-user's custom providers, the OpenAI passthrough lane, and OpenSwarm Pro
+user's custom providers, the OpenAI passthrough lane, and FreeSwarm Pro
 into those nodes. Talks to the already-running 9Router over HTTP; never
 spawns the subprocess (that's process.py's job).
 """
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # We mirror settings.custom_providers[] with prefix `cp-<slug>` so they don't
 # collide with the user's primary OpenAI key.
-NINE_ROUTER_CUSTOM_NAME_SUFFIX = " (OpenSwarm-managed)"
+NINE_ROUTER_CUSTOM_NAME_SUFFIX = " (FreeSwarm-managed)"
 
 
 async def _sync_openai_compat_node(api_key: str | None) -> None:
@@ -31,7 +31,7 @@ async def _sync_openai_compat_node(api_key: str | None) -> None:
     if not _nr().is_running():
         return
     import os as _os
-    port = _os.environ.get("OPENSWARM_PORT", "8324")
+    port = _os.environ.get("FREESWARM_PORT", "8324")
     base_url = f"http://127.0.0.1:{port}/api/openai-passthrough/v1"
     managed_name = f"OpenAI{NINE_ROUTER_CUSTOM_NAME_SUFFIX}"
 
@@ -266,8 +266,8 @@ async def sync_custom_providers(providers: list) -> None:
             logger.warning(f"9Router custom node {prefix} delete failed: {e}")
 
 
-async def sync_openswarm_pro_as_claude(bearer_token: str | None, proxy_url: str | None) -> None:
-    """Register OpenSwarm Pro as a `claude` apikey connection in 9Router,
+async def sync_freeswarm_pro_as_claude(bearer_token: str | None, proxy_url: str | None) -> None:
+    """Register FreeSwarm Pro as a `claude` apikey connection in 9Router,
     pointing at our cloud proxy via `providerSpecificData.baseUrl`.
 
     This is what makes the CLI's built-in WebSearch work on non-Claude
@@ -275,9 +275,9 @@ async def sync_openswarm_pro_as_claude(bearer_token: str | None, proxy_url: str 
     Anthropic via ANTHROPIC_SMALL_FAST_MODEL (claude-haiku). That small-
     model call hits `ANTHROPIC_BASE_URL` which we've already set to
     localhost:20128 (9Router). Without this sync, 9Router has no Claude
-    path for openswarm-pro users, so the search fails with
+    path for freeswarm-pro users, so the search fails with
     "no credentials for provider: claude". With this sync, 9Router sees
-    the OpenSwarm-Pro-backed Claude connection and routes the search
+    the FreeSwarm-Pro-backed Claude connection and routes the search
     call through our cloud; same quota the user's Pro subscription
     already covers, no extra cost."""
     if not _nr().is_running():
@@ -308,25 +308,25 @@ async def sync_openswarm_pro_as_claude(bearer_token: str | None, proxy_url: str 
                         f"{NINE_ROUTER_API}/providers/{existing['id']}",
                         json=payload,
                     )
-                    logger.info("9Router: updated OpenSwarm Pro → Claude connection")
+                    logger.info("9Router: updated FreeSwarm Pro → Claude connection")
                 else:
                     r = await client.post(f"{NINE_ROUTER_API}/providers", json=payload)
                     if r.status_code < 300:
-                        logger.info("9Router: created OpenSwarm Pro → Claude connection")
+                        logger.info("9Router: created FreeSwarm Pro → Claude connection")
                     else:
                         logger.warning(
-                            f"9Router: failed to create OpenSwarm Pro → Claude connection: {r.status_code} {r.text[:200]}"
+                            f"9Router: failed to create FreeSwarm Pro → Claude connection: {r.status_code} {r.text[:200]}"
                         )
             else:
                 if existing:
                     await client.delete(f"{NINE_ROUTER_API}/providers/{existing['id']}")
-                    logger.info("9Router: removed OpenSwarm Pro → Claude connection")
+                    logger.info("9Router: removed FreeSwarm Pro → Claude connection")
     except Exception as e:
-        logger.warning(f"9Router OpenSwarm-Pro Claude sync failed: {e}")
+        logger.warning(f"9Router FreeSwarm-Pro Claude sync failed: {e}")
 
 
 async def sync_pro_routing(settings_obj) -> None:
-    """Mirror the settings' cloud-proxy state (openswarm-pro OR free-trial) into
+    """Mirror the settings' cloud-proxy state (freeswarm-pro OR free-trial) into
     the 9Router Claude lane. Call after any flow that changes connection_mode or
     the bearer (activate, sign-in, sign-out, disconnect, free-trial arm/clear).
     Never raises."""
@@ -334,9 +334,9 @@ async def sync_pro_routing(settings_obj) -> None:
         from backend.apps.settings.credentials import proxy_auth
         bearer, base = proxy_auth(settings_obj)
         active = bool(bearer)
-        await sync_openswarm_pro_as_claude(
+        await sync_freeswarm_pro_as_claude(
             bearer if active else None,
             base if active else None,
         )
     except Exception as e:
-        logger.warning(f"OpenSwarm-Pro → Claude sync failed: {e}")
+        logger.warning(f"FreeSwarm-Pro → Claude sync failed: {e}")

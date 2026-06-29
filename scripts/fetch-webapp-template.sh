@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Re-vendor openswarm-ai/webapp-template into backend/apps/outputs/webapp_template/.
+# Re-vendor yethikrishna/webapp-template into backend/apps/outputs/webapp_template/.
 #
 # Idempotent — wipes the existing vendored dir and re-clones at the pinned ref.
 # Strips files we don't want shipped (LICENSE, README.md, .gitignore — we
 # author our own minimal .gitignore inside the snapshot). Applies our two
 # patches:
-#   1. backend/run.sh: pip-install $OPENSWARM_DEBUGGER_PATH if set, before
+#   1. backend/run.sh: pip-install $FREESWARM_DEBUGGER_PATH if set, before
 #      the existing `pip install -e .` — resolves the `swarm-debug` dep
-#      from OpenSwarm's bundled debugger/ package instead of PyPI (where
+#      from FreeSwarm's bundled debugger/ package instead of PyPI (where
 #      it doesn't exist).
 #   2. Add our own backend_init.sh at the snapshot root.
 #
@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-REPO="openswarm-ai/webapp-template"
+REPO="yethikrishna/webapp-template"
 REF="main"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="$ROOT/backend/apps/outputs/webapp_template"
@@ -32,25 +32,25 @@ git clone --depth 1 --branch "$REF" "https://github.com/$REPO.git" "$TMP/clone" 
 rm -rf "$DEST"
 mkdir -p "$DEST"
 
-# Copy everything except files we don't ship in OpenSwarm.
+# Copy everything except files we don't ship in FreeSwarm.
 ( cd "$TMP/clone" && rm -rf .git LICENSE README.md .gitignore )
 cp -R "$TMP/clone/." "$DEST/"
 
-# Patch 1: backend/run.sh installs OpenSwarm's local debugger/ before the
+# Patch 1: backend/run.sh installs FreeSwarm's local debugger/ before the
 # template's own `pip install -e .` so `from swarm_debug import debug` in
 # the template's backend code resolves to our bundled package (the PyPI
 # `swarm-debug` doesn't exist — our local package registers as `debug`
 # and exposes both `debug` and `swarm_debug` module names via setup.py
 # py_modules).
 RUN_SH="$DEST/backend/run.sh"
-if ! grep -q "OPENSWARM_DEBUGGER_PATH" "$RUN_SH"; then
+if ! grep -q "FREESWARM_DEBUGGER_PATH" "$RUN_SH"; then
     # Insert the install line just before `pip install -e .`. macOS sed
     # vs GNU sed: use a portable awk inline rewrite.
     awk '
         /pip install -e \./ && !inserted {
-            print "if [[ -n \"${OPENSWARM_DEBUGGER_PATH:-}\" && -d \"$OPENSWARM_DEBUGGER_PATH\" ]]; then"
-            print "    echo \"Installing OpenSwarm debugger (swarm_debug) from $OPENSWARM_DEBUGGER_PATH\""
-            print "    pip install -e \"$OPENSWARM_DEBUGGER_PATH\""
+            print "if [[ -n \"${FREESWARM_DEBUGGER_PATH:-}\" && -d \"$FREESWARM_DEBUGGER_PATH\" ]]; then"
+            print "    echo \"Installing FreeSwarm debugger (swarm_debug) from $FREESWARM_DEBUGGER_PATH\""
+            print "    pip install -e \"$FREESWARM_DEBUGGER_PATH\""
             print "fi"
             inserted = 1
         }
@@ -60,8 +60,8 @@ if ! grep -q "OPENSWARM_DEBUGGER_PATH" "$RUN_SH"; then
 fi
 
 # Patch 1b: drop `"swarm-debug"` from the template's backend/pyproject.toml
-# dependencies. The OpenSwarm debugger gets installed separately via Patch
-# 1's `pip install -e $OPENSWARM_DEBUGGER_PATH`. Leaving the dep listed
+# dependencies. The FreeSwarm debugger gets installed separately via Patch
+# 1's `pip install -e $FREESWARM_DEBUGGER_PATH`. Leaving the dep listed
 # would make pip 404 against PyPI (no such package).
 PYPROJECT="$DEST/backend/pyproject.toml"
 awk '
@@ -73,7 +73,7 @@ awk '
 # bind poller in runtime.py:_await_frontend_bind() actually sees the
 # bound socket on macOS, where `localhost` can resolve to ::1), disable
 # Vite's `open: true` browser auto-launch (preview belongs in the
-# OpenSwarm webview, not a popped-out Chrome tab), and set strictPort
+# FreeSwarm webview, not a popped-out Chrome tab), and set strictPort
 # so Vite doesn't silently increment to a port we're not polling.
 VITE_CONFIG="$DEST/frontend/vite.config.ts"
 if ! grep -q "host: '127.0.0.1'" "$VITE_CONFIG"; then
@@ -143,7 +143,7 @@ if [[ ! -f .env ]]; then
 fi
 
 # Source .env so we know the current BACKEND_PORT and the path to the
-# master template's backend/ (written by OpenSwarm at seed time).
+# master template's backend/ (written by FreeSwarm at seed time).
 set -a
 source .env
 set +a
@@ -160,23 +160,23 @@ if [[ -d ./backend ]]; then
     exit 1
 fi
 
-# Resolve master template backend/ path. OPENSWARM_TEMPLATE_BACKEND_PATH
-# is written into .env at seed time; OPENSWARM_DEBUGGER_PATH the same.
-if [[ -z "${OPENSWARM_TEMPLATE_BACKEND_PATH:-}" ]]; then
-    echo "ERROR: OPENSWARM_TEMPLATE_BACKEND_PATH not set in .env. This" >&2
-    echo "       workspace was seeded by an older OpenSwarm; ask the" >&2
+# Resolve master template backend/ path. FREESWARM_TEMPLATE_BACKEND_PATH
+# is written into .env at seed time; FREESWARM_DEBUGGER_PATH the same.
+if [[ -z "${FREESWARM_TEMPLATE_BACKEND_PATH:-}" ]]; then
+    echo "ERROR: FREESWARM_TEMPLATE_BACKEND_PATH not set in .env. This" >&2
+    echo "       workspace was seeded by an older FreeSwarm; ask the" >&2
     echo "       App Builder to recreate it." >&2
     exit 1
 fi
 
-if [[ ! -d "$OPENSWARM_TEMPLATE_BACKEND_PATH" ]]; then
+if [[ ! -d "$FREESWARM_TEMPLATE_BACKEND_PATH" ]]; then
     echo "ERROR: master template backend dir not found at" >&2
-    echo "       $OPENSWARM_TEMPLATE_BACKEND_PATH" >&2
+    echo "       $FREESWARM_TEMPLATE_BACKEND_PATH" >&2
     exit 1
 fi
 
-echo "Copying backend/ from $OPENSWARM_TEMPLATE_BACKEND_PATH..."
-cp -R "$OPENSWARM_TEMPLATE_BACKEND_PATH" ./backend
+echo "Copying backend/ from $FREESWARM_TEMPLATE_BACKEND_PATH..."
+cp -R "$FREESWARM_TEMPLATE_BACKEND_PATH" ./backend
 chmod +x ./backend/run.sh
 
 # Pick a free port. SO_REUSEADDR=0 means the kernel won't immediately

@@ -158,4 +158,4 @@ import pytest
 @pytest.fixture
 def _metrics_dir():
     # the autouse conftest fixture already points metrics at a temp dir; surface it
-    return os.environ["OPENSWARM_BROWSER_METRICS_DIR"]
+    return os.environ["FREESWARM_BROWSER_METRICS_DIR"]

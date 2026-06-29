@@ -18,7 +18,7 @@ interface ErrorBoundaryState {
  * in JSX), React unmounts the whole tree and the iframe goes black —
  * the user just sees an empty preview pane and has no idea what
  * happened. This boundary catches those errors, renders a readable
- * error card in their place, AND mirrors the error up to the OpenSwarm
+ * error card in their place, AND mirrors the error up to the FreeSwarm
  * host (via window.parent.postMessage + console.error, both of which
  * the webview-preload bridge already forwards) so the App Builder
  * agent's `post_tool_hook` can see what went wrong on its next turn
@@ -37,7 +37,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
     this.setState({ errorInfo });
-    // Two channels so the OpenSwarm host's webview-preload bridge can
+    // Two channels so the FreeSwarm host's webview-preload bridge can
     // pick this up regardless of which one it taps:
     //   1. console.error — forwarded as a `[FRONTEND]` line into the
     //      App Builder's Terminal pane, which the agent's
@@ -46,14 +46,14 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     //      the structured payload without parsing console output.
     // eslint-disable-next-line no-console
     console.error(
-      '[openswarm:app-error]',
+      '[freeswarm:app-error]',
       error?.message ?? String(error),
       errorInfo?.componentStack ?? '',
     );
     try {
       window.parent.postMessage(
         {
-          type: 'openswarm:app-error',
+          type: 'freeswarm:app-error',
           message: error?.message ?? String(error),
           stack: error?.stack,
           componentStack: errorInfo?.componentStack,

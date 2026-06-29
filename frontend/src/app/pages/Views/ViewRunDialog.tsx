@@ -8,11 +8,12 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import { Output, executeOutput, OutputExecuteResult, getFrontendCode, getBackendCode, buildServeUrl, SERVE_BASE } from '@/shared/state/outputsSlice';
+import { Output, executeOutput, OutputExecuteResult, getFrontendCode, getBackendCode, SERVE_BASE } from '@/shared/state/outputsSlice';
 import { useAppDispatch } from '@/shared/hooks';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import InputSchemaForm from './InputSchemaForm';
-import { getDefault } from '@/shared/inputSchemaDefaults';
+import { getDefault, collectIssues, schemaHasNoInputs, type SchemaNode } from '@/shared/inputSchemaDefaults';
+import { friendlyError } from '@/shared/friendlyError';
 import ViewPreview from './ViewPreview';
 
 interface Props {
@@ -28,17 +29,32 @@ const ViewRunDialog: React.FC<Props> = ({ output, onClose }) => {
   const [inputData, setInputData] = useState<Record<string, any>>(defaultInput);
   const [result, setResult] = useState<OutputExecuteResult | null>(null);
   const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+
+  const noInputs = useMemo(() => schemaHasNoInputs(output.input_schema as SchemaNode), [output.input_schema]);
+  const issues = useMemo(
+    () => collectIssues(output.input_schema as SchemaNode, inputData),
+    [output.input_schema, inputData],
+  );
+  const hasHardError = issues.some((i) => i.kind === 'error');
+  const blocked = issues.length > 0;
+  const blockHint = hasHardError ? 'Fix the highlighted fields to run.' : 'Fill the required fields to run.';
 
   const warnings = result?.warnings && result.warnings.length > 0 ? result.warnings : null;
   const codePreview = result?.code_preview || null;
+  // result.error is a raw backend string (traceback / jsonschema message); never show it verbatim.
+  const friendlyResultError = result?.error ? friendlyError(result.error, "This app didn't run. Check the Terminal tab for details.") : null;
 
   const runWith = async (force: boolean) => {
     setRunning(true);
+    setRunError(null);
     try {
       const res = await dispatch(
         executeOutput({ output_id: output.id, input_data: inputData, force })
       ).unwrap();
       setResult(res);
+    } catch (e) {
+      setRunError(friendlyError(e, "Couldn't run this app. Try again."));
     } finally {
       setRunning(false);
     }
@@ -61,11 +77,17 @@ const ViewRunDialog: React.FC<Props> = ({ output, onClose }) => {
             >
               Input
             </Typography>
-            <InputSchemaForm
-              schema={output.input_schema}
-              value={inputData}
-              onChange={setInputData}
-            />
+            {noInputs ? (
+              <Typography sx={{ fontSize: '0.85rem', color: c.text.tertiary, mt: 1 }}>
+                No inputs needed, just run it.
+              </Typography>
+            ) : (
+              <InputSchemaForm
+                schema={output.input_schema}
+                value={inputData}
+                onChange={setInputData}
+              />
+            )}
           </Box>
 
           {/* Preview */}
@@ -93,9 +115,9 @@ const ViewRunDialog: React.FC<Props> = ({ output, onClose }) => {
               <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: c.text.muted }}>
                 Preview
               </Typography>
-              {result?.error && (
+              {friendlyResultError && (
                 <Typography sx={{ fontSize: '0.75rem', color: c.status.error }}>
-                  Backend error: {result.error}
+                  {friendlyResultError}
                 </Typography>
               )}
             </Box>
@@ -174,12 +196,17 @@ const ViewRunDialog: React.FC<Props> = ({ output, onClose }) => {
         </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
+        {runError ? (
+          <Typography sx={{ fontSize: '0.78rem', color: c.status.error, mr: 'auto' }}>{runError}</Typography>
+        ) : blocked ? (
+          <Typography sx={{ fontSize: '0.78rem', color: c.text.tertiary, mr: 'auto' }}>{blockHint}</Typography>
+        ) : null}
         <Button onClick={onClose} sx={{ color: c.text.muted }}>Close</Button>
         {warnings ? (
           <Button
             variant="contained"
             onClick={handleRunAnyway}
-            disabled={running}
+            disabled={running || blocked}
             sx={{ bgcolor: c.status.warning, '&:hover': { bgcolor: c.status.warning } }}
           >
             {running ? 'Running...' : 'Run anyway'}
@@ -188,7 +215,7 @@ const ViewRunDialog: React.FC<Props> = ({ output, onClose }) => {
           <Button
             variant="contained"
             onClick={handleRun}
-            disabled={running}
+            disabled={running || blocked}
             sx={{ bgcolor: c.accent.primary, '&:hover': { bgcolor: c.accent.hover } }}
           >
             {running ? 'Running...' : getBackendCode(output) ? 'Execute & Preview' : 'Preview'}

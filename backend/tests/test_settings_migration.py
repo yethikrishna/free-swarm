@@ -29,19 +29,19 @@ def _write(path, obj):
 
 # ---------------- _migrate_legacy_fields ----------------
 
-def test_migrate_managed_to_openswarm_pro():
-    assert store._migrate_legacy_fields({"connection_mode": "managed"})["connection_mode"] == "openswarm-pro"
+def test_migrate_managed_to_freeswarm_pro():
+    assert store._migrate_legacy_fields({"connection_mode": "managed"})["connection_mode"] == "freeswarm-pro"
 
 
 def test_migrate_auth_token_renamed_and_popped():
-    out = store._migrate_legacy_fields({"openswarm_auth_token": "tok"})
-    assert out["openswarm_bearer_token"] == "tok"
-    assert "openswarm_auth_token" not in out
+    out = store._migrate_legacy_fields({"freeswarm_auth_token": "tok"})
+    assert out["freeswarm_bearer_token"] == "tok"
+    assert "freeswarm_auth_token" not in out
 
 
 def test_migrate_does_not_clobber_existing_bearer():
-    out = store._migrate_legacy_fields({"openswarm_auth_token": "old", "openswarm_bearer_token": "new"})
-    assert out["openswarm_bearer_token"] == "new"
+    out = store._migrate_legacy_fields({"freeswarm_auth_token": "old", "freeswarm_bearer_token": "new"})
+    assert out["freeswarm_bearer_token"] == "new"
 
 
 def test_migrate_leaves_modern_values_untouched():
@@ -68,10 +68,10 @@ def test_minimal_old_file_fills_missing_with_defaults(settings_file):
 
 
 def test_legacy_fields_migrated_end_to_end(settings_file):
-    _write(settings_file, {"connection_mode": "managed", "openswarm_auth_token": "tok"})
+    _write(settings_file, {"connection_mode": "managed", "freeswarm_auth_token": "tok"})
     s = store.load_settings()
-    assert s.connection_mode == "openswarm-pro"
-    assert s.openswarm_bearer_token == "tok"
+    assert s.connection_mode == "freeswarm-pro"
+    assert s.freeswarm_bearer_token == "tok"
 
 
 def test_install_id_and_first_opened_continuity(settings_file):

@@ -32,8 +32,8 @@ from unittest.mock import patch, AsyncMock, MagicMock
 import pytest
 
 
-_TMPROOT = tempfile.mkdtemp(prefix="openswarm-v2-invariants-")
-os.environ.setdefault("OPENSWARM_DATA_DIR", _TMPROOT)
+_TMPROOT = tempfile.mkdtemp(prefix="freeswarm-v2-invariants-")
+os.environ.setdefault("FREESWARM_DATA_DIR", _TMPROOT)
 
 
 # ---------------------------------------------------------------------------
@@ -392,16 +392,16 @@ async def test_resolve_aux_model_gemini_api_key_returns_preview_suffix():
 
 @pytest.mark.asyncio
 async def test_resolve_aux_model_anthropic_pro_returns_proxy():
-    """OpenSwarm Pro mode → bare haiku via proxy."""
+    """FreeSwarm Pro mode → bare haiku via proxy."""
     from backend.apps.agents.providers import registry
     from backend.apps.settings.models import AppSettings
     settings = AppSettings()
-    settings.connection_mode = "openswarm-pro"
-    settings.openswarm_proxy_url = "https://api.openswarm.test"
+    settings.connection_mode = "freeswarm-pro"
+    settings.freeswarm_proxy_url = "https://api.freeswarm.test"
     with patch("backend.apps.nine_router.is_running", return_value=False):
         model_id, base = await registry.resolve_aux_model(settings)
         assert "haiku" in model_id
-        assert base == "https://api.openswarm.test"
+        assert base == "https://api.freeswarm.test"
 
 
 @pytest.mark.asyncio
@@ -978,15 +978,15 @@ async def test_aux_failover_anthropic_to_codex():
     from backend.apps.agents.providers import registry
     from backend.apps.settings.models import AppSettings
     settings = AppSettings()
-    settings.connection_mode = "openswarm-pro"  # provides anthropic fallback
-    settings.openswarm_proxy_url = "https://api.openswarm.test"
+    settings.connection_mode = "freeswarm-pro"  # provides anthropic fallback
+    settings.freeswarm_proxy_url = "https://api.freeswarm.test"
     with patch("backend.apps.nine_router.is_running", return_value=True), \
          patch("backend.apps.nine_router.get_providers",
                new=AsyncMock(return_value=[])):  # nothing connected
         # primary_api=codex but codex not connected → cascade to Pro/anthropic
         model_id, base = await registry.resolve_aux_model(settings, primary_api="codex")
         assert "haiku" in model_id  # fallthrough hit Anthropic Pro path
-        assert base == "https://api.openswarm.test"
+        assert base == "https://api.freeswarm.test"
 
 
 @pytest.mark.asyncio
@@ -2528,7 +2528,7 @@ def test_sync_custom_providers_updates_existing_node_in_place():
     existing_nodes = [
         {
             "id": "openai-compatible-chat-existing",
-            "name": "Together AI (OpenSwarm-managed)",
+            "name": "Together AI (FreeSwarm-managed)",
             "prefix": "cp-together-ai",
             "type": "openai-compatible",
             "baseUrl": "https://api.together.xyz/v1",
@@ -2539,7 +2539,7 @@ def test_sync_custom_providers_updates_existing_node_in_place():
         {
             "id": "conn-existing",
             "provider": "openai-compatible-chat-existing",
-            "name": "Together AI (OpenSwarm-managed)",
+            "name": "Together AI (FreeSwarm-managed)",
             "authType": "apikey",
             "apiKey": "old-key",
         },
@@ -2579,7 +2579,7 @@ def test_sync_custom_providers_deletes_orphaned_managed_nodes():
     existing_nodes = [
         {
             "id": "node-orphan",
-            "name": "OldProvider (OpenSwarm-managed)",
+            "name": "OldProvider (FreeSwarm-managed)",
             "prefix": "cp-oldprovider",
             "type": "openai-compatible",
         },

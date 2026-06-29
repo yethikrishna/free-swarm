@@ -15,9 +15,9 @@ from backend.config.Apps import SubApp
 from backend.apps.tools_lib.models import ToolDefinition, ToolCreate, ToolUpdate, BUILTIN_TOOLS
 from backend.config.paths import DATA_ROOT, TOOLS_DIR as DATA_DIR, BUILTIN_PERMISSIONS_PATH as BUILTIN_PERMS_PATH, TRUSTED_SENSITIVE_PATHS_PATH
 
-# oauth_config runs the dotenv load (leaf) so OPENSWARM_OAUTH_BASE_URL is set
+# oauth_config runs the dotenv load (leaf) so FREESWARM_OAUTH_BASE_URL is set
 # before anything reads it; re-exported here for the route handlers below.
-from backend.apps.tools_lib.oauth_config import OPENSWARM_OAUTH_BASE_URL
+from backend.apps.tools_lib.oauth_config import FREESWARM_OAUTH_BASE_URL
 # _sanitize_server_name + derive_mcp_config re-exported for agent_manager/main.
 from backend.apps.tools_lib.mcp_config import _sanitize_server_name, derive_mcp_config
 from backend.apps.tools_lib.mcp_discovery import (
@@ -44,7 +44,10 @@ logger = logging.getLogger(__name__)
 async def tools_lib_lifespan():
     os.makedirs(DATA_DIR, exist_ok=True)
     _ensure_default_permissions()
-    _reclassify_existing_tools()
+    # Tool reclassification is a one-time migration that scans JSON files and
+    # potentially rewrites them. Fire it in the background so it doesn't delay
+    # the HTTP bind, consistent with session restore and router boot.
+    asyncio.create_task(asyncio.to_thread(_reclassify_existing_tools))
     yield
 
 
@@ -420,9 +423,9 @@ async def m365_device_login(tool_id: str):
     # Same priority as MCP-bundle / 9Router paths: bundled real node first
     # (clean, no Dock flicker, fast cold-start), then system node, then
     # Electron-as-Node as last resort.
-    bundled = os.environ.get("OPENSWARM_NODE_PATH")
+    bundled = os.environ.get("FREESWARM_NODE_PATH")
     node = shutil.which("node")
-    electron = os.environ.get("OPENSWARM_ELECTRON_PATH")
+    electron = os.environ.get("FREESWARM_ELECTRON_PATH")
     cmd = (bundled if bundled and os.path.exists(bundled) else None) or node or electron
     if not cmd:
         raise HTTPException(status_code=500, detail="No node/electron found")
@@ -587,14 +590,14 @@ async def oauth_start(tool_id: str):
         )
     from backend.config.install_id import get_install_id
     install_id = get_install_id()
-    _port = os.environ.get("OPENSWARM_PORT", "8324")
+    _port = os.environ.get("FREESWARM_PORT", "8324")
     params = {
         "install_id": install_id,
         "tool_id": tool_id,
         "local_port": _port,
     }
     auth_url = (
-        f"{OPENSWARM_OAUTH_BASE_URL}/api/oauth/{proxied}/start?"
+        f"{FREESWARM_OAUTH_BASE_URL}/api/oauth/{proxied}/start?"
         f"{urlencode(params)}"
     )
     return {"auth_url": auth_url}
@@ -616,27 +619,27 @@ async def oauth_cloud_claim(
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
-                f"{OPENSWARM_OAUTH_BASE_URL}/api/oauth/session/{session_id}/claim",
+                f"{FREESWARM_OAUTH_BASE_URL}/api/oauth/session/{session_id}/claim",
                 json={"install_id": install_id},
             )
     except Exception as e:
         logger.exception("Cloud OAuth claim threw: %s", e)
         return HTMLResponse(
             f"<html><body><h2>Connection failed</h2><pre>{e}</pre>"
-            f"<p>Please retry from OpenSwarm.</p></body></html>",
+            f"<p>Please retry from FreeSwarm.</p></body></html>",
             status_code=502,
         )
 
     if resp.status_code in (404, 410):
         return HTMLResponse(
             "<html><body><h2>Session expired</h2>"
-            "<p>Please retry from OpenSwarm.</p></body></html>",
+            "<p>Please retry from FreeSwarm.</p></body></html>",
             status_code=410,
         )
     if resp.status_code == 403:
         return HTMLResponse(
             "<html><body><h2>OAuth session not bound to this install</h2>"
-            "<p>Please retry from OpenSwarm.</p></body></html>",
+            "<p>Please retry from FreeSwarm.</p></body></html>",
             status_code=403,
         )
     if resp.status_code != 200:
@@ -680,7 +683,7 @@ async def google_oauth_token_proxy(request: Request):
     that minted the refresh_token, so a direct refresh against Google
     returns unauthorized_client. We accept the form-encoded shape,
     discard the (mismatched) local client creds, and forward the
-    refresh_token to api.openswarm.com/api/oauth/google/refresh which
+    refresh_token to api.freeswarm.myndlabs.tech/api/oauth/google/refresh which
     walks the pool to find the issuing slot. The cloud's JSON envelope
     is reshaped back to Google's native token-endpoint response so
     google-auth keeps working transparently.
@@ -697,7 +700,7 @@ async def google_oauth_token_proxy(request: Request):
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             upstream = await client.post(
-                f"{OPENSWARM_OAUTH_BASE_URL}/api/oauth/google/refresh",
+                f"{FREESWARM_OAUTH_BASE_URL}/api/oauth/google/refresh",
                 json={"refresh_token": refresh_token},
             )
     except Exception as e:

@@ -7,11 +7,11 @@ import os
 import urllib.request
 import urllib.error
 
-BACKEND_PORT = os.environ.get("OPENSWARM_PORT", "8324")
-BACKEND_AUTH = os.environ.get("OPENSWARM_AUTH_TOKEN", "")
+BACKEND_PORT = os.environ.get("FREESWARM_PORT", "8324")
+BACKEND_AUTH = os.environ.get("FREESWARM_AUTH_TOKEN", "")
 BACKEND_URL = f"http://127.0.0.1:{BACKEND_PORT}/api/invoke-agent/run"
-PARENT_SESSION_ID = os.environ.get("OPENSWARM_PARENT_SESSION_ID", "")
-DASHBOARD_ID = os.environ.get("OPENSWARM_DASHBOARD_ID", "")
+PARENT_SESSION_ID = os.environ.get("FREESWARM_PARENT_SESSION_ID", "")
+DASHBOARD_ID = os.environ.get("FREESWARM_DASHBOARD_ID", "")
 
 TOOLS = [
     {
@@ -135,7 +135,7 @@ def main():
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
                 "serverInfo": {
-                    "name": "openswarm-invoke-agent",
+                    "name": "freeswarm-invoke-agent",
                     "version": "1.0.0",
                 },
             })

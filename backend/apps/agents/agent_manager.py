@@ -285,14 +285,14 @@ class AgentManager:
 
         # If the fallback chain landed on the user's home directory (no
         # project dir, no default_folder set), re-route to a dedicated
-        # scratch workspace under ~/.openswarm/workspaces/<session_id>.
+        # scratch workspace under ~/.freeswarm/workspaces/<session_id>.
         # This prevents us from writing .git/ (or anything else) into
         # the user's $HOME and gives the CLI's Agent tool a clean repo
         # to do worktree isolation inside. Users with a default_folder
         # or target_directory set keep whatever they configured.
         _home = os.path.expanduser("~")
         if os.path.abspath(effective_cwd) == os.path.abspath(_home):
-            effective_cwd = os.path.join(_home, ".openswarm", "workspaces", session_id)
+            effective_cwd = os.path.join(_home, ".freeswarm", "workspaces", session_id)
             os.makedirs(effective_cwd, exist_ok=True)
 
         _ensure_cwd_git_repo(effective_cwd, _home)
@@ -454,8 +454,12 @@ class AgentManager:
             resolve_model_id_for_sdk as _resolve_model_id_early,
             get_api_type as _get_api_type_early,
         )
-        _router_model_id = _resolve_model_id_early(session.model, load_settings())
-        _api_type_for_session = _get_api_type_early(session.model)
+        # P10 (Tier 0): per-turn model routing. A no-op returning session.model
+        # unless the user enabled routing in its policy; never raises.
+        from backend.apps.agents.live_integration import routed_model as _routed_model
+        _turn_model = _routed_model(prompt, session.model)
+        _router_model_id = _resolve_model_id_early(_turn_model, load_settings())
+        _api_type_for_session = _get_api_type_early(_turn_model)
 
         _builtin_perms = load_builtin_permissions()
 
@@ -685,11 +689,11 @@ class AgentManager:
 
             import re as _re
 
-            bm = _re.match(r"mcp__openswarm-browser-agent__(.+)", tool_name)
+            bm = _re.match(r"mcp__freeswarm-browser-agent__(.+)", tool_name)
             if bm:
                 return _builtin_perms.get(bm.group(1), _default_for(bm.group(1)))
 
-            im = _re.match(r"mcp__openswarm-invoke-agent__(.+)", tool_name)
+            im = _re.match(r"mcp__freeswarm-invoke-agent__(.+)", tool_name)
             if im:
                 return _builtin_perms.get(im.group(1), _default_for(im.group(1)))
 
@@ -786,6 +790,10 @@ class AgentManager:
                 policy, sensitive_pattern = _maybe_override_policy(
                     _get_effective_policy(tool_name), tool_name, input_data
                 )
+                # P4 (Tier 0): declarative gate policy. Only tightens (never
+                # loosens) the resolved policy; no-op unless enforcement is on.
+                from backend.apps.agents.live_integration import gated_policy as _gated_policy
+                policy = _gated_policy(policy, tool_name, input_data)
                 if policy == "always_allow":
                     return PermissionResultAllow(updated_input=input_data)
                 if policy == "deny":
@@ -811,6 +819,9 @@ class AgentManager:
                 policy, sensitive_pattern = _maybe_override_policy(
                     _get_effective_policy(tool_name), tool_name, tool_input
                 )
+                # P4 (Tier 0): apply the declarative gate policy (tighten-only).
+                from backend.apps.agents.live_integration import gated_policy as _gated_policy
+                policy = _gated_policy(policy, tool_name, tool_input)
 
                 if policy == "deny":
                     return {
@@ -1107,7 +1118,7 @@ class AgentManager:
             try:
                 from zoneinfo import ZoneInfo
                 # Best-effort IANA name for the host. Mirrors apps/service/client.py.
-                tz_name = os.environ.get("OPENSWARM_TIMEZONE", "").strip()
+                tz_name = os.environ.get("FREESWARM_TIMEZONE", "").strip()
                 if not tz_name:
                     try:
                         from tzlocal import get_localzone_name  # type: ignore
@@ -1178,7 +1189,7 @@ class AgentManager:
                 browser_agent_server_path = os.path.join(
                     os.path.dirname(__file__), "browser_agent_mcp_server.py"
                 )
-                backend_port = os.environ.get("OPENSWARM_PORT", "8324")
+                backend_port = os.environ.get("FREESWARM_PORT", "8324")
                 # Only the card the user actually picked in select-mode gets claimed for the
                 # task, so the sub drives that one instead of opening its own duplicate. Passing
                 # EVERY dashboard card here (the old behavior) made the sub force-grab a random,
@@ -1186,16 +1197,16 @@ class AgentManager:
                 pre_selected_bids = [b for b in (selected_browser_ids or []) if b]
                 from backend.auth import get_auth_token as _get_auth_token
                 _auth_tok = _get_auth_token()
-                mcp_servers["openswarm-browser-agent"] = {
+                mcp_servers["freeswarm-browser-agent"] = {
                     "command": sys.executable,
                     "args": [browser_agent_server_path],
                     "env": {
-                        "OPENSWARM_PORT": backend_port,
-                        "OPENSWARM_AUTH_TOKEN": _auth_tok,
-                        "OPENSWARM_AGENT_MODEL": session.model,
-                        "OPENSWARM_DASHBOARD_ID": session.dashboard_id or "",
-                        "OPENSWARM_PRE_SELECTED_BROWSER_IDS": ",".join(pre_selected_bids),
-                        "OPENSWARM_PARENT_SESSION_ID": session.id,
+                        "FREESWARM_PORT": backend_port,
+                        "FREESWARM_AUTH_TOKEN": _auth_tok,
+                        "FREESWARM_AGENT_MODEL": session.model,
+                        "FREESWARM_DASHBOARD_ID": session.dashboard_id or "",
+                        "FREESWARM_PRE_SELECTED_BROWSER_IDS": ",".join(pre_selected_bids),
+                        "FREESWARM_PARENT_SESSION_ID": session.id,
                     },
                     "type": "stdio",
                 }
@@ -1210,16 +1221,16 @@ class AgentManager:
                 invoke_agent_server_path = os.path.join(
                     os.path.dirname(__file__), "invoke_agent_mcp_server.py"
                 )
-                backend_port = os.environ.get("OPENSWARM_PORT", "8324")
+                backend_port = os.environ.get("FREESWARM_PORT", "8324")
                 from backend.auth import get_auth_token as _get_auth_token2
-                mcp_servers["openswarm-invoke-agent"] = {
+                mcp_servers["freeswarm-invoke-agent"] = {
                     "command": sys.executable,
                     "args": [invoke_agent_server_path],
                     "env": {
-                        "OPENSWARM_PORT": backend_port,
-                        "OPENSWARM_AUTH_TOKEN": _get_auth_token2(),
-                        "OPENSWARM_PARENT_SESSION_ID": session.id,
-                        "OPENSWARM_DASHBOARD_ID": session.dashboard_id or "",
+                        "FREESWARM_PORT": backend_port,
+                        "FREESWARM_AUTH_TOKEN": _get_auth_token2(),
+                        "FREESWARM_PARENT_SESSION_ID": session.id,
+                        "FREESWARM_DASHBOARD_ID": session.dashboard_id or "",
                     },
                     "type": "stdio",
                 }
@@ -1233,13 +1244,13 @@ class AgentManager:
                 os.path.dirname(__file__), "mcp_meta_server.py"
             )
             from backend.auth import get_auth_token as _get_auth_token3
-            mcp_servers["openswarm-mcp-meta"] = {
+            mcp_servers["freeswarm-mcp-meta"] = {
                 "command": sys.executable,
                 "args": [mcp_meta_server_path],
                 "env": {
-                    "OPENSWARM_PORT": os.environ.get("OPENSWARM_PORT", "8324"),
-                    "OPENSWARM_AUTH_TOKEN": _get_auth_token3(),
-                    "OPENSWARM_PARENT_SESSION_ID": session.id,
+                    "FREESWARM_PORT": os.environ.get("FREESWARM_PORT", "8324"),
+                    "FREESWARM_AUTH_TOKEN": _get_auth_token3(),
+                    "FREESWARM_PARENT_SESSION_ID": session.id,
                 },
                 "type": "stdio",
             }
@@ -1254,7 +1265,7 @@ class AgentManager:
             # higher-quality so we prefer it whenever it's reachable.
             _m = _router_model_id if isinstance(_router_model_id, str) else ""
             # When the primary is non-Claude we deliberately don't count
-            # OpenSwarm Pro as an Anthropic path, using the Pro pool for
+            # FreeSwarm Pro as an Anthropic path, using the Pro pool for
             # WebSearch on a GPT/Gemini session would drain it for the
             # user's Claude turns. The user's GPT/Gemini subscription
             # serves their non-Claude turns at zero cost to us.
@@ -1268,7 +1279,7 @@ class AgentManager:
             # connection unless the user separately set up one. The CLI's
             # built-in WebSearch delegates to Anthropic Haiku, which falls
             # through 9Router to whichever connection serves anthropic/...
-            # ids, usually OpenRouter, and 401s. Force the openswarm-web
+            # ids, usually OpenRouter, and 401s. Force the freeswarm-web
             # MCP to register so WebSearch always cascades through our own
             # /api/web/search (Gemini → OpenAI → DuckDuckGo).
             _is_custom_session = _api_type_for_session == "custom"
@@ -1276,12 +1287,12 @@ class AgentManager:
             # reaches an ENTITLED Anthropic endpoint. That's true in exactly two
             # cases, mirroring the direct-Anthropic env-branch built further down:
             # a direct Anthropic api-route model (base_url = api.anthropic.com
-            # with the user's key), or OpenSwarm Pro (entitled to the managed pool
+            # with the user's key), or FreeSwarm Pro (entitled to the managed pool
             # 9Router's anthropic/* resolves to). A SUBSCRIPTION-route Claude
             # model (opus-4-8, route=None) routes the haiku call through 9Router
             # to the managed pool and 401s for non-Pro users, so a bare key in
             # settings is NOT enough; it must be a *-api route model. Everyone
-            # else registers openswarm-web and cascades through /api/web/search.
+            # else registers freeswarm-web and cascades through /api/web/search.
             from backend.apps.agents.tools.web import anthropic_web_search_is_reliable
             from backend.apps.agents.providers.registry import _find_builtin_model as _fbm_web
             _web_model_entry = _fbm_web(session.model)
@@ -1296,7 +1307,7 @@ class AgentManager:
                 and _primary_is_claude
                 and anthropic_web_search_is_reliable(
                     uses_direct_anthropic_api=_uses_direct_anthropic_api,
-                    is_pro=(getattr(global_settings, "connection_mode", "own_key") in ("openswarm-pro", "free-trial")),
+                    is_pro=(getattr(global_settings, "connection_mode", "own_key") in ("freeswarm-pro", "free-trial")),
                 )
             )
 
@@ -1314,19 +1325,19 @@ class AgentManager:
                 else:
                     _primary_hint = ""
                 from backend.auth import get_auth_token as _get_auth_token3
-                mcp_servers["openswarm-web"] = {
+                mcp_servers["freeswarm-web"] = {
                     "command": sys.executable,
                     "args": [web_mcp_server_path],
                     "env": {
-                        "OPENSWARM_PORT": backend_port,
-                        "OPENSWARM_AUTH_TOKEN": _get_auth_token3(),
-                        "OPENSWARM_PRIMARY_API": _primary_hint,
+                        "FREESWARM_PORT": backend_port,
+                        "FREESWARM_AUTH_TOKEN": _get_auth_token3(),
+                        "FREESWARM_PRIMARY_API": _primary_hint,
                     },
                     "type": "stdio",
                 }
                 logger.info(
                     f"[MCP-DEBUG] Primary {_m} has no reliable native web search, "
-                    f"registering openswarm-web (DDG search + trafilatura fetch, free)"
+                    f"registering freeswarm-web (DDG search + trafilatura fetch, free)"
                 )
 
             effective_allowed = [
@@ -1342,25 +1353,25 @@ class AgentManager:
             if mcp_servers:
                 all_tools_list = load_all_tools()
                 for name in mcp_servers:
-                    if name == "openswarm-browser-agent":
+                    if name == "freeswarm-browser-agent":
                         for bt in _browser_delegation_tools:
                             policy = _builtin_perms.get(bt, "always_allow")
                             if policy == "always_allow":
-                                effective_allowed.append(f"mcp__openswarm-browser-agent__{bt}")
+                                effective_allowed.append(f"mcp__freeswarm-browser-agent__{bt}")
                             elif policy == "deny":
-                                effective_disallowed.append(f"mcp__openswarm-browser-agent__{bt}")
+                                effective_disallowed.append(f"mcp__freeswarm-browser-agent__{bt}")
                         continue
 
-                    if name == "openswarm-invoke-agent":
+                    if name == "freeswarm-invoke-agent":
                         for it in _invoke_agent_tools:
                             policy = _builtin_perms.get(it, "always_allow")
                             if policy == "always_allow":
-                                effective_allowed.append(f"mcp__openswarm-invoke-agent__{it}")
+                                effective_allowed.append(f"mcp__freeswarm-invoke-agent__{it}")
                             elif policy == "deny":
-                                effective_disallowed.append(f"mcp__openswarm-invoke-agent__{it}")
+                                effective_disallowed.append(f"mcp__freeswarm-invoke-agent__{it}")
                         continue
 
-                    if name == "openswarm-web":
+                    if name == "freeswarm-web":
                         # Expose our DDG-backed web tools under an MCP prefix.
                         # Honor existing WebSearch/WebFetch permission policy
                         #, if the user disabled them in Settings, don't offer
@@ -1368,9 +1379,9 @@ class AgentManager:
                         for wt in ("WebSearch", "WebFetch"):
                             policy = _builtin_perms.get(wt, "always_allow")
                             if policy == "always_allow":
-                                effective_allowed.append(f"mcp__openswarm-web__{wt}")
+                                effective_allowed.append(f"mcp__freeswarm-web__{wt}")
                             elif policy == "deny":
-                                effective_disallowed.append(f"mcp__openswarm-web__{wt}")
+                                effective_disallowed.append(f"mcp__freeswarm-web__{wt}")
                         continue
 
                     tool_def = next(
@@ -1390,7 +1401,7 @@ class AgentManager:
                     else:
                         effective_allowed.append(f"mcp__{name}__*")
 
-            # If the openswarm-web MCP was registered, the CLI's built-in
+            # If the freeswarm-web MCP was registered, the CLI's built-in
             # WebSearch/WebFetch are guaranteed to fail (no Anthropic
             # backend). Suppress them so the model picks our MCP variants
             # and doesn't waste a turn on a broken tool.
@@ -1413,8 +1424,8 @@ class AgentManager:
             # the same gate the MCP allowlist uses, so disabling WebSearch in
             # Settings still wins.
             _web_tools_available = _need_web_mcp and (
-                "mcp__openswarm-web__WebSearch" in effective_allowed
-                or "mcp__openswarm-web__WebFetch" in effective_allowed
+                "mcp__freeswarm-web__WebSearch" in effective_allowed
+                or "mcp__freeswarm-web__WebFetch" in effective_allowed
             )
             if _web_tools_available:
                 _hint_lines = ["<web_tools>"]
@@ -1425,14 +1436,14 @@ class AgentManager:
                     "equivalents instead, call them DIRECTLY, no ToolSearch "
                     "step needed:"
                 )
-                if "mcp__openswarm-web__WebSearch" in effective_allowed:
+                if "mcp__freeswarm-web__WebSearch" in effective_allowed:
                     _hint_lines.append(
-                        "- `mcp__openswarm-web__WebSearch(query: str, "
+                        "- `mcp__freeswarm-web__WebSearch(query: str, "
                         "num_results?: int)`, DuckDuckGo search."
                     )
-                if "mcp__openswarm-web__WebFetch" in effective_allowed:
+                if "mcp__freeswarm-web__WebFetch" in effective_allowed:
                     _hint_lines.append(
-                        "- `mcp__openswarm-web__WebFetch(url: str, prompt?: "
+                        "- `mcp__freeswarm-web__WebFetch(url: str, prompt?: "
                         "str)`, fetch a URL and return readable text."
                     )
                 _hint_lines.append(
@@ -1465,7 +1476,7 @@ class AgentManager:
 
             # Capture the Claude CLI's stderr into a buffer so the retry
             # classifier can see the real cause of a process crash (e.g.
-            # "No pool capacity available" from the OpenSwarm proxy, or the
+            # "No pool capacity available" from the FreeSwarm proxy, or the
             # Anthropic SDK's 429/overloaded error body). Without this the
             # SDK's ProcessError only stringifies to "Command failed with
             # exit code 1 / Check stderr output for details", which masks
@@ -1536,7 +1547,7 @@ class AgentManager:
                 # of bumping. Pre-fix: every gpt-5.* / gpt-5.* own-key
                 # session 400'd silently.
                 from backend.auth import get_auth_token as _get_auth_token_o
-                _passthrough_url = f"http://127.0.0.1:{os.environ.get('OPENSWARM_PORT', '8324')}/api/openai-passthrough/v1"
+                _passthrough_url = f"http://127.0.0.1:{os.environ.get('FREESWARM_PORT', '8324')}/api/openai-passthrough/v1"
                 options_kwargs["env"] = {
                     "OPENAI_API_KEY": global_settings.openai_api_key,
                     "OPENAI_BASE_URL": _passthrough_url,
@@ -1595,7 +1606,7 @@ class AgentManager:
                 # JSON-Schema fields Gemini's API rejects ($schema, additionalProperties,
                 # propertyNames, exclusiveMinimum, nested const) that 9Router 0.3.60 misses.
                 from backend.auth import get_auth_token as _get_auth_token_g
-                _proxy_url = f"http://127.0.0.1:{os.environ.get('OPENSWARM_PORT', '8324')}/api/anthropic-proxy"
+                _proxy_url = f"http://127.0.0.1:{os.environ.get('FREESWARM_PORT', '8324')}/api/anthropic-proxy"
                 options_kwargs["env"] = {
                     "GEMINI_API_KEY": global_settings.google_api_key,
                     "GOOGLE_API_KEY": global_settings.google_api_key,
@@ -1636,7 +1647,7 @@ class AgentManager:
                 env["ENABLE_TOOL_SEARCH"] = "auto"
                 options_kwargs["env"] = env
                 logger.info(f"[MCP-DEBUG] Using OpenRouter for {session.model}")
-            elif api_type == "anthropic" and not resolved_is_9router and getattr(global_settings, "connection_mode", "own_key") in ("openswarm-pro", "free-trial"):
+            elif api_type == "anthropic" and not resolved_is_9router and getattr(global_settings, "connection_mode", "own_key") in ("freeswarm-pro", "free-trial"):
                 from backend.apps.settings.credentials import proxy_auth
                 bearer, proxy_url = proxy_auth(global_settings)
                 bearer = bearer or ""
@@ -1663,7 +1674,7 @@ class AgentManager:
                     # The cloud serves every free run as Haiku, so keep the subagent on Haiku too:
                     # a sonnet subagent makes the CLI attach `effort`, which Haiku 400s on.
                     options_kwargs["env"]["CLAUDE_CODE_SUBAGENT_MODEL"] = "claude-haiku-4-5-20251001"
-                logger.info(f"[MCP-DEBUG] Using OpenSwarm cloud proxy at {proxy_url}")
+                logger.info(f"[MCP-DEBUG] Using FreeSwarm cloud proxy at {proxy_url}")
             elif api_type == "anthropic" and not resolved_is_9router and global_settings.anthropic_api_key:
                 options_kwargs["env"] = {"ANTHROPIC_API_KEY": global_settings.anthropic_api_key}
                 logger.info("[MCP-DEBUG] Using direct Anthropic API key")
@@ -1676,7 +1687,7 @@ class AgentManager:
                 )
                 if _is_gemini_bound:
                     from backend.auth import get_auth_token as _get_auth_token_g2
-                    _base_url = f"http://127.0.0.1:{os.environ.get('OPENSWARM_PORT', '8324')}/api/anthropic-proxy"
+                    _base_url = f"http://127.0.0.1:{os.environ.get('FREESWARM_PORT', '8324')}/api/anthropic-proxy"
                     env = {
                         "ANTHROPIC_API_KEY": _get_auth_token_g2() or "9router",
                         "ANTHROPIC_BASE_URL": _base_url,
@@ -1778,7 +1789,7 @@ class AgentManager:
 
             # The claude_code preset auto-attaches the user's claude.ai-
             # connected partner MCPs (`mcp__claude_ai_*`). Those bypass our
-            # MCPActivate gate, don't share OAuth state with the OpenSwarm
+            # MCPActivate gate, don't share OAuth state with the FreeSwarm
             # Gmail/Calendar/Drive connectors the user actually configured
             # here, and confuse the model into picking the partner shim
             # instead of our vetted server. Hard-block them at the SDK
@@ -2817,6 +2828,17 @@ class AgentManager:
                                 "session_id": session_id,
                                 "cost_usd": session.cost_usd,
                             })
+                            # F4/F6 producer: record this turn's spend to the
+                            # cloud cost ledger. Fire-and-forget, never raises.
+                            try:
+                                from backend.apps.telemetry import emitter as _telemetry
+                                _telemetry.emit_turn_cost(
+                                    session_id, session.model,
+                                    getattr(session, "provider", "anthropic"),
+                                    session.cost_usd, total_input, out,
+                                )
+                            except Exception:
+                                pass
 
                         if isinstance(usage, dict):
                             # Per-turn context-usage broadcast. Drives the UI
@@ -3020,7 +3042,7 @@ class AgentManager:
                 friendly_msg = (
                     "You've used your free runs. Connect a model to keep going: "
                     "your own API key, an AI subscription you already pay for, or "
-                    "OpenSwarm Pro."
+                    "FreeSwarm Pro."
                 )
                 error_msg = Message(role="system", content=friendly_msg, branch_id=session.active_branch_id)
                 session.messages.append(error_msg)
@@ -3038,7 +3060,7 @@ class AgentManager:
                 #      -cc route but doesn't have Claude Pro/Max connected
                 #      via 9Router. Tell them to either connect Claude
                 #      Pro/Max OR pick a non--cc model.
-                #   2. OpenSwarm Pro 401, bearer expired. Reconnect.
+                #   2. FreeSwarm Pro 401, bearer expired. Reconnect.
                 #   3. Anthropic API key 401, wrong key. Re-enter.
                 _model = (session.model or "").lower()
                 _combined = f"{e!s}\n{_stderr_tail}".lower()
@@ -3068,16 +3090,16 @@ class AgentManager:
                     reason = "claude_sub_not_connected"
                 elif (
                     "-cc" not in _model
-                    and getattr(load_settings(), "connection_mode", "own_key") == "openswarm-pro"
+                    and getattr(load_settings(), "connection_mode", "own_key") == "freeswarm-pro"
                 ):
                     friendly_msg = (
-                        "OpenSwarm Pro authentication failed. Your subscription "
+                        "FreeSwarm Pro authentication failed. Your subscription "
                         "token may have expired even though the connection still "
                         "shows green. Open Settings → Models and click "
                         "Disconnect / Reconnect on Claude Pro / Max to refresh "
                         "the token."
                     )
-                    reason = "openswarm_pro_auth_expired"
+                    reason = "freeswarm_pro_auth_expired"
                 else:
                     friendly_msg = (
                         "Anthropic authentication failed. The API key or "
@@ -3488,7 +3510,7 @@ class AgentManager:
         # tool_result pair (same shape + mcp__ name the orchestrator uses) so the bubble
         # shows here too. None until we actually dispatch a browser (a pure READ answer
         # has no browser, so no bubble).
-        _BROWSER_TOOL = "mcp__openswarm-browser-agent__CreateBrowserAgent"
+        _BROWSER_TOOL = "mcp__freeswarm-browser-agent__CreateBrowserAgent"
         _bubble_tid = None
         try:
             from backend.apps.agents.browser.browser_agent import run_browser_agents
@@ -4236,7 +4258,12 @@ class AgentManager:
 
     async def reconcile_on_startup(self) -> None:
         """Mark any stale running sessions as stopped."""
-        for sid, data in _load_all_session_data():
+        # Reading every session file is synchronous disk I/O that scales with
+        # history size; do it off the event loop so the HTTP health check stays
+        # responsive during boot on a heavy install.
+        all_data = await asyncio.to_thread(_load_all_session_data)
+        for sid, data in all_data:
+            await asyncio.sleep(0)
             dirty = False
             if data.get("status") in ("running", "waiting_approval"):
                 data["status"] = "stopped"
@@ -4277,7 +4304,11 @@ class AgentManager:
         shutdown).  Sessions with closed_at were explicitly closed by the user
         and stay on disk so the history endpoint can still serve them.
         """
-        for sid, data in _load_all_session_data():
+        # Off the event loop: see reconcile_on_startup. Parsing each session
+        # into a pydantic model is also non-trivial, so yield between sessions.
+        all_data = await asyncio.to_thread(_load_all_session_data)
+        for sid, data in all_data:
+            await asyncio.sleep(0)
             try:
                 session = AgentSession(**data)
             except Exception as e:

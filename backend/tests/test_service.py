@@ -24,7 +24,7 @@ from unittest.mock import patch
 import pytest
 
 _tmpdir = tempfile.mkdtemp()
-os.environ.setdefault("OPENSWARM_DATA_DIR", _tmpdir)
+os.environ.setdefault("FREESWARM_DATA_DIR", _tmpdir)
 
 
 @pytest.fixture(autouse=True)

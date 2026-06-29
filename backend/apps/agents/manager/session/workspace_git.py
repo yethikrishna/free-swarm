@@ -35,7 +35,7 @@ def _ensure_cwd_git_repo(cwd: str, home: str | None = None) -> None:
         # Case A: cwd is inside some git repo (possibly parent). Verify
         # HEAD resolves. If the enclosing repo is broken (e.g. a stray
         # `.git` in $HOME with no commits, which makes workspaces
-        # under ~/.openswarm/workspaces/ inherit a broken HEAD), we
+        # under ~/.freeswarm/workspaces/ inherit a broken HEAD), we
         # need to init a fresh repo AT cwd so it shadows the parent.
         _inside = _sp_git.run(
             ["git", "rev-parse", "--is-inside-work-tree"],
@@ -55,9 +55,9 @@ def _ensure_cwd_git_repo(cwd: str, home: str | None = None) -> None:
             if os.path.isdir(os.path.join(cwd, ".git")):
                 # .git is directly here, commit to fix it.
                 _sp_git.run(
-                    ["git", "-c", "user.email=openswarm@local",
-                     "-c", "user.name=OpenSwarm",
-                     "commit", "--allow-empty", "-q", "-m", "openswarm init"],
+                    ["git", "-c", "user.email=freeswarm@local",
+                     "-c", "user.name=FreeSwarm",
+                     "commit", "--allow-empty", "-q", "-m", "freeswarm init"],
                     cwd=cwd,
                     stdout=_sp_git.DEVNULL, stderr=_sp_git.DEVNULL, timeout=10,
                 )
@@ -74,9 +74,9 @@ def _ensure_cwd_git_repo(cwd: str, home: str | None = None) -> None:
             stdout=_sp_git.DEVNULL, stderr=_sp_git.DEVNULL, timeout=10,
         )
         _sp_git.run(
-            ["git", "-c", "user.email=openswarm@local",
-             "-c", "user.name=OpenSwarm",
-             "commit", "--allow-empty", "-q", "-m", "openswarm init"],
+            ["git", "-c", "user.email=freeswarm@local",
+             "-c", "user.name=FreeSwarm",
+             "commit", "--allow-empty", "-q", "-m", "freeswarm init"],
             cwd=cwd,
             stdout=_sp_git.DEVNULL, stderr=_sp_git.DEVNULL, timeout=10,
         )

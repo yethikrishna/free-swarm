@@ -196,13 +196,13 @@ class AppRuntime:
         bp_raw = _read_env_value(env_path, "BACKEND_PORT")
         # FRONTEND_PORT is allocated by seed_workspace; should always be
         # a number. If missing, fall back to a fresh allocation (rare
-        # edge case: workspace seeded by an older OpenSwarm).
+        # edge case: workspace seeded by an older FreeSwarm).
         try:
             self.frontend_port = int(fp_raw) if fp_raw else _find_free_port()
         except ValueError:
             self.frontend_port = _find_free_port()
         # Port-collision safety net: if a ghost subprocess from a prior
-        # OpenSwarm run is still bound to the persisted port (force-quit,
+        # FreeSwarm run is still bound to the persisted port (force-quit,
         # crash, OS killed the parent before stop_all could reap), Vite
         # would EADDRINUSE silently. Re-probe and reallocate, then rewrite
         # .env so the bash run.sh subprocess reads the new port.
@@ -247,8 +247,8 @@ class AppRuntime:
             _DEBUGGER_PATH,
             _TEMPLATE_BACKEND_PATH,
         )
-        env["OPENSWARM_DEBUGGER_PATH"] = _DEBUGGER_PATH
-        env["OPENSWARM_TEMPLATE_BACKEND_PATH"] = _TEMPLATE_BACKEND_PATH
+        env["FREESWARM_DEBUGGER_PATH"] = _DEBUGGER_PATH
+        env["FREESWARM_TEMPLATE_BACKEND_PATH"] = _TEMPLATE_BACKEND_PATH
 
         try:
             self.process = await asyncio.create_subprocess_exec(
@@ -391,14 +391,14 @@ class AppRuntime:
         """Inherited env minus the install token. Backend.py can hit our
         REST API back via its own creds if it really needs to, but it
         shouldn't inherit the host process's token by default."""
-        env = {k: v for k, v in os.environ.items() if k != "OPENSWARM_AUTH_TOKEN"}
+        env = {k: v for k, v in os.environ.items() if k != "FREESWARM_AUTH_TOKEN"}
         # Hand the workspace's backend/run.sh the exact interpreter we're
         # running on. In the packaged build that's the bundled standalone
         # Python, so a fresh machine with no system `python3` still works;
-        # in dev it's whatever launched uvicorn. OPENSWARM_NODE_PATH already
+        # in dev it's whatever launched uvicorn. FREESWARM_NODE_PATH already
         # rides in via os.environ (set by the Electron shell) for run.sh's
         # Node resolution.
-        env["OPENSWARM_PYTHON"] = sys.executable
+        env["FREESWARM_PYTHON"] = sys.executable
         return env
 
     async def stop(self) -> None:
@@ -652,7 +652,7 @@ class AppRuntimeManager:
         FastAPI lifespan shutdown AND from Electron's pre-quit POST. Without
         this, each `bash run.sh` (and its vite/uvicorn descendants) reparents
         to PID 1 when the main backend dies, leaving ghost listeners on the
-        persisted FRONTEND_PORT/BACKEND_PORT that block the NEXT OpenSwarm
+        persisted FRONTEND_PORT/BACKEND_PORT that block the NEXT FreeSwarm
         launch's app reload. Wakes any SIGSTOP'd idle entries before reaping
         so they can run their own shutdown. Parallel via gather; with the
         per-runtime 3s SIGTERM grace, worst case is one ~3s wait rather than

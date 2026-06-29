@@ -98,7 +98,7 @@ class OnboardingDirector {
         controller.abort();
       }
     };
-    window.addEventListener('openswarm:onboarding:lost_target', onLost);
+    window.addEventListener('freeswarm:onboarding:lost_target', onLost);
     window.addEventListener('hashchange', onRouteChange);
 
     try {
@@ -113,7 +113,7 @@ class OnboardingDirector {
         isDependencySatisfied: this.isDependencySatisfied,
       });
     } finally {
-      window.removeEventListener('openswarm:onboarding:lost_target', onLost);
+      window.removeEventListener('freeswarm:onboarding:lost_target', onLost);
       window.removeEventListener('hashchange', onRouteChange);
       if (this.currentAbort === controller) {
         this.currentAbort = null;

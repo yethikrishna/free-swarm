@@ -20,7 +20,7 @@ Full precedences live in root [CLAUDE.md](../.claude/CLAUDE.md). Always: **under
   - `mcp_meta_server.py`, `mcp_registry.py`: MCP discovery + registry.
   - `9router_gpt5_patch.js`: patch loaded into 9router to translate OpenAI `max_tokens` semantics.
 - `apps/nine_router.py`: supervises the 9router subprocess on `:20128`.
-- `apps/subscription/router.py`: OAuth + Stripe callbacks for openswarm-pro signup.
+- `apps/subscription/router.py`: OAuth + Stripe callbacks for freeswarm-pro signup.
 - `apps/outputs/`: view renderer (HTML/JS/CSS iframes, sandboxed Python execution).
 - `auth.py`: per-install bearer token. **Generated BEFORE the HTTP bind** so the Electron shell can read it from disk; don't reorder.
 

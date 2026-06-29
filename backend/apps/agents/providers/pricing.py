@@ -347,8 +347,8 @@ def compute_billing_kind(
     if (
         api == "anthropic"
         and route is None
-        and getattr(settings, "connection_mode", "own_key") == "openswarm-pro"
-        and getattr(settings, "openswarm_bearer_token", None)
+        and getattr(settings, "connection_mode", "own_key") == "freeswarm-pro"
+        and getattr(settings, "freeswarm_bearer_token", None)
     ):
         return "subscription"
     if route == "api":

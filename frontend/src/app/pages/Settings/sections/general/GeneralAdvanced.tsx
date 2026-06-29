@@ -28,7 +28,7 @@ const GeneralAdvanced: React.FC<{
   // / web (no Electron bridge or unknown sha), in which case we hide the row.
   const [buildLabel, setBuildLabel] = React.useState<string | null>(null);
   React.useEffect(() => {
-    const api = (window as { openswarm?: { getBuildInfo?: () => Promise<{ shortSha: string; channel: string }> } }).openswarm;
+    const api = (window as { freeswarm?: { getBuildInfo?: () => Promise<{ shortSha: string; channel: string }> } }).freeswarm;
     api?.getBuildInfo?.()
       .then((b) => { if (b?.shortSha && b.shortSha !== 'unknown') setBuildLabel(`${b.shortSha} (${b.channel})`); })
       .catch(() => {});
@@ -53,7 +53,7 @@ const GeneralAdvanced: React.FC<{
         />
       </Box>
 
-      <Box sx={inlineRowLastSx}>
+      <Box sx={inlineRowSx}>
         <Box sx={{ mr: 3 }}>
           <Typography sx={labelSx}>Experimental updates</Typography>
           <Typography sx={descSx}>Receive pre-release builds with new features earlier. These versions may be less stable than normal releases.</Typography>
@@ -61,6 +61,21 @@ const GeneralAdvanced: React.FC<{
         <Switch
           checked={form.allow_experimental_updates}
           onChange={(e) => setForm({ ...form, allow_experimental_updates: e.target.checked })}
+          sx={{
+            '& .MuiSwitch-switchBase.Mui-checked': { color: c.accent.primary },
+            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: c.accent.primary },
+          }}
+        />
+      </Box>
+
+      <Box sx={inlineRowLastSx}>
+        <Box sx={{ mr: 3 }}>
+          <Typography sx={labelSx}>Track reasoning tokens</Typography>
+          <Typography sx={descSx}>Enable tracking of extended thinking token usage from 9Router. Useful for understanding model performance and costs.</Typography>
+        </Box>
+        <Switch
+          checked={form.track_reasoning_tokens ?? false}
+          onChange={(e) => setForm({ ...form, track_reasoning_tokens: e.target.checked })}
           sx={{
             '& .MuiSwitch-switchBase.Mui-checked': { color: c.accent.primary },
             '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: c.accent.primary },
@@ -112,7 +127,7 @@ const GeneralAdvanced: React.FC<{
           onClick={() => {
             report('onboarding_v2', 'tour_restarted');
             try {
-              window.localStorage.removeItem('openswarm.onboarding.v2');
+              window.localStorage.removeItem('freeswarm.onboarding.v2');
             } catch { /* ignore */ }
             dispatch(resetTour());
             dispatch(closeSettingsModal());

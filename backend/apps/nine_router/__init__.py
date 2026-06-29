@@ -1,7 +1,7 @@
 """Auto-start and manage the 9Router subprocess.
 
 9Router is a free AI subscription proxy that lets users connect their
-Claude/ChatGPT/Gemini subscriptions to OpenSwarm without API keys. It runs
+Claude/ChatGPT/Gemini subscriptions to FreeSwarm without API keys. It runs
 silently on port 20128 and exposes an OpenAI-compatible API at
 localhost:20128/v1.
 
@@ -12,7 +12,7 @@ the re-exports below.
 - process.py: subprocess lifecycle (the single owner of the process handle),
   constants, ports/URLs, the pinned NPM version, path resolution, stats.
 - sync.py: Gemini/OpenAI/OpenRouter API-key sync.
-- sync_custom.py: custom OpenAI-compatible provider + OpenSwarm Pro sync.
+- sync_custom.py: custom OpenAI-compatible provider + FreeSwarm Pro sync.
 - oauth.py: OAuth start/poll/exchange + the Codex 1455 callback listener.
 """
 
@@ -45,7 +45,7 @@ from .sync_custom import (
     NINE_ROUTER_CUSTOM_NAME_SUFFIX,
     normalize_openai_compat_base_url,
     sync_custom_providers,
-    sync_openswarm_pro_as_claude,
+    sync_freeswarm_pro_as_claude,
     sync_pro_routing,
 )
 from .oauth import (
@@ -81,7 +81,7 @@ __all__ = [
     "sync_openai_api_key",
     "sync_openrouter_api_key",
     "sync_custom_providers",
-    "sync_openswarm_pro_as_claude",
+    "sync_freeswarm_pro_as_claude",
     "sync_pro_routing",
     "normalize_openai_compat_base_url",
 ]

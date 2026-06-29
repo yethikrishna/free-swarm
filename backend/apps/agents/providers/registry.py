@@ -67,9 +67,7 @@ BUILTIN_MODELS: dict[str, list[dict[str, Any]]] = {
          "model_id": "claude-haiku-4-5", "router_model_id": "cc/claude-haiku-4-5-20251001", "api": "anthropic", "reasoning": True, "route": "cc"},
 
         # Fable 5 (released 2026-05-28): new flagship tier ABOVE Opus, 1M ctx,
-        # 128k out, $10/$50. The cc/ sub row is on trial: brand-new ids have 404'd
-        # our pinned 9Router 0.3.60 before (GPT-5.5's cx entry did) and Claude-sub
-        # serving of Fable is unverified, so pull this row if it errors live.
+        # 128k out, $10/$50. Available via cc/ subscription route on FreeSwarm Router fork.
         {"value": "fable-5-cc", "label": "Claude Fable 5", "context_window": 1_000_000,
          "model_id": "claude-fable-5", "router_model_id": "cc/claude-fable-5", "api": "anthropic", "reasoning": True, "route": "cc"},
         {"value": "fable-5-api", "label": "Claude Fable 5 (API key)", "context_window": 1_000_000,
@@ -87,7 +85,7 @@ BUILTIN_MODELS: dict[str, list[dict[str, Any]]] = {
     ],
 
     "OpenAI": [
-        # GPT-5.5 cx/ entry 404s on 9Router 0.3.60 (our pin); API-key route below works.
+        # GPT-5.5: now available via cx/ Codex subscription route on FreeSwarm Router fork.
         {"value": "gpt-5.5", "label": "GPT-5.5",
          "context_window": 1_000_000, "router_model_id": "cx/gpt-5.5",
          "api": "codex", "subscription_only": True, "reasoning": True},
@@ -122,12 +120,11 @@ BUILTIN_MODELS: dict[str, list[dict[str, Any]]] = {
     # but tools and thinking work). 3-pro / 3-flash route via Antigravity when
     # the AG OAuth lane is active; gc/ otherwise.
     "Google": [
-        # Gemini 3.5 Flash (GA 2026-05-19) is offered on the API-key route ONLY (see
-        # the api entry below). Its gc/ subscription entry was pulled because the
-        # pinned 9Router 0.3.60 registry has no gemini-3.5-flash and the gc/ route
-        # allowlists (every other shipped Gemini sub model IS in 0.3.60), so gc/
-        # gemini-3.5-flash would 404. Re-add the gc/ entry once 9Router is bumped
-        # past 0.3.60 (gated by the WebSearch-translation regression; see CLAUDE.md).
+        # Gemini 3.5 Flash (GA 2026-05-19) is now available via gc/ subscription route
+        # on FreeSwarm Router fork (previously unavailable on pinned 0.3.60).
+        {"value": "gemini-3.5-flash", "label": "Gemini 3.5 Flash",
+         "context_window": 1_000_000, "router_model_id": "gc/gemini-3.5-flash",
+         "api": "gemini-cli", "subscription_only": True, "reasoning": False},
         {"value": "gemini-3.1-pro", "label": "Gemini 3.1 Pro",
          "context_window": 1_000_000, "router_model_id": "gc/gemini-3.1-pro-preview",
          "api": "gemini-cli", "subscription_only": True, "reasoning": True},
@@ -237,7 +234,23 @@ def get_api_type(short_name: str) -> str:
 
 
 def resolve_model_id_for_sdk(short_name: str, settings: AppSettings) -> str:
-    """Short model name → id string for ClaudeAgentOptions."""
+    """Short model name → id string for ClaudeAgentOptions.
+
+    Handles combo:// prefixed names by returning the first model in the combo.
+    """
+    # Handle model combos (fallback stacks)
+    if short_name.startswith("combo://"):
+        combo_id = short_name[8:]
+        combos = getattr(settings, "model_combos", None) or []
+        for combo in combos:
+            if combo.get("id") == combo_id and combo.get("model_ids"):
+                # Return the first model in the combo; actual fallback logic
+                # (trying subsequent models if the first is unavailable) is
+                # handled elsewhere if needed, for now just use the first.
+                return str(combo["model_ids"][0])
+        # Fallback if combo not found
+        return short_name
+
     entry = _find_builtin_model(short_name)
     if entry is None:
         return short_name
@@ -248,11 +261,11 @@ def resolve_model_id_for_sdk(short_name: str, settings: AppSettings) -> str:
     if entry.get("route") == "openrouter":
         return entry.get("router_model_id", short_name)
     if entry.get("api") == "anthropic":
-        # openswarm-pro AND free-trial both proxy-route, so resolve to the bare
+        # freeswarm-pro AND free-trial both proxy-route, so resolve to the bare
         # id (the proxy serves it) instead of the cc/-prefixed id that 401s when
         # no Claude subscription is connected. This is the line that otherwise
         # turns a free-trial user's first run into "No AI provider connected".
-        if getattr(settings, "connection_mode", "own_key") in ("openswarm-pro", "free-trial"):
+        if getattr(settings, "connection_mode", "own_key") in ("freeswarm-pro", "free-trial"):
             return entry.get("model_id", short_name)
         if getattr(settings, "anthropic_api_key", None):
             return entry.get("model_id", short_name)
@@ -341,7 +354,7 @@ async def resolve_aux_model(
         if "openrouter" in connected:
             return (or_aux, base_url)
 
-    if getattr(settings, "connection_mode", "own_key") in ("openswarm-pro", "free-trial"):
+    if getattr(settings, "connection_mode", "own_key") in ("freeswarm-pro", "free-trial"):
         from backend.apps.settings.credentials import proxy_auth
         token, base = proxy_auth(settings)
         if token:

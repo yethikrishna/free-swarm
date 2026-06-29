@@ -4,7 +4,7 @@ The 401 'Invalid bearer token (reset after ~2m)' comes from the CLI's built-in
 WebSearch firing an aux `claude-haiku` call. That call only authenticates when it
 reaches an entitled Anthropic endpoint:
   - a DIRECT anthropic api-route model (base_url = api.anthropic.com, user's key), or
-  - OpenSwarm Pro (entitled to the managed pool 9Router's anthropic/* resolves to).
+  - FreeSwarm Pro (entitled to the managed pool 9Router's anthropic/* resolves to).
 
 A SUBSCRIPTION-route Claude model (opus-4-8, route=None) sends the haiku call
 through 9Router to the managed pool, which 401s for non-Pro users, so a bare
@@ -20,7 +20,7 @@ def test_direct_anthropic_api_route_is_reliable():
     assert ok(uses_direct_anthropic_api=True, is_pro=False) is True
 
 
-def test_openswarm_pro_is_reliable():
+def test_freeswarm_pro_is_reliable():
     assert ok(uses_direct_anthropic_api=False, is_pro=True) is True
 
 

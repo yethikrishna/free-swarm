@@ -319,7 +319,7 @@ def _pick_upstream(model: str) -> tuple[str, dict[str, str]]:
     """Return (base_url_without_v1, auth_headers) for this model.
 
     Routing for Claude-family models:
-      1. openswarm-pro mode → cloud proxy with bearer
+      1. freeswarm-pro mode → cloud proxy with bearer
       2. Direct Anthropic API key set → api.anthropic.com (preferred when
          user has their own key, avoids the 8h OAuth expiry pain)
       3. Fallback → 9router (cc/ OAuth subscription, may 401 if expired)
@@ -328,9 +328,9 @@ def _pick_upstream(model: str) -> tuple[str, dict[str, str]]:
     s = load_settings()
 
     if _is_claude_model(model):
-        if getattr(s, "connection_mode", "own_key") == "openswarm-pro":
-            bearer = getattr(s, "openswarm_bearer_token", "") or ""
-            proxy = (getattr(s, "openswarm_proxy_url", "") or "https://api.openswarm.com").rstrip("/")
+        if getattr(s, "connection_mode", "own_key") == "freeswarm-pro":
+            bearer = getattr(s, "freeswarm_bearer_token", "") or ""
+            proxy = (getattr(s, "freeswarm_proxy_url", "") or "https://api.freeswarm.myndlabs.tech").rstrip("/")
             if bearer and proxy:
                 return (proxy, {"Authorization": f"Bearer {bearer}"})
         ak = getattr(s, "anthropic_api_key", "") or ""

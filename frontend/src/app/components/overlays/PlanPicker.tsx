@@ -10,14 +10,14 @@ import { report } from '@/shared/serviceClient';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import {
   subscribeToPlan,
-  OpenSwarmPlan,
+  FreeSwarmPlan,
   BillingInterval,
   CheckoutSource,
 } from '@/shared/subscription/checkout';
 
-// Pricing table; keep in sync with Stripe price IDs on api.openswarm.com.
+// Pricing table; keep in sync with Stripe price IDs on api.freeswarm.myndlabs.tech.
 interface PlanDef {
-  id: OpenSwarmPlan;
+  id: FreeSwarmPlan;
   name: string;
   tagline: string;
   monthly: number;
@@ -74,21 +74,21 @@ const PLANS: PlanDef[] = [
 
 interface PlanPickerProps {
   source: CheckoutSource;
-  defaultPlan?: OpenSwarmPlan;
+  defaultPlan?: FreeSwarmPlan;
   defaultInterval?: BillingInterval;
   compact?: boolean;
   /** User's current tier; drives Resubscribe/Upgrade/Downgrade CTA copy. */
-  currentPlan?: OpenSwarmPlan;
-  onSubscribed?: (plan: OpenSwarmPlan) => void;
+  currentPlan?: FreeSwarmPlan;
+  onSubscribed?: (plan: FreeSwarmPlan) => void;
 }
 
-const TIER_RANK: Record<OpenSwarmPlan, number> = {
+const TIER_RANK: Record<FreeSwarmPlan, number> = {
   pro: 1,
   pro_plus: 2,
   ultra: 3,
 };
 
-function ctaLabel(cardId: OpenSwarmPlan, cardName: string, currentPlan?: OpenSwarmPlan): string {
+function ctaLabel(cardId: FreeSwarmPlan, cardName: string, currentPlan?: FreeSwarmPlan): string {
   if (!currentPlan) return `Subscribe to ${cardName}`;
   if (currentPlan === cardId) return `Resubscribe to ${cardName}`;
   return TIER_RANK[cardId] > TIER_RANK[currentPlan]
@@ -106,13 +106,13 @@ const PlanPicker: React.FC<PlanPickerProps> = ({
 }) => {
   const c = useClaudeTokens();
   const [interval, setInterval] = useState<BillingInterval>(defaultInterval);
-  const [pending, setPending] = useState<OpenSwarmPlan | null>(null);
+  const [pending, setPending] = useState<FreeSwarmPlan | null>(null);
 
   React.useEffect(() => {
     report('subscription', 'plan_picker_opened', { source, default_plan: defaultPlan ?? 'pro_plus' });
   }, [source, defaultPlan]);
 
-  const handleSubscribe = async (plan: OpenSwarmPlan) => {
+  const handleSubscribe = async (plan: FreeSwarmPlan) => {
     setPending(plan);
     try {
       await subscribeToPlan(plan, interval, source, { wasSubscribed: !!currentPlan });
@@ -306,7 +306,7 @@ const PlanPicker: React.FC<PlanPickerProps> = ({
         }}
       >
         *Usage limits apply. Prices shown don't include applicable tax.
-        {' '}Prices and plans are subject to change at OpenSwarm's discretion.
+        {' '}Prices and plans are subject to change at FreeSwarm's discretion.
       </Typography>
     </Box>
   );

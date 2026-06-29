@@ -1,6 +1,6 @@
-# swarm-debug — OpenSwarm's logger for App backends
+# swarm-debug — FreeSwarm's logger for App backends
 
-`swarm_debug` (also importable as `debug` for legacy reasons) is OpenSwarm's
+`swarm_debug` (also importable as `debug` for legacy reasons) is FreeSwarm's
 opinionated `print()` replacement for the App Builder's backend code. It
 prints colored, indented, frame-aware log lines that read at a glance and
 land in the App Builder's **Terminal** tab under the `[BACKEND]` prefix.

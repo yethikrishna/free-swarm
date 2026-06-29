@@ -25,9 +25,9 @@ kill_tree() {
 }
 
 # Previously this was `kill 0`, which SIGTERMs the entire process group.
-# That's fast but propagates UP into OpenSwarm — when this workspace's
+# That's fast but propagates UP into FreeSwarm — when this workspace's
 # cleanup fired on ViewEditor unmount or runtime/stop, it tore down the
-# OpenSwarm dev stack (Terminated: 15) and left port 8324 stuck. Now we
+# FreeSwarm dev stack (Terminated: 15) and left port 8324 stuck. Now we
 # only kill our own tracked subtree, which keeps containment without
 # requiring an OS-level session wall.
 cleanup() {

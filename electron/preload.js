@@ -5,22 +5,22 @@ console.log('[diag][preload] start, ua=', navigator.userAgent);
 
 // E2E gate: set the renderer flag BEFORE any page script parses so the
 // production-build store-on-window expose fires deterministically when
-// Playwright launches with OPENSWARM_E2E=1. Read from the Chromium switch
+// Playwright launches with FREESWARM_E2E=1. Read from the Chromium switch
 // the main process appended; no-op for normal user launches.
 try {
   const args = (typeof process !== 'undefined' && process.argv) ? process.argv : [];
-  if (args.some((a) => /--openswarm-e2e(=1)?$/.test(a))) {
-    contextBridge.exposeInMainWorld('__OPENSWARM_E2E__', true);
+  if (args.some((a) => /--freeswarm-e2e(=1)?$/.test(a))) {
+    contextBridge.exposeInMainWorld('__FREESWARM_E2E__', true);
   }
 } catch (e) { console.log('[diag][preload] e2e-flag setup failed:', e && e.message); }
 
-// Synchronous exposure. The previous async IIFE (await ipcRenderer.invoke) raced React mount: any code reading window.openswarm during the gap (BrowserCard's Electron-detection falling back to iframe mode, AgentChat's auth-token call throwing) saw undefined. sendSync blocks the renderer for one IPC round-trip during preload before any user-visible paint, so window.openswarm is guaranteed to exist before the first frontend bundle evaluates.
+// Synchronous exposure. The previous async IIFE (await ipcRenderer.invoke) raced React mount: any code reading window.freeswarm during the gap (BrowserCard's Electron-detection falling back to iframe mode, AgentChat's auth-token call throwing) saw undefined. sendSync blocks the renderer for one IPC round-trip during preload before any user-visible paint, so window.freeswarm is guaranteed to exist before the first frontend bundle evaluates.
 const port = ipcRenderer.sendSync('get-backend-port-sync');
 const webviewPreloadPath = ipcRenderer.sendSync('get-webview-preload-path-sync');
 
-contextBridge.exposeInMainWorld('__OPENSWARM_PORT__', port);
+contextBridge.exposeInMainWorld('__FREESWARM_PORT__', port);
 
-contextBridge.exposeInMainWorld('openswarm', {
+contextBridge.exposeInMainWorld('freeswarm', {
   getBackendPort: () => port,
   // Fresh re-query of the LIVE backend port (not the cached preload value).
   // Used by the renderer to self-heal if its cached port ever resolved wrong
@@ -104,19 +104,19 @@ contextBridge.exposeInMainWorld('openswarm', {
   },
 
   // Deep-link callback: fires when the OS opens the app with an
-  // openswarm://auth?token=... URL (after Stripe-hosted checkout).
+  // freeswarm://auth?token=... URL (after Stripe-hosted checkout).
   onAuthUrl: (cb) => {
     const listener = (_event, url) => cb(url);
-    ipcRenderer.on('openswarm:auth-url', listener);
-    return () => ipcRenderer.removeListener('openswarm:auth-url', listener);
+    ipcRenderer.on('freeswarm:auth-url', listener);
+    return () => ipcRenderer.removeListener('freeswarm:auth-url', listener);
   },
 
-  // OAuth claim deep-link channel. Receives openswarm://oauth/{provider}/complete
+  // OAuth claim deep-link channel. Receives freeswarm://oauth/{provider}/complete
   // after the user finishes an OAuth flow in their browser.
   onOauthClaim: (cb) => {
     const listener = (_event, url) => cb(url);
-    ipcRenderer.on('openswarm:oauth-claim', listener);
-    return () => ipcRenderer.removeListener('openswarm:oauth-claim', listener);
+    ipcRenderer.on('freeswarm:oauth-claim', listener);
+    return () => ipcRenderer.removeListener('freeswarm:oauth-claim', listener);
   },
 
   // Window blur/focus events: analytics signal for "user switched to
@@ -125,8 +125,8 @@ contextBridge.exposeInMainWorld('openswarm', {
   // pollute the event stream.
   onWindowFocus: (cb) => {
     const listener = (_event, payload) => cb(payload);
-    ipcRenderer.on('openswarm:window-focus', listener);
-    return () => ipcRenderer.removeListener('openswarm:window-focus', listener);
+    ipcRenderer.on('freeswarm:window-focus', listener);
+    return () => ipcRenderer.removeListener('freeswarm:window-focus', listener);
   },
 
   // OAuth popup callback. Fires when any child webContents navigates
@@ -136,7 +136,27 @@ contextBridge.exposeInMainWorld('openswarm', {
   // Anthropic flows that reset the opener chain during redirect).
   onOauthCallback: (cb) => {
     const listener = (_event, data) => cb(data);
-    ipcRenderer.on('openswarm:oauth-callback', listener);
-    return () => ipcRenderer.removeListener('openswarm:oauth-callback', listener);
+    ipcRenderer.on('freeswarm:oauth-callback', listener);
+    return () => ipcRenderer.removeListener('freeswarm:oauth-callback', listener);
+  },
+
+  // Backend recovery callback: fires when the backend watchdog relaunches
+  // the backend process on the same port after a crash. Renderer should
+  // re-establish API and WebSocket connections.
+  onBackendRecovered: (cb) => {
+    const listener = (_event, payload) => cb(payload);
+    ipcRenderer.on('backend-recovered', listener);
+    return () => ipcRenderer.removeListener('backend-recovered', listener);
+  },
+
+  // Phase 2 keychain: OS-secure storage for secrets (API keys, tokens).
+  // IPC-only; never stored in plaintext in settings.json or window globals.
+  setSecret: (key, plaintext) => ipcRenderer.invoke('secret:set', key, plaintext),
+  getSecret: (key) => ipcRenderer.invoke('secret:get', key),
+  deleteSecret: (key) => ipcRenderer.invoke('secret:delete', key),
+  listSecrets: () => ipcRenderer.invoke('secret:list'),
+
+  // Phase 2 auth: mint a one-time nonce for sign-in (proves this install initiated the flow).
+  beginSignin: () => ipcRenderer.invoke('auth:begin-signin');
   },
 });

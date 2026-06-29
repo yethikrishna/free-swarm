@@ -1,6 +1,6 @@
 # Getting Started
 
-A step-by-step guide to get Open Swarm running locally — from clone to launch.
+A step-by-step guide to get Free Swarm running locally — from clone to launch.
 
 ---
 
@@ -34,8 +34,8 @@ nvm use 22
 ## 1. Clone the repository
 
 ```bash
-git clone https://github.com/<your-org>/self-swarm.git
-cd self-swarm
+git clone https://github.com/yethikrishna/free-swarm.git
+cd free-swarm
 ```
 
 ---

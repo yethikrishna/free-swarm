@@ -102,7 +102,8 @@ export const updateOutput = createAsyncThunk(
 );
 
 export const deleteOutput = createAsyncThunk('outputs/delete', async (id: string) => {
-  await fetch(`${OUTPUTS_API}/${id}`, { method: 'DELETE' });
+  const res = await fetch(`${OUTPUTS_API}/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
   return id;
 });
 
@@ -115,6 +116,10 @@ export const executeOutput = createAsyncThunk(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    // Surface HTTP/network failures as a thunk rejection so the dialog can show a
+    // friendly retry message instead of a dead-end (a 500 / non-JSON body would
+    // otherwise throw inside .json() and leave the dialog stuck on "running").
+    if (!res.ok) throw new Error(`Run failed: ${res.status}`);
     return (await res.json()) as OutputExecuteResult;
   }
 );

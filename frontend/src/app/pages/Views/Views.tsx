@@ -57,7 +57,8 @@ const Views: React.FC = () => {
   };
 
   const handleDeleteView = (id: string) => {
-    dispatch(deleteOutput(id));
+    // On failure, re-sync from disk so a card can't appear gone when it isn't.
+    dispatch(deleteOutput(id)).unwrap().catch(() => dispatch(fetchOutputs()));
   };
 
   const handleEditorClose = () => {

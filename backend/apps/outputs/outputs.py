@@ -54,7 +54,7 @@ async def outputs_lifespan():
         # Reap every per-app subprocess. Without this each `bash run.sh`
         # (and its vite/uvicorn descendants) reparents to PID 1 when the
         # main backend dies, leaving ghost listeners on the .env-pinned
-        # ports that block the next OpenSwarm launch's reload preview.
+        # ports that block the next FreeSwarm launch's reload preview.
         try:
             from backend.apps.outputs.runtime import manager as runtime_manager
             killed = await runtime_manager.stop_all()
@@ -74,9 +74,14 @@ outputs = SubApp("outputs", outputs_lifespan)
 @outputs.router.get("/workspace/{workspace_id}/serve/{filepath:path}")
 async def serve_workspace_file(workspace_id: str, filepath: str, _d: str = ""):
     """Serve a file from a workspace folder. For index.html, inject OUTPUT data."""
-    folder = os.path.join(WORKSPACE_DIR, workspace_id)
+    # Confine BOTH the workspace_id and the filepath to WORKSPACE_DIR. The
+    # trailing os.sep is load-bearing: a bare startswith lets a sibling whose
+    # name shares the prefix (workspace "abc" -> "abc-secrets") slip through.
+    base = os.path.normpath(WORKSPACE_DIR)
+    folder = os.path.normpath(os.path.join(base, workspace_id))
     full_path = os.path.normpath(os.path.join(folder, filepath))
-    if not full_path.startswith(os.path.normpath(folder)):
+    if (folder != base and not folder.startswith(base + os.sep)) or \
+       (full_path != folder and not full_path.startswith(folder + os.sep)):
         raise HTTPException(status_code=403, detail="Path traversal not allowed")
     if not os.path.isfile(full_path):
         raise HTTPException(status_code=404, detail="File not found")
@@ -258,7 +263,7 @@ async def seed_workspace(body: WorkspaceSeedRequest):
       from `/api/outputs/workspace/{ws}/serve/...`.
 
     - **`template_mode="webapp_template"`**: copies the vendored
-      openswarm-ai/webapp-template snapshot (React + Vite + TS frontend
+      yethikrishna/webapp-template snapshot (React + Vite + TS frontend
       with an optional FastAPI backend) into the workspace, allocates a
       free FRONTEND_PORT and writes it into both `.env` and
       `.env.example`. BACKEND_PORT stays NONE; the agent opts in with
@@ -344,7 +349,8 @@ async def seed_workspace(body: WorkspaceSeedRequest):
     if body.files:
         for rel_path, content in body.files.items():
             full_path = os.path.normpath(os.path.join(folder, rel_path))
-            if not full_path.startswith(os.path.normpath(folder)):
+            folder_norm = os.path.normpath(folder)
+            if full_path != folder_norm and not full_path.startswith(folder_norm + os.sep):
                 continue
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
             with open(full_path, "w", encoding="utf-8") as f:

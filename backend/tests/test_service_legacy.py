@@ -20,7 +20,7 @@ import pytest
 
 # Sandbox the data dir before any module import touches settings on disk.
 _tmpdir = tempfile.mkdtemp()
-os.environ.setdefault("OPENSWARM_DATA_DIR", _tmpdir)
+os.environ.setdefault("FREESWARM_DATA_DIR", _tmpdir)
 
 # Captured syncs from this test run.
 _captured_syncs: list[dict] = []

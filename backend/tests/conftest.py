@@ -2,7 +2,7 @@
 
 Isolate the persistent browser-skill store (and metrics) into throwaway temp
 dirs for the whole test session, so tests never write skills/metrics into the
-real ~/Library/Application Support/OpenSwarm/data tree (which would pollute the
+real ~/Library/Application Support/FreeSwarm/data tree (which would pollute the
 dev machine and let a stale persisted skill leak across test runs).
 """
 
@@ -17,9 +17,9 @@ def _isolate_browser_state(monkeypatch):
     skills_dir = tempfile.mkdtemp(prefix="os_skills_")
     metrics_dir = tempfile.mkdtemp(prefix="os_metrics_")
     playbook_dir = tempfile.mkdtemp(prefix="os_playbook_")
-    monkeypatch.setenv("OPENSWARM_BROWSER_SKILLS_DIR", skills_dir)
-    monkeypatch.setenv("OPENSWARM_BROWSER_METRICS_DIR", metrics_dir)
-    monkeypatch.setenv("OPENSWARM_BROWSER_PLAYBOOK_DIR", playbook_dir)
+    monkeypatch.setenv("FREESWARM_BROWSER_SKILLS_DIR", skills_dir)
+    monkeypatch.setenv("FREESWARM_BROWSER_METRICS_DIR", metrics_dir)
+    monkeypatch.setenv("FREESWARM_BROWSER_PLAYBOOK_DIR", playbook_dir)
 
     def _reset():
         for mod in ("browser_skills", "browser_playbook"):

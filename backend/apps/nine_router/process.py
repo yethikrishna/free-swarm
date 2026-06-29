@@ -5,7 +5,7 @@ cache. Nothing else in the package spawns or kills the subprocess; the sync
 and oauth modules only talk to the already-running server over HTTP.
 
 9Router is a free AI subscription proxy that lets users connect their
-Claude/ChatGPT/Gemini subscriptions to OpenSwarm without API keys. It runs
+Claude/ChatGPT/Gemini subscriptions to FreeSwarm without API keys. It runs
 silently in the background on port 20128 and exposes an OpenAI-compatible
 API at localhost:20128/v1.
 """
@@ -27,34 +27,28 @@ NINE_ROUTER_URL = f"http://localhost:{NINE_ROUTER_PORT}"
 NINE_ROUTER_API = f"{NINE_ROUTER_URL}/api"
 NINE_ROUTER_V1 = f"{NINE_ROUTER_URL}/v1"
 
-# Pinned 9router npm package version. Stays at 0.3.60.
+# FreeSwarm Router: Custom fork of 9router, vendored at ./router/ and built
+# to ./.next/standalone/router/. This is the source-of-truth router for FreeSwarm,
+# maintained as a first-class product allowing us to customize provider adapters,
+# model discovery, and branding.
 #
-# DO NOT bump to 0.4.x without porting 9Router API auth first. Tested 0.4.66
-# empirically (2026-06-01): it adds an auth gate to its internal /api/* routes,
-# so the endpoints our connect/sync flow calls without a token now 401 instead
-# of working:
-#     endpoint                       0.3.60   0.4.66
-#     /api/oauth/<prov>/device-code   400      401 Unauthorized
-#     POST /api/providers             400      401 Unauthorized
-# That 401 makes start_oauth() throw, which 500s EVERY subscription connect
-# (Claude/Codex/Gemini). oauth.py + sync.py would each need to discover and
-# send 9Router 0.4.x's API token on every /api/* call before a bump is viable.
+# Fork base: 9router v0.3.90 (package v0.3.89), vendored from upstream MIT license.
+# Known issues inherited from v0.3.90 (still in the 0.3.60-0.3.96 range):
+#   - WebSearch regression: cross-provider delegation reports unavailability
+#   - max_tokens field emitted for OpenAI (needs GPT-5 translation patch)
 #
-# What the bump WOULD buy once auth is ported: cc/claude-opus-4-8 and cx/gpt-5.5
-# on the sub routes (gpt-5.5 404s on 0.3.60), and a reworked WebSearch behind a
-# new /api/v1/search route. Gemini 3.5 Flash is Antigravity-only there
-# (ag/gemini-3.5-flash-low), never on the gc/ Gemini-CLI lane.
+# Rationale for forking (vs consuming npm):
+#   - Own provider adapters and OAuth flows without upstream wait
+#   - Custom model discovery per FreeSwarm's routing needs
+#   - Rebrand router as first-class FreeSwarm product
+#   - Version lock on features rather than upstream release cadence
 #
-# Original 0.3.60 pin reason (still holds): versions 0.3.60-0.3.96 regressed
-# cross-provider WebSearch (a Codex/Gemini primary delegating WebSearch saw
-# "claude-haiku-4-5-20251001 unavailable" or hallucinated output).
-#
-# Note: 0.3.60-0.4.20 ALL emit `max_tokens` (not max_completion_tokens)
-# when translating Anthropic->OpenAI, which OpenAI's GPT-5 family rejects.
-# The fix lives in our /api/openai-passthrough proxy; see core/openai_passthrough.py
-# and sync_openai_api_key for how the translation lane is rerouted via an
-# `openai-compatible` provider-node that honors `baseUrl`.
-NINE_ROUTER_NPM_VERSION = "0.3.60"
+# Build: `cd router && npm run build` → `.next/standalone/router/`
+# Lifecycle: backend/apps/nine_router/ spawns as subprocess, syncs OAuth/keys.
+NINE_ROUTER_FORK_VERSION = "0.3.90"
+
+# Backwards-compat alias (still used in public API exports)
+NINE_ROUTER_NPM_VERSION = NINE_ROUTER_FORK_VERSION
 
 _process: subprocess.Popen | None = None
 
@@ -87,7 +81,7 @@ def is_running() -> bool:
 
 def _find_9router_dir() -> str | None:
     """Locate the bundled 9Router directory (works in both dev and packaged mode)."""
-    _is_packaged = os.environ.get("OPENSWARM_PACKAGED") == "1"
+    _is_packaged = os.environ.get("FREESWARM_PACKAGED") == "1"
 
     if _is_packaged:
         import sys
@@ -132,7 +126,7 @@ def _find_node() -> str | None:
     """Find a Node.js binary (works in both dev and packaged mode).
 
     Priority order:
-      1. OPENSWARM_NODE_PATH; set by electron/main.js when a real Node
+      1. FREESWARM_NODE_PATH; set by electron/main.js when a real Node
          binary is bundled in extraResources. Always preferred on user
          machines because it (a) avoids the bouncing "exec" Dock icon
          that ELECTRON_RUN_AS_NODE produces on fresh Macs and (b) starts
@@ -143,7 +137,7 @@ def _find_node() -> str | None:
          packaged builds that for some reason shipped without the bundled
          node payload.
     """
-    bundled = os.environ.get("OPENSWARM_NODE_PATH")
+    bundled = os.environ.get("FREESWARM_NODE_PATH")
     if bundled and os.path.exists(bundled):
         return bundled
 
@@ -151,7 +145,7 @@ def _find_node() -> str | None:
     if node:
         return node
 
-    electron_path = os.environ.get("OPENSWARM_ELECTRON_PATH")
+    electron_path = os.environ.get("FREESWARM_ELECTRON_PATH")
     if electron_path and os.path.exists(electron_path):
         return electron_path
 
@@ -167,7 +161,7 @@ def _dev_router_cache_dir() -> str:
     base = os.environ.get("XDG_CACHE_HOME") or os.path.join(
         os.path.expanduser("~"), ".cache"
     )
-    return os.path.join(base, "openswarm-router", NINE_ROUTER_NPM_VERSION)
+    return os.path.join(base, "freeswarm-router", NINE_ROUTER_NPM_VERSION)
 
 
 def _ensure_router_cached() -> str | None:
@@ -197,7 +191,7 @@ def _ensure_router_cached() -> str | None:
         pkg_json = os.path.join(cache_dir, "package.json")
         if not os.path.exists(pkg_json):
             with open(pkg_json, "w") as f:
-                f.write('{"name":"_openswarm_router_cache","version":"0.0.0","private":true}\n')
+                f.write('{"name":"_freeswarm_router_cache","version":"0.0.0","private":true}\n')
 
         logger.info(
             "Installing 9router@%s into %s (one-time, ~30s)...",
@@ -225,7 +219,7 @@ def _ensure_router_cached() -> str | None:
 async def ensure_running():
     """Start 9Router if not already running."""
     global _process
-    _is_packaged = os.environ.get("OPENSWARM_PACKAGED") == "1"
+    _is_packaged = os.environ.get("FREESWARM_PACKAGED") == "1"
 
     if is_running():
         # In dev mode, kill stale standalone servers (from previous builds)
@@ -253,13 +247,21 @@ async def ensure_running():
     _9router_dir = _find_9router_dir()
 
     if _is_packaged and _9router_dir:
-        # Packaged mode; run the pre-built standalone server staged at
-        # <resources>/router/server.js by scripts/fetch-router.sh at build time.
-        standalone_server = os.path.join(_9router_dir, "server.js")
-        if not os.path.exists(standalone_server):
-            standalone_server = os.path.join(_9router_dir, ".next", "standalone", "server.js")
-        if not os.path.exists(standalone_server):
-            logger.warning("9Router standalone build not found in %s", _9router_dir)
+        # Packaged mode; run the pre-built FreeSwarm Router fork staged at
+        # <resources>/router/ by scripts/fetch-router.sh at build time.
+        # Try multiple paths: direct server.js, .next/standalone/server.js, .next/standalone/router/server.js
+        candidates = [
+            os.path.join(_9router_dir, "server.js"),
+            os.path.join(_9router_dir, ".next", "standalone", "server.js"),
+            os.path.join(_9router_dir, ".next", "standalone", "router", "server.js"),
+        ]
+        standalone_server = None
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                standalone_server = candidate
+                break
+        if not standalone_server:
+            logger.warning("FreeSwarm Router standalone build not found in %s (tried %s)", _9router_dir, candidates)
             return
 
         node = _find_node()
@@ -274,44 +276,67 @@ async def ensure_running():
             cmd += ["--require", _patch]
         cmd.append(standalone_server)
         cwd = os.path.dirname(standalone_server)
-        env = {**os.environ, "PORT": str(NINE_ROUTER_PORT), "NODE_ENV": "production"}
-        if node == os.environ.get("OPENSWARM_ELECTRON_PATH"):
+        # FREESWARM_BUNDLED tells the router it runs inside the desktop app
+        # (updated via Electron auto-updater), so it suppresses the npm
+        # "new version available" nag. See router/src/app/api/version/route.js.
+        env = {**os.environ, "PORT": str(NINE_ROUTER_PORT), "NODE_ENV": "production", "FREESWARM_BUNDLED": "1"}
+        if node == os.environ.get("FREESWARM_ELECTRON_PATH"):
             env["ELECTRON_RUN_AS_NODE"] = "1"
 
     else:
-        # Dev mode; install the pinned 9router npm package into a local
-        # cache the first time run.sh boots, then spawn `node app/server.js`
-        # directly on subsequent launches. Bypassing the package's cli.js
-        # avoids its menu-bar tray icon (which users confusingly quit,
-        # silently killing their subscription routing), its update-check
-        # spinner, and the interactive TUI.
-        cached_server = _ensure_router_cached()
-        if not cached_server:
-            return
+        # Dev mode; use the FreeSwarm Router fork built in ./router/.next/standalone/router/.
+        # First check if fork is built; if not, fallback to npm cache for convenience.
+        dev_router_path = None
+        if _9router_dir:
+            fork_candidates = [
+                os.path.join(_9router_dir, ".next", "standalone", "router", "server.js"),
+                os.path.join(_9router_dir, ".next", "standalone", "server.js"),
+                os.path.join(_9router_dir, "server.js"),
+            ]
+            for candidate in fork_candidates:
+                if os.path.exists(candidate):
+                    dev_router_path = candidate
+                    break
+
+        if not dev_router_path:
+            # Fallback: install pinned npm package to cache
+            logger.info("Router fork not built; falling back to npm package...")
+            cached_server = _ensure_router_cached()
+            if not cached_server:
+                return
+            dev_router_path = cached_server
 
         node = _find_node()
         if not node:
             logger.warning("Node.js not found; cannot start 9Router in dev mode.")
             return
 
-        logger.info(
-            "Starting 9Router (dev cache, 9router@%s) on port %d...",
-            NINE_ROUTER_NPM_VERSION, NINE_ROUTER_PORT,
-        )
+        is_fork = ".next/standalone" in dev_router_path
+        if is_fork:
+            logger.info(
+                "Starting FreeSwarm Router (fork, v%s) on port %d...",
+                NINE_ROUTER_FORK_VERSION, NINE_ROUTER_PORT,
+            )
+        else:
+            logger.info(
+                "Starting 9Router (npm fallback, 9router@%s) on port %d...",
+                NINE_ROUTER_NPM_VERSION, NINE_ROUTER_PORT,
+            )
         cmd = [node]
         _patch = _gpt5_patch_path()
         if _patch:
             cmd += ["--require", _patch]
-        cmd.append(cached_server)
-        cwd = os.path.dirname(cached_server)
-        env = {**os.environ, "PORT": str(NINE_ROUTER_PORT), "NODE_ENV": "production"}
+        cmd.append(dev_router_path)
+        cwd = os.path.dirname(dev_router_path)
+        # See packaged branch above: suppress npm update nag when bundled.
+        env = {**os.environ, "PORT": str(NINE_ROUTER_PORT), "NODE_ENV": "production", "FREESWARM_BUNDLED": "1"}
 
     # By default, 9Router's stdout/stderr go to /dev/null (Next.js dev mode
-    # is extremely chatty and floods the openswarm console otherwise). When
-    # debugging is needed, set OPENSWARM_DEBUG_9ROUTER=1 in the environment
+    # is extremely chatty and floods the freeswarm console otherwise). When
+    # debugging is needed, set FREESWARM_DEBUG_9ROUTER=1 in the environment
     # before launching the backend; output will then be appended to
     # backend/data/9router.log line-buffered, which can be `tail -f`'d.
-    if os.environ.get("OPENSWARM_DEBUG_9ROUTER"):
+    if os.environ.get("FREESWARM_DEBUG_9ROUTER"):
         _log_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "data",

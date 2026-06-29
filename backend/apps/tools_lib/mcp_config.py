@@ -6,7 +6,7 @@ import sys
 from typing import Optional
 
 from backend.apps.tools_lib.models import ToolDefinition
-from backend.apps.tools_lib.oauth_config import OPENSWARM_OAUTH_BASE_URL
+from backend.apps.tools_lib.oauth_config import FREESWARM_OAUTH_BASE_URL
 
 logger = logging.getLogger(__name__)
 
@@ -130,12 +130,12 @@ def derive_mcp_config(tool: ToolDefinition) -> Optional[dict]:
             # proxy that forwards the refresh to our cloud's pool-aware
             # /api/oauth/google/refresh endpoint; CLIENT_ID/SECRET become
             # unused placeholders (gauth.py only validates non-empty).
-            _port = os.environ.get("OPENSWARM_PORT", "8324")
+            _port = os.environ.get("FREESWARM_PORT", "8324")
             env["GOOGLE_WORKSPACE_TOKEN_URI"] = (
                 f"http://127.0.0.1:{_port}/api/tools/google-oauth-token"
             )
-            env.setdefault("GOOGLE_WORKSPACE_CLIENT_ID", "openswarm-proxy")
-            env.setdefault("GOOGLE_WORKSPACE_CLIENT_SECRET", "openswarm-proxy")
+            env.setdefault("GOOGLE_WORKSPACE_CLIENT_ID", "freeswarm-proxy")
+            env.setdefault("GOOGLE_WORKSPACE_CLIENT_SECRET", "freeswarm-proxy")
 
     # Google Workspace MCP: redirect spawn through our shim that
     # monkey-patches gauth.get_credentials before the worker registers
@@ -158,12 +158,12 @@ def derive_mcp_config(tool: ToolDefinition) -> Optional[dict]:
     if tool.name.lower() == "discord" and config.get("type") == "stdio":
         from backend.config.install_id import get_install_id
         env = config.setdefault("env", {})
-        env["OPENSWARM_OAUTH_BASE_URL"] = OPENSWARM_OAUTH_BASE_URL
-        env["OPENSWARM_INSTALL_ID"] = get_install_id()
+        env["FREESWARM_OAUTH_BASE_URL"] = FREESWARM_OAUTH_BASE_URL
+        env["FREESWARM_INSTALL_ID"] = get_install_id()
         # Pass the authorized guild IDs so the shim can scope-enforce.
         guild_ids = [g.get("id", "") for g in (tool.oauth_tokens.get("guilds") or []) if g.get("id")]
         if guild_ids:
-            env["OPENSWARM_DISCORD_GUILD_IDS"] = ",".join(guild_ids)
+            env["FREESWARM_DISCORD_GUILD_IDS"] = ",".join(guild_ids)
         # The shim runs as a subprocess and needs to import
         # `backend.apps.discord_mcp_shim`; set PYTHONPATH to the project
         # root (parent of the backend/ dir) so that import resolves.
@@ -174,7 +174,7 @@ def derive_mcp_config(tool: ToolDefinition) -> Optional[dict]:
     # Microsoft 365 MCP: use a stable token cache path shared across process spawns
     if tool.name.lower() == "microsoft 365" and config.get("type") == "stdio":
         env = config.setdefault("env", {})
-        cache_dir = os.path.join(os.path.expanduser("~"), ".openswarm")
+        cache_dir = os.path.join(os.path.expanduser("~"), ".freeswarm")
         os.makedirs(cache_dir, exist_ok=True)
         env["MS365_MCP_TOKEN_CACHE_PATH"] = os.path.join(cache_dir, "ms365-token-cache.json")
         env["MS365_MCP_SELECTED_ACCOUNT_PATH"] = os.path.join(cache_dir, "ms365-selected-account.json")
@@ -197,7 +197,7 @@ def derive_mcp_config(tool: ToolDefinition) -> Optional[dict]:
                 pkg_name = next((a for a in (config.get("args") or []) if not a.startswith("-")), None)
                 if pkg_name:
                     _backend = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                    electron_path = os.environ.get("OPENSWARM_ELECTRON_PATH")
+                    electron_path = os.environ.get("FREESWARM_ELECTRON_PATH")
                     # Two bundle layouts in mcp-bundles/, checked in priority order:
                     #
                     #  1. Multi-file bundle dir: mcp-bundles/<safe>/dist/index.js
@@ -226,10 +226,10 @@ def derive_mcp_config(tool: ToolDefinition) -> Optional[dict]:
                         bundle_path = bundle_file_path
                     # Prefer the bundled real-Node binary over Electron-as-Node:
                     # avoids the bouncing "exec" Dock icon on fresh user Macs +
-                    # spawns ~10x faster than re-execing the OpenSwarm Electron
+                    # spawns ~10x faster than re-execing the FreeSwarm Electron
                     # binary as Node. Falls back to Electron-as-Node only if
                     # the bundled node payload wasn't shipped (legacy builds).
-                    bundled_node = os.environ.get("OPENSWARM_NODE_PATH")
+                    bundled_node = os.environ.get("FREESWARM_NODE_PATH")
                     if bundle_path and bundled_node and os.path.exists(bundled_node):
                         config["command"] = bundled_node
                         config["args"] = [bundle_path]
@@ -272,7 +272,7 @@ def derive_mcp_config(tool: ToolDefinition) -> Optional[dict]:
         env.setdefault("PYTHONPATH", "")
         # Point uv/uvx at our bundled Python; avoids macOS CLT popup on fresh Macs
         # and avoids downloading Python at runtime
-        _is_packaged = os.environ.get("OPENSWARM_PACKAGED") == "1"
+        _is_packaged = os.environ.get("FREESWARM_PACKAGED") == "1"
         _is_windows = sys.platform == "win32"
         if _is_packaged:
             _resources = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

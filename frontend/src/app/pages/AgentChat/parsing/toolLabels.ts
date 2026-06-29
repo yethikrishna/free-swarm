@@ -290,10 +290,10 @@ const MCP_SERVER_BRAND: Record<string, string> = {
   'asana': 'Asana',
   'figma': 'Figma',
   'stripe': 'Stripe',
-  'openswarm-browser-agent': 'browser',
-  'openswarm-invoke-agent': 'helper',
-  'openswarm-mcp-meta': 'tools',
-  'openswarm-outputs-meta': 'views',
+  'freeswarm-browser-agent': 'browser',
+  'freeswarm-invoke-agent': 'helper',
+  'freeswarm-mcp-meta': 'tools',
+  'freeswarm-outputs-meta': 'views',
 };
 
 // Order matters: most specific verb pattern wins.
@@ -415,7 +415,7 @@ function _labelForMcpTool(toolName: string, seed?: string): ToolLabel | null {
   const brand = MCP_SERVER_BRAND[server] || _humanizeName(server);
 
   // Internal meta-MCPs route through VARIANTS so we don't render "tools: Mcpsearch".
-  if (server.startsWith('openswarm-')) {
+  if (server.startsWith('freeswarm-')) {
     const builtin = VARIANTS[action];
     if (builtin) return _pick(builtin, seed);
   }

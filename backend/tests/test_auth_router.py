@@ -80,7 +80,7 @@ def test_signin_activate_persists_user_id(client, reset_settings):
 
 def test_signin_activate_paid_user_flips_pro_mode(client, reset_settings):
     """A signed-in user who already has a Stripe subscription should also
-    flip into openswarm-pro routing, covers the Google-then-Stripe and
+    flip into freeswarm-pro routing, covers the Google-then-Stripe and
     Stripe-then-Google merge cases."""
     fake_response = AsyncMock()
     fake_response.status_code = 200
@@ -106,9 +106,9 @@ def test_signin_activate_paid_user_flips_pro_mode(client, reset_settings):
     from backend.apps.settings.settings import load_settings
     s = load_settings()
     assert s.user_id == "u-paid"
-    assert s.connection_mode == "openswarm-pro"
-    assert s.openswarm_subscription_plan == "pro"
-    assert s.openswarm_subscription_expires == "2027-01-01T00:00:00.000Z"
+    assert s.connection_mode == "freeswarm-pro"
+    assert s.freeswarm_subscription_plan == "pro"
+    assert s.freeswarm_subscription_expires == "2027-01-01T00:00:00.000Z"
 
 
 def test_signin_activate_invalid_token_returns_401(client, reset_settings):
@@ -145,8 +145,8 @@ def test_signout_clears_local_identity(client, reset_settings):
     s.user_id = "u-bye"
     s.user_email = "bye@example.com"
     s.signin_method = "google"
-    s.openswarm_bearer_token = "bearer-to-revoke-xxxxxxxx"
-    s.connection_mode = "openswarm-pro"
+    s.freeswarm_bearer_token = "bearer-to-revoke-xxxxxxxx"
+    s.connection_mode = "freeswarm-pro"
     _save_settings(s)
 
     fake_response = AsyncMock()
@@ -162,7 +162,7 @@ def test_signout_clears_local_identity(client, reset_settings):
     assert s2.user_id is None
     assert s2.user_email is None
     assert s2.signin_method is None
-    assert s2.openswarm_bearer_token is None
+    assert s2.freeswarm_bearer_token is None
     assert s2.connection_mode == "own_key"
 
 
@@ -171,7 +171,7 @@ def test_signout_succeeds_even_when_cloud_unreachable(client, reset_settings):
     from backend.apps.settings.settings import load_settings, _save_settings
     s = load_settings()
     s.user_id = "u-flaky"
-    s.openswarm_bearer_token = "bearer-flaky-network-xxxx"
+    s.freeswarm_bearer_token = "bearer-flaky-network-xxxx"
     _save_settings(s)
 
     with patch("httpx.AsyncClient") as MockClient:
@@ -183,7 +183,7 @@ def test_signout_succeeds_even_when_cloud_unreachable(client, reset_settings):
     assert r.status_code == 200
     s2 = load_settings()
     assert s2.user_id is None
-    assert s2.openswarm_bearer_token is None
+    assert s2.freeswarm_bearer_token is None
 
 
 # ---------------------------------------------------------------------------
@@ -197,13 +197,13 @@ def test_dev_token_is_dev_only():
     import backend.auth as auth_mod
     noauth = TestClient(app)  # deliberately no bearer header
 
-    os.environ.pop("OPENSWARM_PACKAGED", None)
+    os.environ.pop("FREESWARM_PACKAGED", None)
     r = noauth.get("/api/dev/token")
     assert r.status_code == 200
     assert r.json()["token"] == auth_mod._TOKEN
 
-    os.environ["OPENSWARM_PACKAGED"] = "1"
+    os.environ["FREESWARM_PACKAGED"] = "1"
     try:
         assert noauth.get("/api/dev/token").status_code == 404
     finally:
-        os.environ.pop("OPENSWARM_PACKAGED", None)
+        os.environ.pop("FREESWARM_PACKAGED", None)

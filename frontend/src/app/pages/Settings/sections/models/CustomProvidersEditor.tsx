@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
@@ -8,8 +8,10 @@ import InputAdornment from '@mui/material/InputAdornment';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CloseIcon from '@mui/icons-material/Close';
+import CircularProgress from '@mui/material/CircularProgress';
 import { useClaudeTokens } from '@/shared/styles/ThemeContext';
 import { AppSettings, CustomProvider } from '@/shared/state/settingsSlice';
+import { API_BASE } from '@/shared/config';
 import type { SettingsStyles } from '../settingsStyles';
 
 const CustomProvidersEditor: React.FC<{
@@ -21,6 +23,9 @@ const CustomProvidersEditor: React.FC<{
 }> = ({ form, setForm, showApiKey, setShowApiKey, styles }) => {
   const c = useClaudeTokens();
   const { fieldSx, descSx, labelSx } = styles;
+  // Per-row discovery state: which provider index is loading, and its last error.
+  const [discovering, setDiscovering] = useState<number | null>(null);
+  const [discoverErr, setDiscoverErr] = useState<{ idx: number; msg: string } | null>(null);
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 0.25 }}>
@@ -74,6 +79,31 @@ const CustomProvidersEditor: React.FC<{
           const removeModel = (mIdx: number) => {
             const nextModels = (cp.models || []).filter((_, i) => i !== mIdx);
             updateProvider({ models: nextModels });
+          };
+          const discoverModels = async () => {
+            setDiscoverErr(null);
+            setDiscovering(idx);
+            try {
+              const res = await fetch(`${API_BASE}/agents/discover-models`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ base_url: cp.base_url || '', api_key: cp.api_key || '' }),
+              });
+              const data = await res.json();
+              if (!data.ok) {
+                setDiscoverErr({ idx, msg: data.error || 'Could not load models.' });
+                return;
+              }
+              // Keep the ids the user already typed; append the newly discovered ones.
+              const kept = (cp.models || []).filter((m) => (m.value || '').trim());
+              const have = new Set(kept.map((m) => (m.value || '').trim()));
+              const added = (data.models || []).filter((m: { value: string }) => !have.has(m.value));
+              updateProvider({ models: [...kept, ...added] });
+            } catch {
+              setDiscoverErr({ idx, msg: 'Could not reach the backend.' });
+            } finally {
+              setDiscovering(null);
+            }
           };
           const filledModelCount = (cp.models || []).filter(m => (m.value || '').trim()).length;
           const nameMissing = !cp.name?.trim();
@@ -216,23 +246,45 @@ const CustomProvidersEditor: React.FC<{
                     </Box>
                   ))
                 )}
-                <Button
-                  onClick={addModel}
-                  size="small"
-                  sx={{
-                    alignSelf: 'flex-start',
-                    mt: 0.25,
-                    textTransform: 'none',
-                    color: c.accent.primary,
-                    fontSize: '0.72rem',
-                    minWidth: 'auto',
-                    px: 0.75,
-                    py: 0.25,
-                    '&:hover': { bgcolor: `${c.accent.primary}10` },
-                  }}
-                >
-                  + Add model
-                </Button>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.25, flexWrap: 'wrap' }}>
+                  <Button
+                    onClick={addModel}
+                    size="small"
+                    sx={{
+                      textTransform: 'none',
+                      color: c.accent.primary,
+                      fontSize: '0.72rem',
+                      minWidth: 'auto',
+                      px: 0.75,
+                      py: 0.25,
+                      '&:hover': { bgcolor: `${c.accent.primary}10` },
+                    }}
+                  >
+                    + Add model
+                  </Button>
+                  <Button
+                    onClick={discoverModels}
+                    size="small"
+                    disabled={!cp.base_url?.trim() || discovering === idx}
+                    startIcon={discovering === idx ? <CircularProgress size={12} sx={{ color: c.text.muted }} /> : undefined}
+                    sx={{
+                      textTransform: 'none',
+                      color: c.text.secondary,
+                      fontSize: '0.72rem',
+                      minWidth: 'auto',
+                      px: 0.75,
+                      py: 0.25,
+                      '&:hover': { bgcolor: `${c.accent.primary}10`, color: c.accent.primary },
+                    }}
+                  >
+                    {discovering === idx ? 'Finding models' : 'Discover from endpoint'}
+                  </Button>
+                </Box>
+                {discoverErr && discoverErr.idx === idx && (
+                  <Typography sx={{ fontSize: '0.7rem', color: c.text.muted, px: 0.5 }}>
+                    {discoverErr.msg}
+                  </Typography>
+                )}
               </Box>
             </Box>
           );

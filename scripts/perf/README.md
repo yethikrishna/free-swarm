@@ -27,9 +27,9 @@ node scripts/perf/parse-timing.js --log <path-to-backend.log>
 ```
 
 backend.log lives next to `auth.token`:
-- macOS:   `~/Library/Application Support/OpenSwarm/data/backend.log`
-- Windows: `%APPDATA%\OpenSwarm\data\backend.log`
-- Linux:   `~/.local/share/OpenSwarm/data/backend.log`
+- macOS:   `~/Library/Application Support/FreeSwarm/data/backend.log`
+- Windows: `%APPDATA%\FreeSwarm\data\backend.log`
+- Linux:   `~/.local/share/FreeSwarm/data/backend.log`
 
 ## File count / size
 

@@ -33,7 +33,7 @@ _cache: list[str] | None = None
 
 
 def _dir() -> str | None:
-    base = os.environ.get("OPENSWARM_BROWSER_META_DIR")
+    base = os.environ.get("FREESWARM_BROWSER_META_DIR")
     if not base:
         try:
             from backend.config.paths import DATA_ROOT

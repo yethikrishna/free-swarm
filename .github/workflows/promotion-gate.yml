@@ -23,6 +23,11 @@ permissions:
 
 jobs:
   verify-feeds:
+    # Scope to desktop-app releases only. The auto-updater feeds (latest.yml /
+    # latest-mac.yml) exist only for the Electron app, which ships on v* tags.
+    # Other products (e.g. the Router on router-v* tags) have no such feeds, so
+    # the gate would always go red on them; skip cleanly instead.
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

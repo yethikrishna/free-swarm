@@ -19,6 +19,7 @@ import { LayoutDashboard } from 'lucide-react';
 import PsychologyIcon from '@mui/icons-material/PsychologyOutlined';
 import BuildIcon from '@mui/icons-material/BuildOutlined';
 import TuneIcon from '@mui/icons-material/TuneOutlined';
+import ScheduleIcon from '@mui/icons-material/ScheduleOutlined';
 import { LayoutGrid } from 'lucide-react';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Settings as LucideSettings } from 'lucide-react';
@@ -54,13 +55,14 @@ const SIDEBAR_MIN = 160;
 const SIDEBAR_MAX = 400;
 // 260 matches Claude.ai's nav-sidebar width: roomy enough that names don't truncate.
 const SIDEBAR_DEFAULT = 260;
-const SIDEBAR_WIDTH_KEY = 'openswarm-sidebar-width';
-const UPDATE_DISMISS_KEY = 'openswarm-update-dismissed';
+const SIDEBAR_WIDTH_KEY = 'freeswarm-sidebar-width';
+const UPDATE_DISMISS_KEY = 'freeswarm-update-dismissed';
 
 const CUSTOMIZATION_ITEMS = [
   { label: 'Skills', path: '/skills', icon: <PsychologyIcon />, onboarding: 'sidebar-skills' },
   { label: 'Actions', path: '/actions', icon: <BuildIcon />, onboarding: 'sidebar-actions' },
   { label: 'Modes', path: '/modes', icon: <TuneIcon />, onboarding: 'sidebar-modes' },
+  { label: 'Automation', path: '/automation', icon: <ScheduleIcon />, onboarding: 'sidebar-automation' },
 ];
 
 const CUSTOMIZATION_PATHS = new Set(CUSTOMIZATION_ITEMS.map((i) => i.path));
@@ -118,7 +120,7 @@ const AppShell: React.FC = () => {
   const availableVersion = useAppSelector((state) => state.update.availableVersion);
   const downloadPercent = useAppSelector((state) => state.update.downloadPercent);
   const installing = useAppSelector((state) => state.update.installing);
-  // Windows' Squirrel never reports a version, and a mid-download cache-clear reload wipes it, so render the name version-less instead of "OpenSwarm null".
+  // Windows' Squirrel never reports a version, and a mid-download cache-clear reload wipes it, so render the name version-less instead of "FreeSwarm null".
   const verSuffix = availableVersion ? ` ${availableVersion}` : '';
 
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(() => {
@@ -171,13 +173,13 @@ const AppShell: React.FC = () => {
   }, [availableVersion]);
 
   const handleDownloadUpdate = useCallback(async () => {
-    try { await (window as any).openswarm?.downloadUpdate(); } catch {}
+    try { await (window as any).freeswarm?.downloadUpdate(); } catch {}
   }, []);
 
   const handleInstallUpdate = useCallback(() => {
     if (installing) return;
     dispatch(setInstalling());
-    (window as any).openswarm?.installUpdate();
+    (window as any).freeswarm?.installUpdate();
   }, [installing, dispatch]);
 
   // shallowEqual on top-level Immer dicts: nested mutations bump the dict reference, causing AppShell to re-render on every rename/output bump despite identical structure.
@@ -229,7 +231,7 @@ const AppShell: React.FC = () => {
       dispatch(addBrowserCard({ url }));
     } else {
       dispatch(setPendingBrowserUrl(url));
-      const lastId = (window as any).__openswarm_last_dashboard_id as string | undefined;
+      const lastId = (window as any).__freeswarm_last_dashboard_id as string | undefined;
       const firstDashboard = dashboardList[0];
       const targetId = lastId || firstDashboard?.id;
       if (targetId) {
@@ -273,10 +275,10 @@ const AppShell: React.FC = () => {
 
   useEffect(() => {
     const w = window as any;
-    if (!w.openswarm?.onWebviewNewWindow) return;
+    if (!w.freeswarm?.onWebviewNewWindow) return;
     let lastUrl = '';
     let lastTime = 0;
-    return w.openswarm.onWebviewNewWindow((url: string, webContentsId: number) => {
+    return w.freeswarm.onWebviewNewWindow((url: string, webContentsId: number) => {
       const now = Date.now();
       if (url === lastUrl && now - lastTime < 1000) return;
       lastUrl = url;
@@ -299,8 +301,8 @@ const AppShell: React.FC = () => {
       }
       dispatch(setPendingFocusAgentId(sessionId));
     };
-    window.addEventListener('openswarm:notification-click', handler as EventListener);
-    return () => window.removeEventListener('openswarm:notification-click', handler as EventListener);
+    window.addEventListener('freeswarm:notification-click', handler as EventListener);
+    return () => window.removeEventListener('freeswarm:notification-click', handler as EventListener);
   }, [navigate, dispatch]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -487,7 +489,7 @@ const AppShell: React.FC = () => {
           <Box
             component="img"
             src="./logo.png"
-            alt="OpenSwarm"
+            alt="FreeSwarm"
             sx={{ width: 20, height: 20, borderRadius: 0.5, opacity: 0.85 }}
           />
           <Typography
@@ -499,7 +501,7 @@ const AppShell: React.FC = () => {
               lineHeight: 1,
             }}
           >
-            OpenSwarm
+            FreeSwarm
           </Typography>
         </Box>
       </Box>
@@ -512,8 +514,8 @@ const AppShell: React.FC = () => {
             gap: 1.5,
             px: 2,
             py: 0.6,
-            bgcolor: 'rgba(239, 68, 68, 0.08)',
-            borderBottom: '1px solid rgba(239, 68, 68, 0.18)',
+            bgcolor: c.status.errorBg,
+            borderBottom: `1px solid ${c.status.error}2E`,
             flexShrink: 0,
             animation: showWarningBanner ? 'warning-fade-in 0.4s ease-out' : undefined,
             '@keyframes warning-fade-in': {
@@ -523,7 +525,7 @@ const AppShell: React.FC = () => {
           }}
         >
           <ErrorSlime size={22} />
-          <Typography sx={{ fontSize: '0.86rem', color: '#ef4444', flex: 1, fontWeight: 500, letterSpacing: '0.01em' }}>
+          <Typography sx={{ fontSize: '0.86rem', color: c.status.error, flex: 1, fontWeight: 500, letterSpacing: '0.01em' }}>
             {!isOnline
               ? 'No internet connection; agents cannot reach AI models or external services'
               : (
@@ -564,9 +566,9 @@ const AppShell: React.FC = () => {
         >
           <SystemUpdateAltIcon sx={{ fontSize: 16, color: c.accent.primary, flexShrink: 0 }} />
           <Typography sx={{ fontSize: '0.8rem', color: c.text.secondary, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {updateStatus === 'available' && `OpenSwarm${verSuffix} is available`}
-            {updateStatus === 'downloading' && `Downloading OpenSwarm${verSuffix}…`}
-            {updateStatus === 'downloaded' && `OpenSwarm${verSuffix} is ready to install`}
+            {updateStatus === 'available' && `FreeSwarm${verSuffix} is available`}
+            {updateStatus === 'downloading' && `Downloading FreeSwarm${verSuffix}…`}
+            {updateStatus === 'downloaded' && `FreeSwarm${verSuffix} is ready to install`}
           </Typography>
           {updateStatus === 'downloading' && (
             <LinearProgress
@@ -891,7 +893,7 @@ const AppShell: React.FC = () => {
                       onClick={() => navigate(item.path)}
                       onMouseEnter={() => {
                         // Hover-prefetch lazy chunk so click is ~0ms (see Main.tsx for path -> import map).
-                        const fn = (window as any).__openswarmPrefetchRoute;
+                        const fn = (window as any).__freeswarmPrefetchRoute;
                         if (typeof fn === 'function') fn(item.path);
                       }}
                       sx={{
@@ -938,7 +940,7 @@ const AppShell: React.FC = () => {
             <ListItemButton
               onClick={handleAppsClick}
               onMouseEnter={() => {
-                const fn = (window as any).__openswarmPrefetchRoute;
+                const fn = (window as any).__freeswarmPrefetchRoute;
                 if (typeof fn === 'function') fn('/apps');
               }}
               data-onboarding="sidebar-apps"
@@ -1243,8 +1245,8 @@ const AppShell: React.FC = () => {
             '& .MuiAlert-icon': { color: c.accent.primary },
           }}
         >
-          {updateStatus === 'available' && `OpenSwarm${verSuffix} is available`}
-          {updateStatus === 'downloaded' && `OpenSwarm${verSuffix} downloaded; restart to update`}
+          {updateStatus === 'available' && `FreeSwarm${verSuffix} is available`}
+          {updateStatus === 'downloaded' && `FreeSwarm${verSuffix} downloaded; restart to update`}
         </Alert>
       </Snackbar>
     </Box>

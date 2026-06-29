@@ -15,13 +15,13 @@ try:
 except ImportError:
     HAS_PIL = False
 
-BACKEND_PORT = os.environ.get("OPENSWARM_PORT", "8324")
-BACKEND_AUTH = os.environ.get("OPENSWARM_AUTH_TOKEN", "")
+BACKEND_PORT = os.environ.get("FREESWARM_PORT", "8324")
+BACKEND_AUTH = os.environ.get("FREESWARM_AUTH_TOKEN", "")
 BACKEND_URL = f"http://127.0.0.1:{BACKEND_PORT}/api/browser-agent/run"
-MODEL = os.environ.get("OPENSWARM_AGENT_MODEL", "sonnet")
-DASHBOARD_ID = os.environ.get("OPENSWARM_DASHBOARD_ID", "")
-PRE_SELECTED_BROWSER_IDS = os.environ.get("OPENSWARM_PRE_SELECTED_BROWSER_IDS", "")
-PARENT_SESSION_ID = os.environ.get("OPENSWARM_PARENT_SESSION_ID", "")
+MODEL = os.environ.get("FREESWARM_AGENT_MODEL", "sonnet")
+DASHBOARD_ID = os.environ.get("FREESWARM_DASHBOARD_ID", "")
+PRE_SELECTED_BROWSER_IDS = os.environ.get("FREESWARM_PRE_SELECTED_BROWSER_IDS", "")
+PARENT_SESSION_ID = os.environ.get("FREESWARM_PARENT_SESSION_ID", "")
 
 TOOLS = [
     {
@@ -312,7 +312,7 @@ def main():
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
                 "serverInfo": {
-                    "name": "openswarm-browser-agent",
+                    "name": "freeswarm-browser-agent",
                     "version": "1.0.0",
                 },
             })

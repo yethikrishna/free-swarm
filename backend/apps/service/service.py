@@ -6,7 +6,7 @@ and lifecycle management. Responsibilities:
   - Usage-summary and cost-breakdown endpoints (user-facing, for the
     Settings / Usage page)
   - Background heartbeat that reports operational state to the cloud
-  - 9Router auto-start for OpenSwarm Pro users
+  - 9Router auto-start for FreeSwarm Pro users
   - Frontend event endpoint (`POST /api/service/event`)
   - Periodic spool drainer for offline retry
 """
@@ -177,25 +177,37 @@ async def service_lifespan():
             id_props["referral_source"] = settings.user_referral_source
 
         mode = getattr(settings, "connection_mode", "own_key")
-        plan = getattr(settings, "openswarm_subscription_plan", None)
-        is_paying = mode == "openswarm-pro" and bool(
-            getattr(settings, "openswarm_bearer_token", None)
+        plan = getattr(settings, "freeswarm_subscription_plan", None)
+        is_paying = mode == "freeswarm-pro" and bool(
+            getattr(settings, "freeswarm_bearer_token", None)
         )
         id_props["connection_mode"] = mode
         id_props["plan"] = plan if is_paying else "free"
         id_props["is_paying_customer"] = is_paying
-        if is_paying and getattr(settings, "openswarm_subscription_expires", None):
-            id_props["subscription_expires"] = settings.openswarm_subscription_expires
+        if is_paying and getattr(settings, "freeswarm_subscription_expires", None):
+            id_props["subscription_expires"] = settings.freeswarm_subscription_expires
 
         svc.sync({"identity": id_props})
     except Exception as e:
         logger.debug(f"Service startup event failed (non-critical): {e}")
 
-    try:
-        from backend.apps.nine_router import ensure_running as ensure_9router
-        await ensure_9router()
-    except Exception as e:
-        logger.debug(f"9Router auto-start skipped: {e}")
+    # Fire-and-forget: ensure_running() spawns 9Router and then BLOCKS up to
+    # 20s polling for readiness, and the router's own cold-start can stall far
+    # longer on a machine with slow/broken DNS (each startup network probe
+    # waits out its timeout). Awaiting it here froze the FastAPI lifespan, which
+    # delays the HTTP bind, so /api/health/check stayed unanswered for minutes
+    # and the Electron splash gave up ("closed before main window appeared").
+    # 9Router is only needed once the user picks a non-Anthropic model, so boot
+    # it in the background and let the app window come up immediately. settings.py
+    # already follows this rule (see its _boot_router_then_sync create_task).
+    async def _boot_9router_bg():
+        try:
+            from backend.apps.nine_router import ensure_running as ensure_9router
+            await ensure_9router()
+        except Exception as e:
+            logger.debug(f"9Router auto-start skipped: {e}")
+
+    asyncio.create_task(_boot_9router_bg())
 
     _pulse_task = asyncio.create_task(_pulse_loop())
     _drain_task = asyncio.create_task(_drain_loop())
@@ -252,7 +264,9 @@ def _load_all_sessions() -> list[dict]:
 async def usage_summary():
     from backend.apps.agents.agent_manager import agent_manager
 
-    sessions = _load_all_sessions()
+    # Reading every session JSON off the event loop: the directory grows with
+    # history, so a synchronous scan here would stall all concurrent requests/WS.
+    sessions = await asyncio.to_thread(_load_all_sessions)
     for s in agent_manager.get_all_sessions():
         sessions.append(s.model_dump(mode="json"))
 

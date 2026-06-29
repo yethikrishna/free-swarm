@@ -493,9 +493,9 @@ async def run_browser_agent(
     # Route the client based on the resolved model id, not just
     # connection_mode. Without this, a pinned-route value like "sonnet-cc"
     # resolves to "cc/claude-sonnet-4-6" but the old get_anthropic_client()
-    # still returned an OpenSwarm-proxy client (because connection_mode was
-    # openswarm-pro), which then rejected the cc/ prefix and surfaced as a
-    # misleading "OpenSwarm servers are busy" error.
+    # still returned an FreeSwarm-proxy client (because connection_mode was
+    # freeswarm-pro), which then rejected the cc/ prefix and surfaced as a
+    # misleading "FreeSwarm servers are busy" error.
     client = get_anthropic_client_for_model(browser_settings, api_model)
 
     # Resume prior conversation on this browser if we have one cached. This
@@ -2268,7 +2268,7 @@ async def run_browser_agents(
         return [{
             "summary": (
                 "Error: no dashboard window is connected, so browser tools cannot run. "
-                "Tell the user to open the OpenSwarm window and try again; do not retry until they do."
+                "Tell the user to open the FreeSwarm window and try again; do not retry until they do."
             ),
             "action_log": [], "final_screenshot": None,
         } for _ in tasks]

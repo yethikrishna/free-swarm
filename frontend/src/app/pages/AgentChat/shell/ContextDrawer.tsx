@@ -19,8 +19,8 @@ export default function ContextDrawer() {
       if (detail?.open && detail?.sessionId) setOpenFor(detail.sessionId);
       else setOpenFor(null);
     };
-    window.addEventListener('openswarm:context-drawer', handler);
-    return () => window.removeEventListener('openswarm:context-drawer', handler);
+    window.addEventListener('freeswarm:context-drawer', handler);
+    return () => window.removeEventListener('freeswarm:context-drawer', handler);
   }, []);
 
   if (!openFor || !session) return null;

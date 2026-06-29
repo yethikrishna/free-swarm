@@ -108,7 +108,7 @@ def _walk_directory(folder: str) -> dict[str, str]:
                 size = os.path.getsize(full_path)
                 if size > _WALK_MAX_FILE_BYTES:
                     files[rel_path] = (
-                        f"// [openswarm] file truncated ({size} bytes > "
+                        f"// [freeswarm] file truncated ({size} bytes > "
                         f"{_WALK_MAX_FILE_BYTES} byte cap). Open directly "
                         f"to view full contents."
                     )

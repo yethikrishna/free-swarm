@@ -77,7 +77,7 @@ def _clean_bullet(b: str) -> str | None:
 
 # --- persistence (mirrors browser_skills, separate dir) -------------------
 def _dir() -> str | None:
-    base = os.environ.get("OPENSWARM_BROWSER_PLAYBOOK_DIR")
+    base = os.environ.get("FREESWARM_BROWSER_PLAYBOOK_DIR")
     if not base:
         try:
             from backend.config.paths import DATA_ROOT

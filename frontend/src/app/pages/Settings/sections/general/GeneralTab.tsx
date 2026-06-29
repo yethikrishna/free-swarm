@@ -18,8 +18,8 @@ const GeneralTab: React.FC<{
   modelOptions: { grouped: Record<string, ModelOption[]>; flat: Array<ModelOption & { provider: string }> };
   modesList: Array<{ id: string; name: string }>;
   providerColors: Record<string, string>;
-  openswarmGradient: string;
-}> = ({ form, setForm, styles, setBrowseOpen, modelOptions, modesList, providerColors, openswarmGradient }) => {
+  freeswarmGradient: string;
+}> = ({ form, setForm, styles, setBrowseOpen, modelOptions, modesList, providerColors, freeswarmGradient }) => {
   const { sectionSx } = styles;
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', pt: 2.5, pb: 1, animation: 'fadeIn 0.2s ease', '@keyframes fadeIn': { from: { opacity: 0 }, to: { opacity: 1 } } }}>
@@ -35,7 +35,7 @@ const GeneralTab: React.FC<{
         modelOptions={modelOptions}
         modesList={modesList}
         providerColors={providerColors}
-        openswarmGradient={openswarmGradient}
+        freeswarmGradient={freeswarmGradient}
       />
 
       <GeneralInterface form={form} setForm={setForm} styles={styles} />

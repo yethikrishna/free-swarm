@@ -1,6 +1,6 @@
 import { report } from '@/shared/serviceClient';
 
-export type OpenSwarmPlan = 'pro' | 'pro_plus' | 'ultra';
+export type FreeSwarmPlan = 'pro' | 'pro_plus' | 'ultra';
 export type BillingInterval = 'monthly' | 'annual';
 export type CheckoutSource = 'settings' | 'onboarding' | 'upgrade_cta';
 
@@ -10,7 +10,7 @@ interface SubscribeOptions {
 
 /** Create a Stripe Checkout session and open the URL externally; used by all subscribe CTAs. */
 export async function subscribeToPlan(
-  plan: OpenSwarmPlan,
+  plan: FreeSwarmPlan,
   billingInterval: BillingInterval,
   source: CheckoutSource,
   opts: SubscribeOptions = {},
@@ -29,7 +29,7 @@ export async function subscribeToPlan(
     // app_install_id lets the cloud attribute Stripe checkout to install_tokens for affiliate payout.
     let appInstallId: string | null = null;
     try {
-      const api = (window as any).openswarm;
+      const api = (window as any).freeswarm;
       const state = await api?.getInstallState?.();
       if (state && typeof state.app_install_id === 'string') {
         appInstallId = state.app_install_id;
@@ -39,7 +39,7 @@ export async function subscribeToPlan(
     const body: Record<string, unknown> = { plan, billing_interval: wireInterval };
     if (appInstallId) body.app_install_id = appInstallId;
 
-    const r = await fetch('https://api.openswarm.com/api/stripe/checkout', {
+    const r = await fetch('https://api.freeswarm.myndlabs.tech/api/stripe/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -57,7 +57,7 @@ export async function subscribeToPlan(
       billing_interval: billingInterval,
     });
 
-    const api = (window as any).openswarm;
+    const api = (window as any).freeswarm;
     if (api?.openExternal) api.openExternal(url);
     else window.open(url, '_blank');
   } catch (e) {

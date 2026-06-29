@@ -71,7 +71,7 @@ const ELEMENT_SEPARATOR = '\n\n---\nSelected UI Elements:\n';
 // box doesn't collapse and the scrollbar doesn't jump as it crosses the viewport.
 const oversizedContentHeights = new Map<string, number>();
 
-interface OpenSwarmErrorInfo {
+interface FreeSwarmErrorInfo {
   kind: 'cap' | 'auth' | 'network' | 'too_many_tools';
   title: string;
   detail: string;
@@ -95,10 +95,10 @@ function formatTokens(n: number): string {
 }
 
 /** Parses raw error text into a friendly card; returns null when the error isn't one we recognize. */
-function parseOpenSwarmError(text: string, ctx?: OverflowContext): OpenSwarmErrorInfo | null {
+function parseFreeSwarmError(text: string, ctx?: OverflowContext): FreeSwarmErrorInfo | null {
   if (!text) return null;
-  // A real OpenSwarm-side plan cap (has a reset window) -> offer the upgrade.
-  if (/reached your OpenSwarm.*plan limit|Usage cap exceeded|Resets in /i.test(text)) {
+  // A real FreeSwarm-side plan cap (has a reset window) -> offer the upgrade.
+  if (/reached your FreeSwarm.*plan limit|Usage cap exceeded|Resets in /i.test(text)) {
     const reset = text.match(/Resets in ([\dhms\s]+)/)?.[1];
     return {
       kind: 'cap',
@@ -115,16 +115,16 @@ function parseOpenSwarmError(text: string, ctx?: OverflowContext): OpenSwarmErro
   if (/rate_limit_error|free_pool_busy|overloaded_error|too many requests/i.test(text)) {
     return {
       kind: 'network',
-      title: 'OpenSwarm is busy right now',
+      title: 'FreeSwarm is busy right now',
       detail: 'A lot of requests are coming through at once. Wait a few seconds, then send your message again.',
     };
   }
-  if (/free_trial_exhausted|used your free|free OpenSwarm runs/i.test(text)) {
+  if (/free_trial_exhausted|used your free|free FreeSwarm runs/i.test(text)) {
     return {
       kind: 'cap',
       title: "You've used your free runs",
       detail:
-        'Connect a model to keep going: your own API key, an AI subscription you already pay for, or OpenSwarm Pro.',
+        'Connect a model to keep going: your own API key, an AI subscription you already pay for, or FreeSwarm Pro.',
       ctaLabel: 'Connect a model',
       ctaAction: 'settings',
     };
@@ -180,7 +180,7 @@ function parseOpenSwarmError(text: string, ctx?: OverflowContext): OpenSwarmErro
     const extras: string[] = [];
     if (fw) extras.push(`built-in tools + system prompt ~${formatTokens(fw)}`);
     if (mcps > 0) extras.push(`${mcps} active app${mcps === 1 ? '' : 's'}`);
-    const breakdown = extras.length > 0 ? ` Overhead from OpenSwarm: ${extras.join(', ')}.` : '';
+    const breakdown = extras.length > 0 ? ` Overhead from FreeSwarm: ${extras.join(', ')}.` : '';
     return {
       kind: 'too_many_tools',
       title: 'This chat exceeded the model\'s context window',
@@ -197,13 +197,13 @@ function parseOpenSwarmError(text: string, ctx?: OverflowContext): OpenSwarmErro
     return {
       kind: 'auth',
       title: 'Subscription issue',
-      detail: "We can't find an active OpenSwarm subscription. Check your billing status.",
+      detail: "We can't find an active FreeSwarm subscription. Check your billing status.",
       ctaLabel: 'Open Settings',
       ctaAction: 'settings',
     };
   }
   // Strict matchers only; bare "network" false-matched Python tracebacks.
-  if (/\b(?:ECONNREFUSED|ENETUNREACH|ENOTFOUND|EAI_AGAIN)\b|Could\s+not\s+reach\s+OpenSwarm|Unable\s+to\s+connect\s+to\s+OpenSwarm/i.test(text)) {
+  if (/\b(?:ECONNREFUSED|ENETUNREACH|ENOTFOUND|EAI_AGAIN)\b|Could\s+not\s+reach\s+FreeSwarm|Unable\s+to\s+connect\s+to\s+FreeSwarm/i.test(text)) {
     return {
       kind: 'network',
       title: 'Connection issue',
@@ -987,7 +987,7 @@ const MessageBubble: React.FC<Props> = React.memo(({ message, editing = false, o
       messagesCount: s.messages?.length ?? 0,
     } as OverflowContext;
   }, shallowEqual);
-  const openswarmError = !isUser ? parseOpenSwarmError(rawText, overflowCtx) : null;
+  const freeswarmError = !isUser ? parseFreeSwarmError(rawText, overflowCtx) : null;
 
   // Reports asynchronously, bc without this an oversized message that mounts in
   // view (e.g. scrolling up into the agent's reply) would paint the blank
@@ -1050,10 +1050,10 @@ const MessageBubble: React.FC<Props> = React.memo(({ message, editing = false, o
 
   // (message.id, kind) keys so cap card analytics fire once, not on edits.
   React.useEffect(() => {
-    if (openswarmError?.kind === 'cap') {
+    if (freeswarmError?.kind === 'cap') {
       report('subscription', 'rate_limit_hit', { message_id: message.id });
     }
-  }, [message.id, openswarmError?.kind]);
+  }, [message.id, freeswarmError?.kind]);
 
   React.useEffect(() => {
     if (editing) setEditText(rawText);
@@ -1263,7 +1263,7 @@ const MessageBubble: React.FC<Props> = React.memo(({ message, editing = false, o
               '& a': { color: c.accent.primary },
             }}
           >
-            {openswarmError ? (
+            {freeswarmError ? (
               <Box
                 sx={{
                   mt: 0.5,
@@ -1279,24 +1279,24 @@ const MessageBubble: React.FC<Props> = React.memo(({ message, editing = false, o
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <ErrorSlime size={22} />
                   <Typography sx={{ fontSize: '0.92rem', fontWeight: 600, color: c.text.primary }}>
-                    {openswarmError.title}
+                    {freeswarmError.title}
                   </Typography>
                 </Box>
                 <Typography sx={{ fontSize: '0.82rem', color: c.text.secondary, lineHeight: 1.5 }}>
-                  {openswarmError.detail}
+                  {freeswarmError.detail}
                 </Typography>
-                {openswarmError.ctaLabel && (
+                {freeswarmError.ctaLabel && (
                   <Box sx={{ mt: 0.4 }}>
                     <Button
                       size="small"
                       variant="outlined"
                       onClick={() => {
-                        const api = (window as any).openswarm;
-                        if (openswarmError.ctaAction === 'upgrade') {
+                        const api = (window as any).freeswarm;
+                        if (freeswarmError.ctaAction === 'upgrade') {
                           setPickerOpen(true);
-                        } else if (openswarmError.ctaAction === 'settings') {
+                        } else if (freeswarmError.ctaAction === 'settings') {
                           dispatch(openSettingsModal('models'));
-                        } else if (openswarmError.ctaAction === 'waitlist') {
+                        } else if (freeswarmError.ctaAction === 'waitlist') {
                           const url = 'https://discord.com/channels/1486442924391796896/1486442927554170892';
                           if (api?.openExternal) api.openExternal(url);
                           else window.open(url, '_blank');
@@ -1311,7 +1311,7 @@ const MessageBubble: React.FC<Props> = React.memo(({ message, editing = false, o
                         '&:hover': { borderColor: c.accent.primary },
                       }}
                     >
-                      {openswarmError.ctaLabel}
+                      {freeswarmError.ctaLabel}
                     </Button>
                   </Box>
                 )}

@@ -199,7 +199,7 @@ export async function runStep(args: RunStepArgs): Promise<void> {
           : '';
         // Stash full untruncated error + stack on window for DevTools; popup only shows the 180-char snippet.
         try {
-          (window as any).__OPENSWARM_LAST_ONBOARDING_ERR__ = {
+          (window as any).__FREESWARM_LAST_ONBOARDING_ERR__ = {
             step_id: step.id,
             message: (err as Error)?.message ?? String(err),
             stack: (err as Error)?.stack,

@@ -1,0 +1,706 @@
+# Instincts generated from https://github.com/yethikrishna/free-swarm
+# Generated: 2026-06-29T16:58:12.925Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: free-swarm-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Commit Length
+
+## Action
+
+Write moderate-length commit messages (~57 characters)
+
+## Evidence
+
+- Average commit message length: 57 chars
+- Based on 100 commits
+
+---
+id: free-swarm-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: free-swarm-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: free-swarm-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Export Style
+
+## Action
+
+Prefer default exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: default
+
+---
+id: free-swarm-arch-type-based
+trigger: "when adding new code"
+confidence: 0.8
+domain: architecture
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Arch Type Based
+
+## Action
+
+Place code in the appropriate type folder (components/, services/, utils/, etc.)
+
+## Evidence
+
+- Type-based module organization detected
+- Folders: 
+
+---
+id: free-swarm-test-framework
+trigger: "when writing tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Test Framework
+
+## Action
+
+Use jest as the test framework
+
+## Evidence
+
+- Test framework detected: jest
+- File pattern: *.spec.ts
+
+---
+id: free-swarm-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Test Naming
+
+## Action
+
+Name test files using the pattern: *.spec.ts
+
+## Evidence
+
+- File pattern: *.spec.ts
+- Consistent across test files
+
+---
+id: free-swarm-test-types
+trigger: "when planning tests for a feature"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Test Types
+
+## Action
+
+Write unit, integration, e2e tests to match project standards
+
+## Evidence
+
+- Test types detected: unit, integration, e2e
+- Coverage config: yes
+
+---
+id: free-swarm-workflow-database-migration
+trigger: "when modifying the database schema or adding tables"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Workflow Database Migration
+
+## Action
+
+Follow the database-migration workflow:
+1. Create migration file
+2. Update schema definitions
+3. Generate/update types
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: **/schema.*, migrations/*
+
+---
+id: free-swarm-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~13x per month
+- Files: backend/apps/outputs/webapp_template/frontend/src/app/*, backend/apps/outputs/webapp_template/frontend/src/app/components/*, backend/apps/outputs/webapp_template/frontend/src/app/components/layout/*
+
+---
+id: free-swarm-workflow-monorepo-deployment-restructure
+trigger: "when doing monorepo deployment restructure"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Workflow Monorepo Deployment Restructure
+
+## Action
+
+Follow the monorepo-deployment-restructure workflow:
+1. Move or reorganize project directories (e.g., move website/ to root, keep frontend/ as /app, etc.)
+2. Update or create root-level build scripts in package.json to build all subprojects
+3. Update vercel.json to handle new routing and rewrites for each app
+4. Update or add configuration files (next.config.js, tailwind.config.js, tsconfig.json) at the root
+5. Remove or archive old subproject directories as needed
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: package.json, vercel.json, next.config.js
+
+---
+id: free-swarm-workflow-cloud-api-endpoint-implementation
+trigger: "when doing cloud api endpoint implementation"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Workflow Cloud Api Endpoint Implementation
+
+## Action
+
+Follow the cloud-api-endpoint-implementation workflow:
+1. Add or update endpoint handler file in cloud/api/
+2. Add or update supporting logic in cloud/lib/
+3. Update cloud/README.md and .env.example for new env vars or documentation
+4. Update cloud/db/schema.sql if new tables or fields are needed
+5. Update cloud/package.json for new dependencies
+6. Test with tsc and runtime
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: cloud/api/*.ts, cloud/lib/*.ts, cloud/db/schema.sql
+
+---
+id: free-swarm-workflow-frontend-settings-feature-extension
+trigger: "when doing frontend settings feature extension"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Workflow Frontend Settings Feature Extension
+
+## Action
+
+Follow the frontend-settings-feature-extension workflow:
+1. Create or update React component(s) in frontend/src/app/pages/Settings/sections/
+2. Update or add Redux state logic in frontend/src/shared/state/settingsSlice.ts
+3. Integrate new component into the relevant Settings tab/page
+4. Update backend handler if new API routes or logic are required
+5. Test UI and state changes
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: frontend/src/app/pages/Settings/sections/**/*.tsx, frontend/src/app/pages/Settings/Settings.tsx, frontend/src/shared/state/settingsSlice.ts
+
+---
+id: free-swarm-workflow-oauth-provider-integration
+trigger: "when doing oauth provider integration"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Workflow Oauth Provider Integration
+
+## Action
+
+Follow the oauth-provider-integration workflow:
+1. Add or update cloud/api/auth/{provider}.ts endpoint
+2. Update cloud/.env.example and README.md for new provider credentials
+3. Update frontend/src/web/WebApp.tsx and/or frontend/src/app/pages/Settings/sections/subscription/AccountCard.tsx to add sign-in/connect button
+4. Update OAuth redirect and token handoff logic (may involve frontend/src/index.tsx or WebAccountCard.tsx)
+5. Test full OAuth flow (web and desktop)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: cloud/api/auth/*.ts, cloud/.env.example, cloud/README.md
+
+---
+id: free-swarm-workflow-branding-or-rebranding-sweep
+trigger: "when doing branding or rebranding sweep"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Workflow Branding Or Rebranding Sweep
+
+## Action
+
+Follow the branding-or-rebranding-sweep workflow:
+1. Bulk search/replace across all files for old brand/product/org names
+2. Update README.md, GETTING_STARTED.md, and other docs
+3. Update assets (icons, screenshots, etc.) as needed
+4. Update deployment configs (vercel.json, index.html, package.json)
+5. Audit for missed references and document in a report
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: README.md, GETTING_STARTED.md, assets/*
+
+---
+id: free-swarm-workflow-build-pipeline-fix-or-optimization
+trigger: "when doing build pipeline fix or optimization"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/yethikrishna/free-swarm
+---
+
+# Free Swarm Workflow Build Pipeline Fix Or Optimization
+
+## Action
+
+Follow the build-pipeline-fix-or-optimization workflow:
+1. Update build scripts in package.json (root or subproject)
+2. Update webpack.config.js or next.config.js as needed
+3. Update .gitignore to add/remove build artifacts
+4. Update vercel.json for buildCommand or rewrites
+5. Test build locally and/or on Vercel
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: package.json, frontend/package.json, frontend/webpack.config.js
+
+---
+id: free-swarm-camelcase-files
+trigger: "When creating or renaming a file."
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Camelcase Files
+
+## Action
+
+Use camelCase for file names.
+
+## Evidence
+
+- Pattern in namingConventions.files
+- Fix: Rename OpenSwarmProCard.tsx to FreeSwarmProCard.tsx to match imports
+
+---
+id: free-swarm-camelcase-functions
+trigger: "When defining a function."
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Camelcase Functions
+
+## Action
+
+Name the function in camelCase.
+
+## Evidence
+
+- Pattern in namingConventions.functions
+
+---
+id: free-swarm-pascalcase-classes
+trigger: "When defining a class."
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Pascalcase Classes
+
+## Action
+
+Name the class in PascalCase.
+
+## Evidence
+
+- Pattern in namingConventions.classes
+
+---
+id: free-swarm-screaming-snake-constants
+trigger: "When declaring a constant."
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Screaming Snake Constants
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for constant names.
+
+## Evidence
+
+- Pattern in namingConventions.constants
+
+---
+id: free-swarm-relative-imports
+trigger: "When importing modules."
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Relative Imports
+
+## Action
+
+Use relative import paths.
+
+## Evidence
+
+- Pattern in importStyle
+- Fix: Rename OpenSwarmProCard.tsx to FreeSwarmProCard.tsx to match imports
+
+---
+id: free-swarm-default-exports
+trigger: "When exporting modules."
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Default Exports
+
+## Action
+
+Use default exports.
+
+## Evidence
+
+- Pattern in exportStyle
+
+---
+id: free-swarm-jest-spec-pattern
+trigger: "When adding a test file."
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Jest Spec Pattern
+
+## Action
+
+Name the test file with the pattern *.spec.ts.
+
+## Evidence
+
+- Pattern in testing.filePattern
+- feature-development workflow includes **/*.test.*
+
+---
+id: free-swarm-jest-framework
+trigger: "When writing tests."
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Jest Framework
+
+## Action
+
+Use the Jest framework.
+
+## Evidence
+
+- Pattern in testing.framework
+
+---
+id: free-swarm-test-coverage-config
+trigger: "When configuring tests."
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Test Coverage Config
+
+## Action
+
+Enable and maintain test coverage configuration.
+
+## Evidence
+
+- Pattern in testing.coverageConfig
+
+---
+id: free-swarm-commit-prefixes
+trigger: "When writing a commit message."
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Commit Prefixes
+
+## Action
+
+Prefix commit messages with type indicators (e.g., Fix:, CI:, Release:).
+
+## Evidence
+
+- Seen in commits: 'Fix: Rename...', 'CI: remove...', 'Release: bump...'
+
+---
+id: free-swarm-atomic-commits
+trigger: "When committing changes."
+confidence: 0.8
+domain: git
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Atomic Commits
+
+## Action
+
+Keep commits focused and atomic, addressing a single logical change.
+
+## Evidence
+
+- Average commit length is short (57)
+- Example commits are focused on single changes
+
+---
+id: free-swarm-monorepo-restructure
+trigger: "When consolidating multiple apps into a single deployable monorepo for cloud hosting."
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Monorepo Restructure
+
+## Action
+
+Move/reorganize project directories, update root-level build scripts, update vercel.json, update/create root config files, and remove/archive old subproject directories.
+
+## Evidence
+
+- Workflow: monorepo-deployment-restructure
+- Pattern in files: package.json, vercel.json, next.config.js, tailwind.config.js, tsconfig.json, app/, website/, frontend/
+
+---
+id: free-swarm-cloud-api-endpoint
+trigger: "When implementing new cloud-side features or integrating new OAuth/billing providers."
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Cloud Api Endpoint
+
+## Action
+
+Add/update handler in cloud/api/, update cloud/lib/, update cloud/README.md and .env.example, update cloud/db/schema.sql if needed, update cloud/package.json, and test with tsc/runtime.
+
+## Evidence
+
+- Workflow: cloud-api-endpoint-implementation
+- Pattern in files: cloud/api/*.ts, cloud/lib/*.ts, cloud/db/schema.sql, cloud/.env.example, cloud/README.md, cloud/package.json
+
+---
+id: free-swarm-frontend-settings-extension
+trigger: "When adding a new configurable feature or option in the Settings area."
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Frontend Settings Extension
+
+## Action
+
+Create/update React component(s) in frontend/src/app/pages/Settings/sections/, update Redux state in frontend/src/shared/state/settingsSlice.ts, integrate into Settings page, update backend handler if needed, and test UI/state changes.
+
+## Evidence
+
+- Workflow: frontend-settings-feature-extension
+- Pattern in files: frontend/src/app/pages/Settings/sections/**/*.tsx, frontend/src/app/pages/Settings/Settings.tsx, frontend/src/shared/state/settingsSlice.ts, backend/apps/agents/*.py
+
+---
+id: free-swarm-oauth-provider-integration
+trigger: "When adding support for a new OAuth provider for user sign-in or account connection."
+confidence: 0.92
+domain: workflow
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Oauth Provider Integration
+
+## Action
+
+Add/update cloud/api/auth/{provider}.ts, update cloud/.env.example and README.md, update frontend UI for sign-in/connect, update OAuth redirect/token handoff logic, and test full OAuth flow.
+
+## Evidence
+
+- Workflow: oauth-provider-integration
+- Pattern in files: cloud/api/auth/*.ts, cloud/.env.example, cloud/README.md, frontend/src/web/WebApp.tsx, frontend/src/app/pages/Settings/sections/subscription/AccountCard.tsx, frontend/src/app/pages/Settings/sections/subscription/WebAccountCard.tsx, frontend/src/index.tsx
+
+---
+id: free-swarm-branding-sweep
+trigger: "When renaming the product, organization, or major domain references across all code, docs, and configs."
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Branding Sweep
+
+## Action
+
+Bulk search/replace old names, update docs/assets/configs, audit for missed references, and document in a report.
+
+## Evidence
+
+- Workflow: branding-or-rebranding-sweep
+- Pattern in files: README.md, GETTING_STARTED.md, assets/*, package.json, vercel.json, frontend/src/app/pages/**/*.tsx, backend/**/*.py, BRANDING_AUDIT_REPORT.md
+- Commit: Rebrand OpenSwarm to FreeSwarm (Mynd Labs) + add Vercel deployment config
+
+---
+id: free-swarm-build-pipeline-fix
+trigger: "When builds fail or need optimization for deployment."
+confidence: 0.93
+domain: workflow
+source: repo-analysis
+source_repo: yethikrishna/free-swarm
+---
+
+# Free Swarm Build Pipeline Fix
+
+## Action
+
+Update build scripts in package.json, update webpack.config.js or next.config.js, update .gitignore, update vercel.json for buildCommand/rewrites, and test build locally and/or on Vercel.
+
+## Evidence
+
+- Workflow: build-pipeline-fix-or-optimization
+- Pattern in files: package.json, frontend/package.json, frontend/webpack.config.js, next.config.js, .gitignore, vercel.json
+- Commit: Fix Vercel deployment config: use absolute publicPath and add SPA handling
+

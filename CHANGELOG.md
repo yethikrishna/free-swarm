@@ -72,6 +72,27 @@ All backend phases are **advisory / opt-in by default**: they expose engines and
 endpoints (and launcher / `pick_for_turn` / runner / rewind seams) without
 changing existing turn behavior until enabled.
 
+### ⚡ Live activation (Tier 0)
+- The advisory engines now affect real runs, behind their own opt-in flags, via
+  one defensive seam (`live_integration`) that never raises and no-ops when off:
+  - **P10 routing** picks the per-turn model (no-op unless routing policy enabled)
+  - **P4 gates** fold into per-tool permissions, tighten-only (no-op unless gate
+    policy `enforce` is set; never loosens an existing permission)
+- Off by default: an untouched install is byte-for-byte unchanged.
+
+### 📊 Observability + evaluation (Tier 1)
+- **Tracing** (`/api/tracing/*`): span timeline + hotspot ranking from the timings
+  the loop already records; UI in the chat Insights panel
+- **Benchmark** (`/api/benchmark/*`): grades a P12 suite run (pass rate, cost/turn
+  efficiency, composite + letter grade) and A/B-compares two configs
+
+### 🧱 Tier 2 (app-side built; infra boundary marked)
+- **P6 worker placement** (`/api/cluster/*`): local-vs-burst placement by mode +
+  live load; local runs today via P1, remote is an HTTP seam an operator deploys
+- **P11 offline mode** (`/api/offline/*`): detect + select a user-run local
+  OpenAI-compatible model (LM Studio/Ollama/llama.cpp/Jan); model bundling stays
+  a packaging effort
+
 ### 🔒 Security
 - Marketplace discovery projects to a public shape (no internal `owner_id` leak)
 - Publish rejects manifests over 64KB to prevent storage abuse
@@ -82,9 +103,9 @@ changing existing turn behavior until enabled.
 - **L2** outbound webhook (HMAC-signed) + Slack/email notification delivery
 - **L3** share-transcript button in the chat header + public viewer page
 
-### ⏭️ Deferred (infrastructure, not application code)
-- **P6** distributed runtime / cloud burst (needs a persistent worker tier)
-- **P11** offline-first local model (needs model bundling + a local inference runtime)
+### ⏭️ Remaining infrastructure (operator/packaging, not application code)
+- **P6** the remote worker fleet the placement layer bursts to (provisioned compute)
+- **P11** bundling + quantizing a model into the desktop build (packaging)
 
 ## [1.0.0] - June 2026
 

@@ -59,6 +59,8 @@ from backend.apps.rewind.launcher import wire as wire_rewind_driver
 from backend.apps.marketplace.marketplace import marketplace
 from backend.apps.tracing.tracing import tracing
 from backend.apps.benchmark.benchmark import benchmark
+from backend.apps.cluster.cluster import cluster
+from backend.apps.offline.offline import offline
 from backend.apps.agents.proxy.anthropic_proxy import anthropic_proxy
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import WebSocket, WebSocketDisconnect
@@ -66,7 +68,7 @@ from pydantic import BaseModel, Field
 from typeguard import typechecked
 import json
 
-main_app = MainApp([health, agents, skills, tools_lib, modes, settings, mcp_registry, skill_registry, outputs, dashboards, service, subscription, auth, web, automation, routing, memory, replay, coordination, context, testing, rewind, marketplace, tracing, benchmark, anthropic_proxy])
+main_app = MainApp([health, agents, skills, tools_lib, modes, settings, mcp_registry, skill_registry, outputs, dashboards, service, subscription, auth, web, automation, routing, memory, replay, coordination, context, testing, rewind, marketplace, tracing, benchmark, cluster, offline, anthropic_proxy])
 app = main_app.app
 
 # Inject the real "launch an agent" behavior into the automation scheduler now

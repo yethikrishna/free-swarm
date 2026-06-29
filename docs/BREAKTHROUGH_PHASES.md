@@ -54,20 +54,50 @@ one-line opt-in rather than a risky rewrite.
   already streams into Redux and the messages already in the session; they are
   pure presentation (`buildThoughtTree` is the only logic, and it's pure).
 
-## Deferred (and why)
+## Live activation (Tier 0)
 
-Only the two genuine-infrastructure phases remain. They cannot live in a
-serverless function or a desktop leaf module, so they are out of scope for this
-code-level batch:
+The advisory engines are wired into the real turn loop behind their own opt-in
+flags, via one defensive seam (`apps/agents/live_integration.py`) that never
+raises and returns the unchanged input when off:
 
-- **P6 Distributed runtime / cloud burst**: needs a persistent worker tier
-  (queue + autoscaling compute), not a request-scoped function. P1's delegation
-  queue is the in-process precursor; the distributed version is an ops project.
-- **P11 Offline-first local model**: bundling + quantizing a local model into the
-  desktop build is a packaging/infra effort (model weights, hardware detection,
-  a local inference runtime), not application code.
+- **P10 routing** picks the per-turn model at the SDK-resolve point (no-op unless
+  the routing policy's `enabled` is set).
+- **P4 gates** fold into the per-tool permission in `can_use_tool` / the PreToolUse
+  hook (no-op unless the gate policy's `enforce` is set), and only ever *tighten*
+  (allow -> ask -> deny), never loosen.
 
-Everything else from the roadmap (P1-P5, P7-P10, P12) is shipped above.
+Off by default, so an untouched install is byte-for-byte unchanged; flipping a
+flag on can at worst no-op, never break a turn.
+
+## Observability + evaluation (Tier 1)
+
+- **Tracing** (`apps/tracing/` + `/api/tracing/*`): a span/timeline view +
+  hotspot ranking built purely from the timings the loop already records
+  (`tool_latencies`, `time_per_model`, `agent_active_ms`). UI in the chat
+  Insights panel.
+- **Benchmark** (`apps/benchmark/` + `/api/benchmark/*`): grades a P12 suite run
+  (pass rate, cost/turn efficiency, composite + letter grade) and A/B-compares two
+  configs. Reuses the P12 runner.
+
+## Tier 2 (app-side built; infra boundary marked)
+
+P6 and P11 are infrastructure phases. The application-side is built and tested;
+the parts that need provisioned compute or bundled model weights are a documented
+seam, not fabricated:
+
+- **P6 worker placement** (`apps/cluster/` + `/api/cluster/*`): the placement
+  decision (local vs. burst-to-remote by mode + live load) is real and tested;
+  local execution runs today through P1's queue. The remote worker tier it bursts
+  to is an HTTP seam, an operator deploys the autoscaling compute that answers it;
+  `mode=remote` with no URL degrades gracefully to local.
+- **P11 offline mode** (`apps/offline/` + `/api/offline/*`): detects and selects a
+  user-run local OpenAI-compatible model (LM Studio / Ollama / llama.cpp / Jan)
+  over loopback, which the router can already route to as a custom provider.
+  Bundling + quantizing a model into the desktop build (weights, hardware
+  detection, a packaged inference runtime) remains a packaging effort, not app code.
+
+Everything from the roadmap (P1-P12) now has shipped app-level code; only the
+P6 remote-fleet deploy and the P11 model-bundling step are operator/packaging work.
 
 ## Leftovers closed alongside
 
